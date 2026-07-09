@@ -39,3 +39,27 @@ All deterministic tests passed!
 Result  : ALL 8 / 8 TESTS PASSED
 Verdict : Brute-force baseline confirmed correct and trustworthy as oracle.
 ================================================================================
+
+================================================================================
+Contract Alignment Check — Verified by: Mohammad Nobinur
+================================================================================
+[✓] version 0 is the initial array
+      Constructor calls initialize() which pushes the initial array as versions[0].
+
+[✓] Each update creates exactly one new version
+      rangeAdd() always calls createVersion() and returns the new version index.
+
+[✓] Updates may apply from any existing version
+      rangeAdd(baseVersion, ...) copies from baseVersion, not only from the latest.
+
+[✓] Queries may target any valid version
+      rangeSum(version, ...) accepts any version index, guarded by validateVersion().
+
+[✓] Values and sums use long long
+      Header declares: using ValueType = long long — used throughout the API.
+
+[✓] Old versions are never mutated
+      rangeAdd() writes only into versions[newVersion].
+      Confirmed by: Version Isolation test passing (v1 unchanged after v2 is created).
+
+================================================================================
