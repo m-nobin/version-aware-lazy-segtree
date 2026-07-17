@@ -1,7 +1,5 @@
 #include "lazy_segment_tree.hpp"
 
-#include <algorithm>
-
 /*
 =========================================================
 Constructors
