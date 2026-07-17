@@ -1,250 +1,160 @@
 #include <valseg/lazy_segment_tree.hpp>
 
-#include <cassert>
-#include <iostream>
+#include <gtest/gtest.h>
+
 #include <stdexcept>
 #include <vector>
 
-using std::cout;
-using std::endl;
 using valseg::LazySegmentTree;
 
-void testInitialization() {
-  cout << "[TEST] Initialization..." << endl;
+// ---------------------------------------------------------------------------
+// Core operation tests
+// ---------------------------------------------------------------------------
 
-  LazySegmentTree tree({1, 2, 3, 4, 5});
+TEST(LazySegmentTreeTest, Initialization)
+{
+    LazySegmentTree tree({1, 2, 3, 4, 5});
 
-  assert(tree.size() == 5);
-  assert(tree.rangeSum(0, 4) == 15);
-
-  cout << "PASS\n" << endl;
+    EXPECT_EQ(tree.size(), 5u);
+    EXPECT_EQ(tree.rangeSum(0, 4), 15);
 }
 
-void testSingleRangeUpdate() {
-  cout << "[TEST] Single Range Update..." << endl;
+TEST(LazySegmentTreeTest, SingleRangeUpdate)
+{
+    LazySegmentTree tree({1, 2, 3, 4, 5});
 
-  LazySegmentTree tree({1, 2, 3, 4, 5});
+    tree.rangeAdd(1, 3, 5);
 
-  tree.rangeAdd(1, 3, 5);
-
-  assert(tree.rangeSum(0, 4) == 30);
-  assert(tree.rangeSum(1, 3) == 24);
-
-  cout << "PASS\n" << endl;
+    EXPECT_EQ(tree.rangeSum(0, 4), 30);
+    EXPECT_EQ(tree.rangeSum(1, 3), 24);
 }
 
-void testMultipleUpdates() {
-  cout << "[TEST] Multiple Updates..." << endl;
+TEST(LazySegmentTreeTest, MultipleUpdates)
+{
+    LazySegmentTree tree({1, 2, 3, 4, 5});
 
-  LazySegmentTree tree({1, 2, 3, 4, 5});
+    tree.rangeAdd(0, 2, 10);
+    tree.rangeAdd(2, 4, -2);
 
-  tree.rangeAdd(0, 2, 10);
-  tree.rangeAdd(2, 4, -2);
-
-  assert(tree.rangeSum(0, 4) == 39);
-
-  cout << "PASS\n" << endl;
+    EXPECT_EQ(tree.rangeSum(0, 4), 39);
 }
 
-void testWholeArrayUpdate() {
-  cout << "[TEST] Whole Array Update..." << endl;
+TEST(LazySegmentTreeTest, WholeArrayUpdate)
+{
+    LazySegmentTree tree({1, 1, 1, 1});
 
-  LazySegmentTree tree({1, 1, 1, 1});
+    tree.rangeAdd(0, 3, 3);
 
-  tree.rangeAdd(0, 3, 3);
-
-  assert(tree.rangeSum(0, 3) == 16);
-
-  cout << "PASS\n" << endl;
+    EXPECT_EQ(tree.rangeSum(0, 3), 16);
 }
 
-void testSingleElementUpdate() {
-  cout << "[TEST] Single Element Update..." << endl;
+TEST(LazySegmentTreeTest, SingleElementUpdate)
+{
+    LazySegmentTree tree({5, 5, 5});
 
-  LazySegmentTree tree({5, 5, 5});
+    tree.rangeAdd(1, 1, 7);
 
-  tree.rangeAdd(1, 1, 7);
-
-  assert(tree.rangeSum(1, 1) == 12);
-  assert(tree.rangeSum(0, 2) == 22);
-
-  cout << "PASS\n" << endl;
+    EXPECT_EQ(tree.rangeSum(1, 1), 12);
+    EXPECT_EQ(tree.rangeSum(0, 2), 22);
 }
 
-void testNegativeUpdates() {
-  cout << "[TEST] Negative Updates..." << endl;
+TEST(LazySegmentTreeTest, NegativeUpdates)
+{
+    LazySegmentTree tree({10, 10, 10, 10});
 
-  LazySegmentTree tree({10, 10, 10, 10});
+    tree.rangeAdd(0, 3, -3);
 
-  tree.rangeAdd(0, 3, -3);
-
-  assert(tree.rangeSum(0, 3) == 28);
-
-  cout << "PASS\n" << endl;
+    EXPECT_EQ(tree.rangeSum(0, 3), 28);
 }
 
-void testOverlappingUpdates() {
-  cout << "[TEST] Overlapping Updates..." << endl;
+TEST(LazySegmentTreeTest, OverlappingUpdates)
+{
+    LazySegmentTree tree({1, 2, 3, 4, 5});
 
-  LazySegmentTree tree({1, 2, 3, 4, 5});
+    tree.rangeAdd(0, 3, 2);
+    tree.rangeAdd(2, 4, 5);
 
-  tree.rangeAdd(0, 3, 2);
-  tree.rangeAdd(2, 4, 5);
-
-  assert(tree.rangeSum(0, 4) == 38);
-  assert(tree.rangeSum(2, 3) == 21);
-
-  cout << "PASS\n" << endl;
+    EXPECT_EQ(tree.rangeSum(0, 4), 38);
+    EXPECT_EQ(tree.rangeSum(2, 3), 21);
 }
 
-void testManyQueries() {
-  cout << "[TEST] Multiple Queries..." << endl;
+TEST(LazySegmentTreeTest, MultipleQueries)
+{
+    LazySegmentTree tree({2, 4, 6, 8, 10});
 
-  LazySegmentTree tree({2, 4, 6, 8, 10});
+    EXPECT_EQ(tree.rangeSum(0, 1), 6);
+    EXPECT_EQ(tree.rangeSum(2, 4), 24);
 
-  assert(tree.rangeSum(0, 1) == 6);
-  assert(tree.rangeSum(2, 4) == 24);
+    tree.rangeAdd(1, 3, 1);
 
-  tree.rangeAdd(1, 3, 1);
-
-  assert(tree.rangeSum(0, 4) == 33);
-  assert(tree.rangeSum(1, 3) == 21);
-
-  cout << "PASS\n" << endl;
+    EXPECT_EQ(tree.rangeSum(0, 4), 33);
+    EXPECT_EQ(tree.rangeSum(1, 3), 21);
 }
 
-/*
-=========================================================
-Edge Case Tests
-=========================================================
-*/
+// ---------------------------------------------------------------------------
+// Edge case tests
+// ---------------------------------------------------------------------------
 
-void testZeroDeltaUpdate() {
-  cout << "[TEST] Zero Delta Update..." << endl;
+TEST(LazySegmentTreeTest, ZeroDeltaUpdate)
+{
+    LazySegmentTree tree({1, 2, 3, 4, 5});
 
-  LazySegmentTree tree({1, 2, 3, 4, 5});
+    tree.rangeAdd(0, 4, 0);
 
-  tree.rangeAdd(0, 4, 0);
-
-  assert(tree.rangeSum(0, 4) == 15);
-  assert(tree.rangeSum(1, 3) == 9);
-
-  cout << "PASS\n" << endl;
+    EXPECT_EQ(tree.rangeSum(0, 4), 15);
+    EXPECT_EQ(tree.rangeSum(1, 3), 9);
 }
 
-void testSingleElementArray() {
-  cout << "[TEST] Single Element Array..." << endl;
+TEST(LazySegmentTreeTest, SingleElementArray)
+{
+    LazySegmentTree tree({42});
 
-  LazySegmentTree tree({42});
+    EXPECT_EQ(tree.rangeSum(0, 0), 42);
 
-  assert(tree.rangeSum(0, 0) == 42);
+    tree.rangeAdd(0, 0, 8);
 
-  tree.rangeAdd(0, 0, 8);
-
-  assert(tree.rangeSum(0, 0) == 50);
-
-  cout << "PASS\n" << endl;
+    EXPECT_EQ(tree.rangeSum(0, 0), 50);
 }
 
-void testEmptyTree() {
-  cout << "[TEST] Empty Tree..." << endl;
+TEST(LazySegmentTreeTest, EmptyTreeRangeSumThrows)
+{
+    LazySegmentTree tree;
 
-  LazySegmentTree tree;
-
-  bool exceptionThrown = false;
-
-  try {
-    tree.rangeSum(0, 0);
-  } catch (const std::runtime_error &) {
-    exceptionThrown = true;
-  }
-
-  assert(exceptionThrown);
-
-  exceptionThrown = false;
-
-  try {
-    tree.rangeAdd(0, 0, 5);
-  } catch (const std::runtime_error &) {
-    exceptionThrown = true;
-  }
-
-  assert(exceptionThrown);
-
-  cout << "PASS\n" << endl;
+    EXPECT_THROW(tree.rangeSum(0, 0), std::runtime_error);
 }
 
-void testLargeValues() {
-  cout << "[TEST] Large Values..." << endl;
+TEST(LazySegmentTreeTest, EmptyTreeRangeAddThrows)
+{
+    LazySegmentTree tree;
 
-  constexpr std::size_t n = 1000;
-  constexpr long long value = 1000000000LL;
-
-  std::vector<long long> data(n, value);
-
-  LazySegmentTree tree(data);
-
-  assert(tree.rangeSum(0, n - 1) == value * n);
-
-  tree.rangeAdd(0, n - 1, value);
-
-  assert(tree.rangeSum(0, n - 1) == value * n * 2);
-
-  cout << "PASS\n" << endl;
+    EXPECT_THROW(tree.rangeAdd(0, 0, 5), std::runtime_error);
 }
 
-void testOutOfRangeAccess() {
-  cout << "[TEST] Out-of-Range Access..." << endl;
+TEST(LazySegmentTreeTest, LargeValues)
+{
+    constexpr std::size_t n     = 1000;
+    constexpr long long   value = 1'000'000'000LL;
 
-  LazySegmentTree tree({1, 2, 3});
+    std::vector<long long> data(n, value);
+    LazySegmentTree        tree(data);
 
-  bool exceptionThrown = false;
+    EXPECT_EQ(tree.rangeSum(0, n - 1), value * static_cast<long long>(n));
 
-  try {
-    tree.rangeSum(0, 3);
-  } catch (const std::out_of_range &) {
-    exceptionThrown = true;
-  }
+    tree.rangeAdd(0, n - 1, value);
 
-  assert(exceptionThrown);
-
-  exceptionThrown = false;
-
-  try {
-    tree.rangeAdd(0, 5, 1);
-  } catch (const std::out_of_range &) {
-    exceptionThrown = true;
-  }
-
-  assert(exceptionThrown);
-
-  cout << "PASS\n" << endl;
+    EXPECT_EQ(tree.rangeSum(0, n - 1), value * static_cast<long long>(n) * 2);
 }
 
-void runAllTests() {
-  testInitialization();
-  testSingleRangeUpdate();
-  testMultipleUpdates();
-  testWholeArrayUpdate();
-  testSingleElementUpdate();
-  testNegativeUpdates();
-  testOverlappingUpdates();
-  testManyQueries();
+TEST(LazySegmentTreeTest, OutOfRangeAccessRangeSumThrows)
+{
+    LazySegmentTree tree({1, 2, 3});
 
-  // Edge cases
-  testZeroDeltaUpdate();
-  testSingleElementArray();
-  testEmptyTree();
-  testLargeValues();
-  testOutOfRangeAccess();
-
-  cout << "======================================" << endl;
-  cout << "All Lazy Segment Tree Tests Passed!" << endl;
-  cout << "======================================" << endl;
+    EXPECT_THROW(tree.rangeSum(0, 3), std::out_of_range);
 }
 
-int main() {
-  runAllTests();
+TEST(LazySegmentTreeTest, OutOfRangeAccessRangeAddThrows)
+{
+    LazySegmentTree tree({1, 2, 3});
 
-  return 0;
+    EXPECT_THROW(tree.rangeAdd(0, 5, 1), std::out_of_range);
 }

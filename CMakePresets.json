@@ -1,8 +1,8 @@
 {
-  "version": 3,
+  "version": 6,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 21,
+    "minor": 25,
     "patch": 0
   },
   "configurePresets": [
@@ -119,7 +119,9 @@
       "configurePreset": "dev",
       "output": {
         "verbosity": "verbose",
-        "outputOnFailure": true
+        "outputOnFailure": true,
+        "outputLogFile": "${sourceDir}/build/dev/test_output.log",
+        "outputJUnitFile": "${sourceDir}/build/dev/test_results.xml"
       },
       "execution": {
         "stopOnFailure": false

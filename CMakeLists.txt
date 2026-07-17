@@ -3,9 +3,10 @@
 # Supported platforms : Linux, Windows, macOS
 # Supported toolchains: GCC, Clang, Apple Clang, MSVC
 # Minimum CMake version chosen to support:
-#   - CMakePresets.json schema version 3
-#   - CTest --output-junit (added in CMake 3.21)
-cmake_minimum_required(VERSION 3.21)
+#   - CMakePresets.json schema version 6 (requires CMake >= 3.25)
+#   - CTest --output-junit / outputJUnitFile in test presets (CMake 3.21+)
+#   - gtest_discover_tests (CMake 3.10+)
+cmake_minimum_required(VERSION 3.25)
 
 project(
   valseg

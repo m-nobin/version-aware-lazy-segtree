@@ -1,180 +1,125 @@
 #include <valseg/brute_force_array.hpp>
 
-#include <cassert>
-#include <iostream>
-#include <vector>
+#include <gtest/gtest.h>
 
-using std::cout;
-using std::endl;
 using valseg::BruteForceArray;
 
-void testInitialization()
+// ---------------------------------------------------------------------------
+// Initialization
+// ---------------------------------------------------------------------------
+
+TEST(BruteForceArrayTest, Initialization)
 {
-    cout << "[TEST] Initialization..." << endl;
+    BruteForceArray arr({1, 2, 3, 4, 5});
 
-    BruteForceArray arr({1,2,3,4,5});
-
-    assert(arr.versionCount() == 1);
-    assert(arr.size() == 5);
-
-    assert(arr.rangeSum(0,0,4) == 15);
-
-    cout << "PASS\n" << endl;
+    EXPECT_EQ(arr.versionCount(), 1u);
+    EXPECT_EQ(arr.size(), 5u);
+    EXPECT_EQ(arr.rangeSum(0, 0, 4), 15);
 }
 
-void testSingleRangeUpdate()
+// ---------------------------------------------------------------------------
+// Single range update
+// ---------------------------------------------------------------------------
+
+TEST(BruteForceArrayTest, SingleRangeUpdate)
 {
-    cout << "[TEST] Single Range Update..." << endl;
+    BruteForceArray arr({1, 2, 3, 4, 5});
 
-    BruteForceArray arr({1,2,3,4,5});
+    std::size_t v1 = arr.rangeAdd(0, 1, 3, 5);
 
-    std::size_t v1 = arr.rangeAdd(0,1,3,5);
+    EXPECT_EQ(v1, 1u);
 
-    assert(v1 == 1);
+    // Version 0 must remain unchanged.
+    EXPECT_EQ(arr.rangeSum(0, 0, 4), 15);
 
-    // Version 0 unchanged
-    assert(arr.rangeSum(0,0,4) == 15);
-
-    // Version 1
-    assert(arr.rangeSum(v1,0,4) == 30);
-
-    assert(arr.rangeSum(v1,1,3) == 24);
-
-    cout << "PASS\n" << endl;
+    // Version 1 reflects the update.
+    EXPECT_EQ(arr.rangeSum(v1, 0, 4), 30);
+    EXPECT_EQ(arr.rangeSum(v1, 1, 3), 24);
 }
 
-void testMultipleVersions()
+// ---------------------------------------------------------------------------
+// Multiple versions
+// ---------------------------------------------------------------------------
+
+TEST(BruteForceArrayTest, MultipleVersions)
 {
-    cout << "[TEST] Multiple Versions..." << endl;
+    BruteForceArray arr({1, 2, 3, 4, 5});
 
-    BruteForceArray arr({1,2,3,4,5});
+    std::size_t v1 = arr.rangeAdd(0, 0, 2, 10);
+    std::size_t v2 = arr.rangeAdd(v1, 2, 4, -2);
 
-    std::size_t v1 = arr.rangeAdd(0,0,2,10);
-
-    std::size_t v2 = arr.rangeAdd(v1,2,4,-2);
-
-    // Version 0
-
-    assert(arr.rangeSum(0,0,4) == 15);
-
-    // Version 1
-
-    assert(arr.rangeSum(v1,0,4) == 45);
-
-    // Version 2
-
-    assert(arr.rangeSum(v2,0,4) == 39);
-
-    cout << "PASS\n" << endl;
+    EXPECT_EQ(arr.rangeSum(0, 0, 4), 15);
+    EXPECT_EQ(arr.rangeSum(v1, 0, 4), 45);
+    EXPECT_EQ(arr.rangeSum(v2, 0, 4), 39);
 }
 
-void testHistoricalQueries()
+// ---------------------------------------------------------------------------
+// Historical queries — old versions remain unchanged
+// ---------------------------------------------------------------------------
+
+TEST(BruteForceArrayTest, HistoricalQueries)
 {
-    cout << "[TEST] Historical Queries..." << endl;
+    BruteForceArray arr({10, 20, 30, 40});
 
-    BruteForceArray arr({10,20,30,40});
+    std::size_t v1 = arr.rangeAdd(0, 0, 3, 5);
+    std::size_t v2 = arr.rangeAdd(v1, 1, 2, 10);
 
-    std::size_t v1 = arr.rangeAdd(0,0,3,5);
-
-    std::size_t v2 = arr.rangeAdd(v1,1,2,10);
-
-    // Old versions must remain unchanged
-
-    assert(arr.rangeSum(0,0,3) == 100);
-
-    assert(arr.rangeSum(v1,0,3) == 120);
-
-    assert(arr.rangeSum(v2,0,3) == 140);
-
-    cout << "PASS\n" << endl;
+    EXPECT_EQ(arr.rangeSum(0, 0, 3), 100);
+    EXPECT_EQ(arr.rangeSum(v1, 0, 3), 120);
+    EXPECT_EQ(arr.rangeSum(v2, 0, 3), 140);
 }
 
-void testNegativeUpdates()
+// ---------------------------------------------------------------------------
+// Negative updates
+// ---------------------------------------------------------------------------
+
+TEST(BruteForceArrayTest, NegativeUpdates)
 {
-    cout << "[TEST] Negative Updates..." << endl;
+    BruteForceArray arr({5, 5, 5, 5});
 
-    BruteForceArray arr({5,5,5,5});
+    std::size_t v1 = arr.rangeAdd(0, 0, 3, -2);
 
-    std::size_t v1 = arr.rangeAdd(0,0,3,-2);
-
-    assert(arr.rangeSum(v1,0,3) == 12);
-
-    cout << "PASS\n" << endl;
+    EXPECT_EQ(arr.rangeSum(v1, 0, 3), 12);
 }
 
-void testSingleElementUpdate()
+// ---------------------------------------------------------------------------
+// Single element update
+// ---------------------------------------------------------------------------
+
+TEST(BruteForceArrayTest, SingleElementUpdate)
 {
-    cout << "[TEST] Single Element Update..." << endl;
+    BruteForceArray arr({1, 2, 3});
 
-    BruteForceArray arr({1,2,3});
+    std::size_t v1 = arr.rangeAdd(0, 1, 1, 10);
 
-    std::size_t v1 = arr.rangeAdd(0,1,1,10);
-
-    assert(arr.rangeSum(v1,1,1) == 12);
-
-    assert(arr.rangeSum(0,1,1) == 2);
-
-    cout << "PASS\n" << endl;
+    EXPECT_EQ(arr.rangeSum(v1, 1, 1), 12);
+    EXPECT_EQ(arr.rangeSum(0, 1, 1), 2);
 }
 
-void testWholeArrayUpdate()
+// ---------------------------------------------------------------------------
+// Whole array update
+// ---------------------------------------------------------------------------
+
+TEST(BruteForceArrayTest, WholeArrayUpdate)
 {
-    cout << "[TEST] Whole Array Update..." << endl;
+    BruteForceArray arr({1, 1, 1, 1});
 
-    BruteForceArray arr({1,1,1,1});
+    std::size_t v1 = arr.rangeAdd(0, 0, 3, 3);
 
-    std::size_t v1 = arr.rangeAdd(0,0,3,3);
-
-    assert(arr.rangeSum(v1,0,3) == 16);
-
-    cout << "PASS\n" << endl;
+    EXPECT_EQ(arr.rangeSum(v1, 0, 3), 16);
 }
 
-void testVersionIsolation()
+// ---------------------------------------------------------------------------
+// Version isolation — modifying v2 must not alter v1
+// ---------------------------------------------------------------------------
+
+TEST(BruteForceArrayTest, VersionIsolation)
 {
-    cout << "[TEST] Version Isolation..." << endl;
+    BruteForceArray arr({1, 2, 3});
 
-    BruteForceArray arr({1,2,3});
+    std::size_t v1 = arr.rangeAdd(0, 0, 0, 10);
+    std::size_t v2 = arr.rangeAdd(v1, 1, 1, 20);
 
-    std::size_t v1 = arr.rangeAdd(0,0,0,10);
-
-    std::size_t v2 = arr.rangeAdd(v1,1,1,20);
-
-    // Ensure Version 1 was not modified after Version 2
-
-    assert(arr.rangeSum(v1,0,2) == 16);
-
-    assert(arr.rangeSum(v2,0,2) == 36);
-
-    cout << "PASS\n" << endl;
-}
-
-void runAllTests()
-{
-    testInitialization();
-
-    testSingleRangeUpdate();
-
-    testMultipleVersions();
-
-    testHistoricalQueries();
-
-    testNegativeUpdates();
-
-    testSingleElementUpdate();
-
-    testWholeArrayUpdate();
-
-    testVersionIsolation();
-
-    cout << "======================================" << endl;
-    cout << "All deterministic tests passed!" << endl;
-    cout << "======================================" << endl;
-}
-
-int main()
-{
-    runAllTests();
-
-    return 0;
+    EXPECT_EQ(arr.rangeSum(v1, 0, 2), 16);
+    EXPECT_EQ(arr.rangeSum(v2, 0, 2), 36);
 }
