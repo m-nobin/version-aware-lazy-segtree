@@ -41,6 +41,10 @@ function(add_valseg_test target source)
 
   target_compile_features(${target} PRIVATE cxx_std_17)
 
+  if(VALSEG_ENABLE_CLANG_TIDY)
+    set_property(TARGET ${target} PROPERTY CXX_CLANG_TIDY "${VALSEG_CLANG_TIDY_COMMAND}")
+  endif()
+
   if(MSVC)
     target_compile_options(${target} PRIVATE /W4 /permissive-)
   else()

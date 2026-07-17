@@ -1,5 +1,7 @@
 #include <valseg/lazy_segment_tree.hpp>
 
+#include <stdexcept>
+
 namespace valseg {
 
 /*
@@ -10,7 +12,7 @@ Constructors
 
 LazySegmentTree::LazySegmentTree() : arraySize(0) {}
 
-LazySegmentTree::LazySegmentTree(const std::vector<ValueType> &values) {
+LazySegmentTree::LazySegmentTree(const std::vector<ValueType>& values) {
   initialize(values);
 }
 
@@ -20,7 +22,7 @@ Initialization
 =========================================================
 */
 
-void LazySegmentTree::initialize(const std::vector<ValueType> &values) {
+void LazySegmentTree::initialize(const std::vector<ValueType>& values) {
   arraySize = values.size();
 
   tree.assign(4 * arraySize, 0);
@@ -37,21 +39,21 @@ Public Operations
 =========================================================
 */
 
-void LazySegmentTree::rangeAdd(std::size_t left, std::size_t right,
-                               ValueType value) {
+void LazySegmentTree::rangeAdd(std::size_t left, std::size_t right, ValueType value) {
   validateRange(left, right);
 
   update(0, 0, arraySize - 1, left, right, value);
 }
 
-LazySegmentTree::ValueType LazySegmentTree::rangeSum(std::size_t left,
-                                                     std::size_t right) {
+LazySegmentTree::ValueType LazySegmentTree::rangeSum(std::size_t left, std::size_t right) {
   validateRange(left, right);
 
   return query(0, 0, arraySize - 1, left, right);
 }
 
-std::size_t LazySegmentTree::size() const { return arraySize; }
+std::size_t LazySegmentTree::size() const {
+  return arraySize;
+}
 
 /*
 =========================================================
@@ -59,9 +61,8 @@ Build
 =========================================================
 */
 
-void LazySegmentTree::build(const std::vector<ValueType> &values,
-                            std::size_t node, std::size_t segmentLeft,
-                            std::size_t segmentRight) {
+void LazySegmentTree::build(const std::vector<ValueType>& values, std::size_t node,
+                            std::size_t segmentLeft, std::size_t segmentRight) {
   if (segmentLeft == segmentRight) {
     tree[node] = values[segmentLeft];
     return;
@@ -82,15 +83,13 @@ Lazy Push
 =========================================================
 */
 
-void LazySegmentTree::push(std::size_t node, std::size_t segmentLeft,
-                           std::size_t segmentRight) {
+void LazySegmentTree::push(std::size_t node, std::size_t segmentLeft, std::size_t segmentRight) {
   if (lazy[node] == 0)
     return;
 
   // Explicit conversion: segment length is always positive and fits in
   // ValueType (long long), so static_cast<ValueType> is safe here.
-  tree[node] +=
-      static_cast<ValueType>(segmentRight - segmentLeft + 1) * lazy[node];
+  tree[node] += static_cast<ValueType>(segmentRight - segmentLeft + 1) * lazy[node];
 
   if (segmentLeft != segmentRight) {
     lazy[2 * node + 1] += lazy[node];
@@ -106,9 +105,8 @@ Range Update
 =========================================================
 */
 
-void LazySegmentTree::update(std::size_t node, std::size_t segmentLeft,
-                             std::size_t segmentRight, std::size_t queryLeft,
-                             std::size_t queryRight, ValueType value) {
+void LazySegmentTree::update(std::size_t node, std::size_t segmentLeft, std::size_t segmentRight,
+                             std::size_t queryLeft, std::size_t queryRight, ValueType value) {
   push(node, segmentLeft, segmentRight);
 
   if (segmentRight < queryLeft || segmentLeft > queryRight) {
@@ -138,10 +136,8 @@ Range Query
 =========================================================
 */
 
-LazySegmentTree::ValueType LazySegmentTree::query(std::size_t node,
-                                                  std::size_t segmentLeft,
-                                                  std::size_t segmentRight,
-                                                  std::size_t queryLeft,
+LazySegmentTree::ValueType LazySegmentTree::query(std::size_t node, std::size_t segmentLeft,
+                                                  std::size_t segmentRight, std::size_t queryLeft,
                                                   std::size_t queryRight) {
   push(node, segmentLeft, segmentRight);
 

@@ -16,6 +16,31 @@ project(
 )
 
 # ---------------------------------------------------------------------------
+# Optional developer tooling
+# ---------------------------------------------------------------------------
+
+option(VALSEG_ENABLE_CLANG_TIDY "Run Clang-Tidy while compiling project targets" OFF)
+
+if(VALSEG_ENABLE_CLANG_TIDY)
+  find_program(
+    VALSEG_CLANG_TIDY_EXECUTABLE
+    NAMES clang-tidy
+    DOC "Path to the Clang-Tidy executable"
+  )
+
+  if(NOT VALSEG_CLANG_TIDY_EXECUTABLE)
+    message(FATAL_ERROR
+      "VALSEG_ENABLE_CLANG_TIDY requires clang-tidy. "
+      "Install LLVM or set VALSEG_CLANG_TIDY_EXECUTABLE explicitly."
+    )
+  endif()
+
+  set(VALSEG_CLANG_TIDY_COMMAND
+    "${VALSEG_CLANG_TIDY_EXECUTABLE};--config-file=${PROJECT_SOURCE_DIR}/.clang-tidy"
+  )
+endif()
+
+# ---------------------------------------------------------------------------
 # Library target
 # ---------------------------------------------------------------------------
 
@@ -26,6 +51,10 @@ add_library(valseg
 
 # Canonical alias used by consumers and by CTest targets in this project.
 add_library(valseg::valseg ALIAS valseg)
+
+if(VALSEG_ENABLE_CLANG_TIDY)
+  set_property(TARGET valseg PROPERTY CXX_CLANG_TIDY "${VALSEG_CLANG_TIDY_COMMAND}")
+endif()
 
 # C++17 is required; propagate the requirement to downstream targets.
 target_compile_features(valseg PUBLIC cxx_std_17)

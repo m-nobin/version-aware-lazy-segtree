@@ -2,7 +2,6 @@
 #define VALSEG_LAZY_SEGMENT_TREE_HPP
 
 #include <cstddef>
-#include <stdexcept>
 #include <vector>
 
 namespace valseg {
@@ -28,12 +27,12 @@ public:
 
   LazySegmentTree();
 
-  explicit LazySegmentTree(const std::vector<ValueType> &values);
+  explicit LazySegmentTree(const std::vector<ValueType>& values);
 
   /**
    * @brief Build the segment tree.
    */
-  void initialize(const std::vector<ValueType> &values);
+  void initialize(const std::vector<ValueType>& values);
 
   /**
    * @brief Add value to every element in [left, right].
@@ -63,19 +62,16 @@ private:
   ============================================
   */
 
-  void build(const std::vector<ValueType> &values, std::size_t node,
-             std::size_t segmentLeft, std::size_t segmentRight);
+  void build(const std::vector<ValueType>& values, std::size_t node, std::size_t segmentLeft,
+             std::size_t segmentRight);
 
-  void push(std::size_t node, std::size_t segmentLeft,
-            std::size_t segmentRight);
+  void push(std::size_t node, std::size_t segmentLeft, std::size_t segmentRight);
 
-  void update(std::size_t node, std::size_t segmentLeft,
-              std::size_t segmentRight, std::size_t queryLeft,
-              std::size_t queryRight, ValueType value);
+  void update(std::size_t node, std::size_t segmentLeft, std::size_t segmentRight,
+              std::size_t queryLeft, std::size_t queryRight, ValueType value);
 
-  ValueType query(std::size_t node, std::size_t segmentLeft,
-                  std::size_t segmentRight, std::size_t queryLeft,
-                  std::size_t queryRight);
+  ValueType query(std::size_t node, std::size_t segmentLeft, std::size_t segmentRight,
+                  std::size_t queryLeft, std::size_t queryRight);
 
   void validateRange(std::size_t left, std::size_t right) const;
 };

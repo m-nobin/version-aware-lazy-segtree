@@ -1,6 +1,6 @@
 #include <valseg/brute_force_array.hpp>
 
-#include <numeric>
+#include <stdexcept>
 
 namespace valseg {
 
@@ -12,7 +12,7 @@ Constructors
 
 BruteForceArray::BruteForceArray() {}
 
-BruteForceArray::BruteForceArray(const std::vector<ValueType> &initial) {
+BruteForceArray::BruteForceArray(const std::vector<ValueType>& initial) {
   initialize(initial);
 }
 
@@ -22,7 +22,7 @@ Initialization
 =========================================================
 */
 
-void BruteForceArray::initialize(const std::vector<ValueType> &initial) {
+void BruteForceArray::initialize(const std::vector<ValueType>& initial) {
   versions.clear();
   versions.push_back(initial);
 }
@@ -47,8 +47,8 @@ Range Update
 =========================================================
 */
 
-std::size_t BruteForceArray::rangeAdd(std::size_t baseVersion, std::size_t left,
-                                      std::size_t right, ValueType value) {
+std::size_t BruteForceArray::rangeAdd(std::size_t baseVersion, std::size_t left, std::size_t right,
+                                      ValueType value) {
   validateVersion(baseVersion);
   validateRange(baseVersion, left, right);
 
@@ -67,8 +67,7 @@ Range Query
 =========================================================
 */
 
-BruteForceArray::ValueType BruteForceArray::rangeSum(std::size_t version,
-                                                     std::size_t left,
+BruteForceArray::ValueType BruteForceArray::rangeSum(std::size_t version, std::size_t left,
                                                      std::size_t right) const {
   validateVersion(version);
   validateRange(version, left, right);
@@ -88,14 +87,16 @@ Accessors
 =========================================================
 */
 
-const std::vector<BruteForceArray::ValueType> &
+const std::vector<BruteForceArray::ValueType>&
 BruteForceArray::getVersion(std::size_t version) const {
   validateVersion(version);
 
   return versions[version];
 }
 
-std::size_t BruteForceArray::versionCount() const { return versions.size(); }
+std::size_t BruteForceArray::versionCount() const {
+  return versions.size();
+}
 
 std::size_t BruteForceArray::size() const {
   if (versions.empty()) {

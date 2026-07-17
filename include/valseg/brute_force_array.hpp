@@ -2,7 +2,6 @@
 #define VALSEG_BRUTE_FORCE_ARRAY_HPP
 
 #include <cstddef>
-#include <stdexcept>
 #include <vector>
 
 namespace valseg {
@@ -31,7 +30,7 @@ public:
    *
    * @param initial Initial array.
    */
-  explicit BruteForceArray(const std::vector<ValueType> &initial);
+  explicit BruteForceArray(const std::vector<ValueType>& initial);
 
   /**
    * @brief Initialize Version 0.
@@ -40,7 +39,7 @@ public:
    *
    * @param initial Initial array.
    */
-  void initialize(const std::vector<ValueType> &initial);
+  void initialize(const std::vector<ValueType>& initial);
 
   /**
    * @brief Perform a range addition on a copied version.
@@ -55,8 +54,8 @@ public:
    *
    * @return Newly created version number.
    */
-  std::size_t rangeAdd(std::size_t baseVersion, std::size_t left,
-                       std::size_t right, ValueType value);
+  std::size_t rangeAdd(std::size_t baseVersion, std::size_t left, std::size_t right,
+                       ValueType value);
 
   /**
    * @brief Compute the range sum.
@@ -67,13 +66,12 @@ public:
    *
    * @return Sum over [left, right].
    */
-  ValueType rangeSum(std::size_t version, std::size_t left,
-                     std::size_t right) const;
+  ValueType rangeSum(std::size_t version, std::size_t left, std::size_t right) const;
 
   /**
    * @brief Get a read-only reference to a version.
    */
-  const std::vector<ValueType> &getVersion(std::size_t version) const;
+  const std::vector<ValueType>& getVersion(std::size_t version) const;
 
   /**
    * @brief Number of versions currently stored.
@@ -111,8 +109,7 @@ private:
   /**
    * Validate query/update range.
    */
-  void validateRange(std::size_t version, std::size_t left,
-                     std::size_t right) const;
+  void validateRange(std::size_t version, std::size_t left, std::size_t right) const;
 };
 
 } // namespace valseg
