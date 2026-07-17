@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux / GCC
+            os: ubuntu-24.04
+            preset: ci-linux-gcc
+            build-dir: build/ci-linux-gcc
+            install-clang: false
+          - name: Linux / Clang
+            os: ubuntu-24.04
+            preset: ci-linux-clang
+            build-dir: build/ci-linux-clang
+            install-clang: true
+          - name: Windows / MSVC
+            os: windows-2022
+            preset: ci-windows-msvc
+            build-dir: build/ci-windows-msvc
+            install-clang: false
+          - name: macOS / Apple Clang
+            os: macos-14
+            preset: ci-macos-clang
+            build-dir: build/ci-macos-clang
+            install-clang: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Clang
+        if: matrix.install-clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang
+
+      - name: Show CMake version
+        run: cmake --version
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
+
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-evidence-${{ matrix.preset }}
+          path: |
+            ${{ matrix.build-dir }}/test_output.log
+            ${{ matrix.build-dir }}/test_results.xml
+          if-no-files-found: error
+          retention-days: 14
+
+  format:
+    name: Formatting / ClangFormat 18
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install ClangFormat
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang-format-18
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          find include src tests -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0 \
+            | xargs -0 clang-format-18 --dry-run --Werror
+
+  sanitizers:
+    name: Linux / Clang / ASan + UBSan
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang
+
+      - name: Configure
+        run: cmake --preset ci-linux-clang-sanitizers
+
+      - name: Build
+        run: cmake --build --preset ci-linux-clang-sanitizers
+
+      - name: Test
+        run: ctest --preset ci-linux-clang-sanitizers
+
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-evidence-ci-linux-clang-sanitizers
+          path: |
+            build/ci-linux-clang-sanitizers/test_output.log
+            build/ci-linux-clang-sanitizers/test_results.xml
+          if-no-files-found: error
+          retention-days: 14

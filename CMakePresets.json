@@ -85,6 +85,17 @@
       }
     },
     {
+      "name": "ci-linux-clang-sanitizers",
+      "displayName": "CI — Linux Clang (Sanitizers)",
+      "description": "CI configuration for Linux with AddressSanitizer and UndefinedBehaviorSanitizer.",
+      "inherits": "ci-linux-clang",
+      "binaryDir": "${sourceDir}/build/ci-linux-clang-sanitizers",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+      }
+    },
+    {
       "name": "ci-macos-clang",
       "displayName": "CI — macOS Apple Clang",
       "description": "CI configuration for macOS with Apple Clang.",
@@ -143,6 +154,12 @@
       "name": "ci-linux-clang",
       "displayName": "Build (CI Linux Clang)",
       "configurePreset": "ci-linux-clang",
+      "configuration": "Debug"
+    },
+    {
+      "name": "ci-linux-clang-sanitizers",
+      "displayName": "Build (CI Linux Clang, Sanitizers)",
+      "configurePreset": "ci-linux-clang-sanitizers",
       "configuration": "Debug"
     },
     {
@@ -209,7 +226,12 @@
       "configuration": "Debug",
       "output": {
         "verbosity": "verbose",
-        "outputOnFailure": true
+        "outputOnFailure": true,
+        "outputLogFile": "${sourceDir}/build/ci-linux-gcc/test_output.log",
+        "outputJUnitFile": "${sourceDir}/build/ci-linux-gcc/test_results.xml"
+      },
+      "execution": {
+        "stopOnFailure": false
       }
     },
     {
@@ -219,7 +241,27 @@
       "configuration": "Debug",
       "output": {
         "verbosity": "verbose",
-        "outputOnFailure": true
+        "outputOnFailure": true,
+        "outputLogFile": "${sourceDir}/build/ci-linux-clang/test_output.log",
+        "outputJUnitFile": "${sourceDir}/build/ci-linux-clang/test_results.xml"
+      },
+      "execution": {
+        "stopOnFailure": false
+      }
+    },
+    {
+      "name": "ci-linux-clang-sanitizers",
+      "displayName": "Test (CI Linux Clang, Sanitizers)",
+      "configurePreset": "ci-linux-clang-sanitizers",
+      "configuration": "Debug",
+      "output": {
+        "verbosity": "verbose",
+        "outputOnFailure": true,
+        "outputLogFile": "${sourceDir}/build/ci-linux-clang-sanitizers/test_output.log",
+        "outputJUnitFile": "${sourceDir}/build/ci-linux-clang-sanitizers/test_results.xml"
+      },
+      "execution": {
+        "stopOnFailure": false
       }
     },
     {
@@ -229,7 +271,12 @@
       "configuration": "Debug",
       "output": {
         "verbosity": "verbose",
-        "outputOnFailure": true
+        "outputOnFailure": true,
+        "outputLogFile": "${sourceDir}/build/ci-macos-clang/test_output.log",
+        "outputJUnitFile": "${sourceDir}/build/ci-macos-clang/test_results.xml"
+      },
+      "execution": {
+        "stopOnFailure": false
       }
     },
     {
@@ -239,7 +286,12 @@
       "configuration": "Debug",
       "output": {
         "verbosity": "verbose",
-        "outputOnFailure": true
+        "outputOnFailure": true,
+        "outputLogFile": "${sourceDir}/build/ci-windows-msvc/test_output.log",
+        "outputJUnitFile": "${sourceDir}/build/ci-windows-msvc/test_results.xml"
+      },
+      "execution": {
+        "stopOnFailure": false
       }
     }
   ]
