@@ -2,6 +2,8 @@
 
 #include <gtest/gtest.h>
 
+#include <stdexcept>
+
 using valseg::BruteForceArray;
 
 // ---------------------------------------------------------------------------
@@ -122,4 +124,88 @@ TEST(BruteForceArrayTest, VersionIsolation)
 
     EXPECT_EQ(arr.rangeSum(v1, 0, 2), 16);
     EXPECT_EQ(arr.rangeSum(v2, 0, 2), 36);
+}
+
+// ---------------------------------------------------------------------------
+// Validation contracts
+// ---------------------------------------------------------------------------
+
+TEST(BruteForceArrayTest, InvalidVersionQueryThrows)
+{
+    BruteForceArray arr({1, 2, 3});
+
+    EXPECT_THROW(arr.rangeSum(1, 0, 2), std::out_of_range);
+}
+
+TEST(BruteForceArrayTest, InvalidBaseVersionUpdateThrowsWithoutCreatingVersion)
+{
+    BruteForceArray arr({1, 2, 3});
+
+    EXPECT_THROW(arr.rangeAdd(1, 0, 2, 5), std::out_of_range);
+    EXPECT_EQ(arr.versionCount(), 1u);
+}
+
+TEST(BruteForceArrayTest, DefaultArrayHasNoVersion)
+{
+    BruteForceArray arr;
+
+    EXPECT_EQ(arr.versionCount(), 0u);
+    EXPECT_EQ(arr.size(), 0u);
+    EXPECT_THROW(arr.rangeSum(0, 0, 0), std::out_of_range);
+    EXPECT_THROW(arr.rangeAdd(0, 0, 0, 1), std::out_of_range);
+}
+
+TEST(BruteForceArrayTest, InitializedEmptyArrayRejectsRanges)
+{
+    BruteForceArray arr;
+    arr.initialize({});
+
+    EXPECT_EQ(arr.versionCount(), 1u);
+    EXPECT_EQ(arr.size(), 0u);
+    EXPECT_THROW(arr.rangeSum(0, 0, 0), std::out_of_range);
+    EXPECT_THROW(arr.rangeAdd(0, 0, 0, 1), std::out_of_range);
+    EXPECT_EQ(arr.versionCount(), 1u);
+}
+
+TEST(BruteForceArrayTest, ReversedQueryRangeThrows)
+{
+    BruteForceArray arr({1, 2, 3});
+
+    EXPECT_THROW(arr.rangeSum(0, 2, 1), std::invalid_argument);
+}
+
+TEST(BruteForceArrayTest, ReversedUpdateRangeThrowsWithoutCreatingVersion)
+{
+    BruteForceArray arr({1, 2, 3});
+
+    EXPECT_THROW(arr.rangeAdd(0, 2, 1, 5), std::invalid_argument);
+    EXPECT_EQ(arr.versionCount(), 1u);
+}
+
+TEST(BruteForceArrayTest, OutOfRangeQueryThrows)
+{
+    BruteForceArray arr({1, 2, 3});
+
+    EXPECT_THROW(arr.rangeSum(0, 0, 3), std::out_of_range);
+}
+
+TEST(BruteForceArrayTest, OutOfRangeUpdateThrowsWithoutCreatingVersion)
+{
+    BruteForceArray arr({1, 2, 3});
+
+    EXPECT_THROW(arr.rangeAdd(0, 0, 3, 5), std::out_of_range);
+    EXPECT_EQ(arr.versionCount(), 1u);
+}
+
+TEST(BruteForceArrayTest, ReinitializeResetsVersionHistory)
+{
+    BruteForceArray arr({1, 2, 3});
+    std::size_t     oldVersion = arr.rangeAdd(0, 0, 2, 5);
+
+    arr.initialize({10, 20});
+
+    EXPECT_EQ(arr.versionCount(), 1u);
+    EXPECT_EQ(arr.size(), 2u);
+    EXPECT_EQ(arr.rangeSum(0, 0, 1), 30);
+    EXPECT_THROW(arr.rangeSum(oldVersion, 0, 1), std::out_of_range);
 }

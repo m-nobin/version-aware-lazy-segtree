@@ -158,3 +158,29 @@ TEST(LazySegmentTreeTest, OutOfRangeAccessRangeAddThrows)
 
     EXPECT_THROW(tree.rangeAdd(0, 5, 1), std::out_of_range);
 }
+
+TEST(LazySegmentTreeTest, ReversedRangeSumThrows)
+{
+    LazySegmentTree tree({1, 2, 3});
+
+    EXPECT_THROW(tree.rangeSum(2, 1), std::invalid_argument);
+}
+
+TEST(LazySegmentTreeTest, ReversedRangeAddThrows)
+{
+    LazySegmentTree tree({1, 2, 3});
+
+    EXPECT_THROW(tree.rangeAdd(2, 1, 5), std::invalid_argument);
+}
+
+TEST(LazySegmentTreeTest, ReinitializeResetsTreeState)
+{
+    LazySegmentTree tree({1, 2, 3});
+    tree.rangeAdd(0, 2, 5);
+
+    tree.initialize({10, 20});
+
+    EXPECT_EQ(tree.size(), 2u);
+    EXPECT_EQ(tree.rangeSum(0, 1), 30);
+    EXPECT_THROW(tree.rangeSum(0, 2), std::out_of_range);
+}
