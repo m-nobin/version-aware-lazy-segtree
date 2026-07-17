@@ -45,15 +45,6 @@ public:
         const std::vector<ValueType>& initial);
 
     /**
-     * @brief Create a new version by copying an existing version.
-     *
-     * @param baseVersion Version to copy.
-     * @return Index of the newly created version.
-     */
-    std::size_t createVersion(
-        std::size_t baseVersion);
-
-    /**
      * @brief Perform a range addition on a copied version.
      *
      * A new version is first created from baseVersion,
@@ -109,6 +100,19 @@ public:
         std::size_t version) const;
 
 private:
+
+    /**
+     * @brief Create a new version by copying an existing version.
+     *
+     * Used internally by rangeAdd(). This function is kept private
+     * to prevent callers from creating duplicate versions without
+     * applying any update.
+     *
+     * @param baseVersion Version to copy.
+     * @return Index of the newly created version.
+     */
+    std::size_t createVersion(
+        std::size_t baseVersion);
 
     /**
      * Each entry stores one complete array version.

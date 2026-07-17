@@ -172,11 +172,9 @@ void BruteForceVersionedArray::validateRange(
     std::size_t left,
     std::size_t right) const
 {
-    if (versions.empty())
-    {
-        throw std::runtime_error(
-            "Versioned array has not been initialized.");
-    }
+    // Precondition:
+    // validateVersion(version) has already been called,
+    // so versions[version] is guaranteed to exist.
 
     const std::size_t n = versions[version].size();
 
