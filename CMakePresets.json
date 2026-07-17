@@ -1,0 +1,165 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "dev",
+      "displayName": "Developer (Debug)",
+      "description": "Out-of-source Debug build with tests enabled. Works on Linux, macOS, and Windows.",
+      "binaryDir": "${sourceDir}/build/dev",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTING": "ON",
+        "VALSEG_WARNINGS_AS_ERRORS": "OFF"
+      }
+    },
+    {
+      "name": "dev-werror",
+      "displayName": "Developer (Debug, Warnings as Errors)",
+      "description": "Same as 'dev' but promotes all warnings to errors. Used in CI.",
+      "inherits": "dev",
+      "cacheVariables": {
+        "VALSEG_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "description": "Optimised release build with tests disabled.",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "OFF",
+        "VALSEG_WARNINGS_AS_ERRORS": "OFF"
+      }
+    },
+    {
+      "name": "ci-linux-gcc",
+      "displayName": "CI — Linux GCC",
+      "description": "CI configuration for Linux with GCC.",
+      "inherits": "dev-werror",
+      "binaryDir": "${sourceDir}/build/ci-linux-gcc",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "ci-linux-clang",
+      "displayName": "CI — Linux Clang",
+      "description": "CI configuration for Linux with Clang.",
+      "inherits": "dev-werror",
+      "binaryDir": "${sourceDir}/build/ci-linux-clang",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "ci-macos-clang",
+      "displayName": "CI — macOS Apple Clang",
+      "description": "CI configuration for macOS with Apple Clang.",
+      "inherits": "dev-werror",
+      "binaryDir": "${sourceDir}/build/ci-macos-clang"
+    },
+    {
+      "name": "ci-windows-msvc",
+      "displayName": "CI — Windows MSVC",
+      "description": "CI configuration for Windows with MSVC.",
+      "inherits": "dev-werror",
+      "binaryDir": "${sourceDir}/build/ci-windows-msvc"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "dev",
+      "displayName": "Build (dev)",
+      "configurePreset": "dev"
+    },
+    {
+      "name": "dev-werror",
+      "displayName": "Build (dev, warnings as errors)",
+      "configurePreset": "dev-werror"
+    },
+    {
+      "name": "release",
+      "displayName": "Build (release)",
+      "configurePreset": "release"
+    },
+    {
+      "name": "ci-linux-gcc",
+      "displayName": "Build (CI Linux GCC)",
+      "configurePreset": "ci-linux-gcc"
+    },
+    {
+      "name": "ci-linux-clang",
+      "displayName": "Build (CI Linux Clang)",
+      "configurePreset": "ci-linux-clang"
+    },
+    {
+      "name": "ci-macos-clang",
+      "displayName": "Build (CI macOS Clang)",
+      "configurePreset": "ci-macos-clang"
+    },
+    {
+      "name": "ci-windows-msvc",
+      "displayName": "Build (CI Windows MSVC)",
+      "configurePreset": "ci-windows-msvc"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "verify",
+      "displayName": "Verify (verbose CTest)",
+      "description": "Runs all registered tests with verbose output, and writes a JUnit XML report and a log file under build/dev/.",
+      "configurePreset": "dev",
+      "output": {
+        "verbosity": "verbose",
+        "outputOnFailure": true
+      },
+      "execution": {
+        "stopOnFailure": false
+      }
+    },
+    {
+      "name": "ci-linux-gcc",
+      "displayName": "Test (CI Linux GCC)",
+      "configurePreset": "ci-linux-gcc",
+      "output": {
+        "verbosity": "verbose",
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ci-linux-clang",
+      "displayName": "Test (CI Linux Clang)",
+      "configurePreset": "ci-linux-clang",
+      "output": {
+        "verbosity": "verbose",
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ci-macos-clang",
+      "displayName": "Test (CI macOS Clang)",
+      "configurePreset": "ci-macos-clang",
+      "output": {
+        "verbosity": "verbose",
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ci-windows-msvc",
+      "displayName": "Test (CI Windows MSVC)",
+      "configurePreset": "ci-windows-msvc",
+      "output": {
+        "verbosity": "verbose",
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
