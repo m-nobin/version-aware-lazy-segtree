@@ -1,7 +1,8 @@
 #include <valseg/brute_force_array.hpp>
 
-#include <iostream>
 #include <numeric>
+
+namespace valseg {
 
 /*
 =========================================================
@@ -9,14 +10,10 @@ Constructors
 =========================================================
 */
 
-BruteForceVersionedArray::BruteForceVersionedArray()
-{
-}
+BruteForceArray::BruteForceArray() {}
 
-BruteForceVersionedArray::BruteForceVersionedArray(
-    const std::vector<ValueType>& initial)
-{
-    initialize(initial);
+BruteForceArray::BruteForceArray(const std::vector<ValueType> &initial) {
+  initialize(initial);
 }
 
 /*
@@ -25,11 +22,9 @@ Initialization
 =========================================================
 */
 
-void BruteForceVersionedArray::initialize(
-    const std::vector<ValueType>& initial)
-{
-    versions.clear();
-    versions.push_back(initial);
+void BruteForceArray::initialize(const std::vector<ValueType> &initial) {
+  versions.clear();
+  versions.push_back(initial);
 }
 
 /*
@@ -38,14 +33,12 @@ Version Management
 =========================================================
 */
 
-std::size_t BruteForceVersionedArray::createVersion(
-    std::size_t baseVersion)
-{
-    validateVersion(baseVersion);
+std::size_t BruteForceArray::createVersion(std::size_t baseVersion) {
+  validateVersion(baseVersion);
 
-    versions.push_back(versions[baseVersion]);
+  versions.push_back(versions[baseVersion]);
 
-    return versions.size() - 1;
+  return versions.size() - 1;
 }
 
 /*
@@ -54,23 +47,18 @@ Range Update
 =========================================================
 */
 
-std::size_t BruteForceVersionedArray::rangeAdd(
-    std::size_t baseVersion,
-    std::size_t left,
-    std::size_t right,
-    ValueType value)
-{
-    validateVersion(baseVersion);
-    validateRange(baseVersion, left, right);
+std::size_t BruteForceArray::rangeAdd(std::size_t baseVersion, std::size_t left,
+                                      std::size_t right, ValueType value) {
+  validateVersion(baseVersion);
+  validateRange(baseVersion, left, right);
 
-    std::size_t newVersion = createVersion(baseVersion);
+  std::size_t newVersion = createVersion(baseVersion);
 
-    for (std::size_t i = left; i <= right; ++i)
-    {
-        versions[newVersion][i] += value;
-    }
+  for (std::size_t i = left; i <= right; ++i) {
+    versions[newVersion][i] += value;
+  }
 
-    return newVersion;
+  return newVersion;
 }
 
 /*
@@ -79,23 +67,19 @@ Range Query
 =========================================================
 */
 
-BruteForceVersionedArray::ValueType
-BruteForceVersionedArray::rangeSum(
-    std::size_t version,
-    std::size_t left,
-    std::size_t right) const
-{
-    validateVersion(version);
-    validateRange(version, left, right);
+BruteForceArray::ValueType BruteForceArray::rangeSum(std::size_t version,
+                                                     std::size_t left,
+                                                     std::size_t right) const {
+  validateVersion(version);
+  validateRange(version, left, right);
 
-    ValueType sum = 0;
+  ValueType sum = 0;
 
-    for (std::size_t i = left; i <= right; ++i)
-    {
-        sum += versions[version][i];
-    }
+  for (std::size_t i = left; i <= right; ++i) {
+    sum += versions[version][i];
+  }
 
-    return sum;
+  return sum;
 }
 
 /*
@@ -104,51 +88,21 @@ Accessors
 =========================================================
 */
 
-const std::vector<BruteForceVersionedArray::ValueType>&
-BruteForceVersionedArray::getVersion(
-    std::size_t version) const
-{
-    validateVersion(version);
+const std::vector<BruteForceArray::ValueType> &
+BruteForceArray::getVersion(std::size_t version) const {
+  validateVersion(version);
 
-    return versions[version];
+  return versions[version];
 }
 
-std::size_t BruteForceVersionedArray::versionCount() const
-{
-    return versions.size();
-}
+std::size_t BruteForceArray::versionCount() const { return versions.size(); }
 
-std::size_t BruteForceVersionedArray::size() const
-{
-    if (versions.empty())
-    {
-        return 0;
-    }
+std::size_t BruteForceArray::size() const {
+  if (versions.empty()) {
+    return 0;
+  }
 
-    return versions.front().size();
-}
-
-/*
-=========================================================
-Debug Utilities
-=========================================================
-*/
-
-void BruteForceVersionedArray::printVersion(
-    std::size_t version) const
-{
-    validateVersion(version);
-
-    std::cout << "Version "
-              << version
-              << " : ";
-
-    for (ValueType value : versions[version])
-    {
-        std::cout << value << " ";
-    }
-
-    std::cout << std::endl;
+  return versions.front().size();
 }
 
 /*
@@ -157,36 +111,27 @@ Validation
 =========================================================
 */
 
-void BruteForceVersionedArray::validateVersion(
-    std::size_t version) const
-{
-    if (version >= versions.size())
-    {
-        throw std::out_of_range(
-            "Invalid version number.");
-    }
+void BruteForceArray::validateVersion(std::size_t version) const {
+  if (version >= versions.size()) {
+    throw std::out_of_range("Invalid version number.");
+  }
 }
 
-void BruteForceVersionedArray::validateRange(
-    std::size_t version,
-    std::size_t left,
-    std::size_t right) const
-{
-    // Precondition:
-    // validateVersion(version) has already been called,
-    // so versions[version] is guaranteed to exist.
+void BruteForceArray::validateRange(std::size_t version, std::size_t left,
+                                    std::size_t right) const {
+  // Precondition:
+  // validateVersion(version) has already been called,
+  // so versions[version] is guaranteed to exist.
 
-    const std::size_t n = versions[version].size();
+  const std::size_t n = versions[version].size();
 
-    if (left > right)
-    {
-        throw std::invalid_argument(
-            "Left index is greater than right index.");
-    }
+  if (left > right) {
+    throw std::invalid_argument("Left index is greater than right index.");
+  }
 
-    if (right >= n)
-    {
-        throw std::out_of_range(
-            "Range exceeds array size.");
-    }
+  if (right >= n) {
+    throw std::out_of_range("Range exceeds array size.");
+  }
 }
+
+} // namespace valseg

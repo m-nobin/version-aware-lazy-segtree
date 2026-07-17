@@ -6,12 +6,13 @@
 
 using std::cout;
 using std::endl;
+using valseg::BruteForceArray;
 
 void testInitialization()
 {
     cout << "[TEST] Initialization..." << endl;
 
-    BruteForceVersionedArray arr({1,2,3,4,5});
+    BruteForceArray arr({1,2,3,4,5});
 
     assert(arr.versionCount() == 1);
     assert(arr.size() == 5);
@@ -25,7 +26,7 @@ void testSingleRangeUpdate()
 {
     cout << "[TEST] Single Range Update..." << endl;
 
-    BruteForceVersionedArray arr({1,2,3,4,5});
+    BruteForceArray arr({1,2,3,4,5});
 
     std::size_t v1 = arr.rangeAdd(0,1,3,5);
 
@@ -46,7 +47,7 @@ void testMultipleVersions()
 {
     cout << "[TEST] Multiple Versions..." << endl;
 
-    BruteForceVersionedArray arr({1,2,3,4,5});
+    BruteForceArray arr({1,2,3,4,5});
 
     std::size_t v1 = arr.rangeAdd(0,0,2,10);
 
@@ -71,7 +72,7 @@ void testHistoricalQueries()
 {
     cout << "[TEST] Historical Queries..." << endl;
 
-    BruteForceVersionedArray arr({10,20,30,40});
+    BruteForceArray arr({10,20,30,40});
 
     std::size_t v1 = arr.rangeAdd(0,0,3,5);
 
@@ -92,7 +93,7 @@ void testNegativeUpdates()
 {
     cout << "[TEST] Negative Updates..." << endl;
 
-    BruteForceVersionedArray arr({5,5,5,5});
+    BruteForceArray arr({5,5,5,5});
 
     std::size_t v1 = arr.rangeAdd(0,0,3,-2);
 
@@ -105,7 +106,7 @@ void testSingleElementUpdate()
 {
     cout << "[TEST] Single Element Update..." << endl;
 
-    BruteForceVersionedArray arr({1,2,3});
+    BruteForceArray arr({1,2,3});
 
     std::size_t v1 = arr.rangeAdd(0,1,1,10);
 
@@ -120,7 +121,7 @@ void testWholeArrayUpdate()
 {
     cout << "[TEST] Whole Array Update..." << endl;
 
-    BruteForceVersionedArray arr({1,1,1,1});
+    BruteForceArray arr({1,1,1,1});
 
     std::size_t v1 = arr.rangeAdd(0,0,3,3);
 
@@ -133,7 +134,7 @@ void testVersionIsolation()
 {
     cout << "[TEST] Version Isolation..." << endl;
 
-    BruteForceVersionedArray arr({1,2,3});
+    BruteForceArray arr({1,2,3});
 
     std::size_t v1 = arr.rangeAdd(0,0,0,10);
 
