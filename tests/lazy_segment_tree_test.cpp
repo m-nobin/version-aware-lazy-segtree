@@ -1,4 +1,4 @@
-#include "../../lazy_segment_tree/lazy_segment_tree.hpp"
+#include <valseg/lazy_segment_tree.hpp>
 
 #include <cassert>
 #include <iostream>

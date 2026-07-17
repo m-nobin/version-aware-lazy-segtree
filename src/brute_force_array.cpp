@@ -1,4 +1,4 @@
-#include "brute_force.hpp"
+#include <valseg/brute_force_array.hpp>
 
 #include <iostream>
 #include <numeric>
