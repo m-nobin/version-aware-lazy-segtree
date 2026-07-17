@@ -86,6 +86,9 @@ CMakePresets.json           Developer, release, analysis, and CI presets
 
 Detailed design and research material lives in the [project Wiki](https://github.com/m-nobin/version-aware-lazy-segtree/wiki):
 
+Actionable development work is tracked in the [GitHub Project](https://github.com/users/m-nobin/projects/1)
+and the repository [issue tracker](https://github.com/m-nobin/version-aware-lazy-segtree/issues).
+
 - [Getting Started](https://github.com/m-nobin/version-aware-lazy-segtree/wiki/Getting-Started)
 - [Problem Definition](https://github.com/m-nobin/version-aware-lazy-segtree/wiki/Problem-Definition)
 - [Architecture](https://github.com/m-nobin/version-aware-lazy-segtree/wiki/Architecture)
