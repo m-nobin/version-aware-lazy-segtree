@@ -14,23 +14,27 @@ include(FetchContent)
 
 FetchContent_Declare(
   googletest
-  URL      https://github.com/google/googletest/archive/refs/tags/v1.15.2.tar.gz
-  URL_HASH SHA256=7b42b4d6ed48810c5362c265a17faebe90dc2373c885e5216439d37927f02926
+  URL      https://github.com/google/googletest/archive/refs/tags/v1.17.0.tar.gz
+  URL_HASH SHA256=65fab701d9829d38cb77c14acdc431d2108bfdbf8979e40eb8ae567edf10b27c
 )
 
-# Do not install GoogleTest alongside our project.
+# Build only the GoogleTest targets this project uses.
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 
-# Keep GoogleTest's own warning flags out of our targets.
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+# Match the parent project's shared MSVC runtime setting on Windows.
+if(MSVC)
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+endif()
 
 FetchContent_MakeAvailable(googletest)
+include(GoogleTest)
 
 # ---------------------------------------------------------------------------
-# Helper macro — avoids repeating the same boilerplate for every target.
+# Helper function — avoids repeating the same boilerplate for every target.
 # ---------------------------------------------------------------------------
 
-macro(add_valseg_test target source)
+function(add_valseg_test target source)
   add_executable(${target} ${source})
 
   target_link_libraries(${target} PRIVATE valseg::valseg GTest::gtest_main)
@@ -54,9 +58,8 @@ macro(add_valseg_test target source)
   endif()
 
   # Discover and register individual GoogleTest cases with CTest.
-  include(GoogleTest)
   gtest_discover_tests(${target})
-endmacro()
+endfunction()
 
 # ---------------------------------------------------------------------------
 # Test targets

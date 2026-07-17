@@ -22,6 +22,7 @@
       "displayName": "Developer (Debug, Warnings as Errors)",
       "description": "Same as 'dev' but promotes all warnings to errors. Used in CI.",
       "inherits": "dev",
+      "binaryDir": "${sourceDir}/build/dev-werror",
       "cacheVariables": {
         "VALSEG_WARNINGS_AS_ERRORS": "ON"
       }
@@ -38,13 +39,24 @@
       }
     },
     {
+      "name": "release-verify",
+      "displayName": "Release Verification",
+      "description": "Optimised release build with tests and warnings as errors enabled.",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build/release-verify",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "VALSEG_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
       "name": "ci-linux-gcc",
       "displayName": "CI — Linux GCC",
       "description": "CI configuration for Linux with GCC.",
       "inherits": "dev-werror",
+      "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/build/ci-linux-gcc",
       "cacheVariables": {
-        "CMAKE_C_COMPILER": "gcc",
         "CMAKE_CXX_COMPILER": "g++"
       }
     },
@@ -53,9 +65,9 @@
       "displayName": "CI — Linux Clang",
       "description": "CI configuration for Linux with Clang.",
       "inherits": "dev-werror",
+      "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/build/ci-linux-clang",
       "cacheVariables": {
-        "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++"
       }
     },
@@ -64,6 +76,7 @@
       "displayName": "CI — macOS Apple Clang",
       "description": "CI configuration for macOS with Apple Clang.",
       "inherits": "dev-werror",
+      "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/build/ci-macos-clang"
     },
     {
@@ -71,6 +84,8 @@
       "displayName": "CI — Windows MSVC",
       "description": "CI configuration for Windows with MSVC.",
       "inherits": "dev-werror",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
       "binaryDir": "${sourceDir}/build/ci-windows-msvc"
     }
   ],
@@ -78,37 +93,50 @@
     {
       "name": "dev",
       "displayName": "Build (dev)",
-      "configurePreset": "dev"
+      "configurePreset": "dev",
+      "configuration": "Debug"
     },
     {
       "name": "dev-werror",
       "displayName": "Build (dev, warnings as errors)",
-      "configurePreset": "dev-werror"
+      "configurePreset": "dev-werror",
+      "configuration": "Debug"
     },
     {
       "name": "release",
       "displayName": "Build (release)",
-      "configurePreset": "release"
+      "configurePreset": "release",
+      "configuration": "Release"
+    },
+    {
+      "name": "release-verify",
+      "displayName": "Build (release verification)",
+      "configurePreset": "release-verify",
+      "configuration": "Release"
     },
     {
       "name": "ci-linux-gcc",
       "displayName": "Build (CI Linux GCC)",
-      "configurePreset": "ci-linux-gcc"
+      "configurePreset": "ci-linux-gcc",
+      "configuration": "Debug"
     },
     {
       "name": "ci-linux-clang",
       "displayName": "Build (CI Linux Clang)",
-      "configurePreset": "ci-linux-clang"
+      "configurePreset": "ci-linux-clang",
+      "configuration": "Debug"
     },
     {
       "name": "ci-macos-clang",
       "displayName": "Build (CI macOS Clang)",
-      "configurePreset": "ci-macos-clang"
+      "configurePreset": "ci-macos-clang",
+      "configuration": "Debug"
     },
     {
       "name": "ci-windows-msvc",
       "displayName": "Build (CI Windows MSVC)",
-      "configurePreset": "ci-windows-msvc"
+      "configurePreset": "ci-windows-msvc",
+      "configuration": "Debug"
     }
   ],
   "testPresets": [
@@ -117,6 +145,7 @@
       "displayName": "Verify (verbose CTest)",
       "description": "Runs all registered tests with verbose output, and writes a JUnit XML report and a log file under build/dev/.",
       "configurePreset": "dev",
+      "configuration": "Debug",
       "output": {
         "verbosity": "verbose",
         "outputOnFailure": true,
@@ -128,9 +157,26 @@
       }
     },
     {
+      "name": "release-verify",
+      "displayName": "Verify (Release)",
+      "description": "Runs all registered tests against the optimised release build.",
+      "configurePreset": "release-verify",
+      "configuration": "Release",
+      "output": {
+        "verbosity": "verbose",
+        "outputOnFailure": true,
+        "outputLogFile": "${sourceDir}/build/release-verify/test_output.log",
+        "outputJUnitFile": "${sourceDir}/build/release-verify/test_results.xml"
+      },
+      "execution": {
+        "stopOnFailure": false
+      }
+    },
+    {
       "name": "ci-linux-gcc",
       "displayName": "Test (CI Linux GCC)",
       "configurePreset": "ci-linux-gcc",
+      "configuration": "Debug",
       "output": {
         "verbosity": "verbose",
         "outputOnFailure": true
@@ -140,6 +186,7 @@
       "name": "ci-linux-clang",
       "displayName": "Test (CI Linux Clang)",
       "configurePreset": "ci-linux-clang",
+      "configuration": "Debug",
       "output": {
         "verbosity": "verbose",
         "outputOnFailure": true
@@ -149,6 +196,7 @@
       "name": "ci-macos-clang",
       "displayName": "Test (CI macOS Clang)",
       "configurePreset": "ci-macos-clang",
+      "configuration": "Debug",
       "output": {
         "verbosity": "verbose",
         "outputOnFailure": true
@@ -158,6 +206,7 @@
       "name": "ci-windows-msvc",
       "displayName": "Test (CI Windows MSVC)",
       "configurePreset": "ci-windows-msvc",
+      "configuration": "Debug",
       "output": {
         "verbosity": "verbose",
         "outputOnFailure": true
