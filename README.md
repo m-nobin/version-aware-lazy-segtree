@@ -84,29 +84,10 @@ CMakePresets.json           Developer, release, analysis, and CI presets
 
 ## Documentation
 
-Detailed design and research material lives in the [project Wiki](https://github.com/m-nobin/version-aware-lazy-segtree/wiki):
-
-Actionable development work is tracked in the [GitHub Project](https://github.com/users/m-nobin/projects/1)
-and the repository [issue tracker](https://github.com/m-nobin/version-aware-lazy-segtree/issues).
-
-- [Getting Started](https://github.com/m-nobin/version-aware-lazy-segtree/wiki/Getting-Started)
-- [Problem Definition](https://github.com/m-nobin/version-aware-lazy-segtree/wiki/Problem-Definition)
-- [Architecture](https://github.com/m-nobin/version-aware-lazy-segtree/wiki/Architecture)
-- [Public API](https://github.com/m-nobin/version-aware-lazy-segtree/wiki/Public-API)
-- [Baseline Algorithms](https://github.com/m-nobin/version-aware-lazy-segtree/wiki/Baseline-Algorithms)
-- [Planned Versioned Tree](https://github.com/m-nobin/version-aware-lazy-segtree/wiki/Planned-Versioned-Tree)
-- [Proposal and progress documentation](https://github.com/m-nobin/version-aware-lazy-segtree/wiki/Proposal)
-- [Literature Review](https://github.com/m-nobin/version-aware-lazy-segtree/wiki/Literature-Review)
-
-Approved PDF deliverables will be added and linked in a later documentation commit.
-
-## Roadmap
-
-1. Finalize persistent-node and lazy-tag invariants.
-2. Implement the partially persistent lazy segment tree.
-3. Add randomized differential tests against `BruteForceArray`.
-4. Benchmark update time, query time, and memory growth.
-5. Publish the approved report, proposal, and presentation PDFs.
+Detailed design and research documentation is maintained in the
+[project Wiki](https://github.com/m-nobin/version-aware-lazy-segtree/wiki), while actionable work is
+organized through the [GitHub Project](https://github.com/users/m-nobin/projects/1) and repository
+[issue tracker](https://github.com/m-nobin/version-aware-lazy-segtree/issues).
 
 ## Citation and license
 
