@@ -243,4 +243,4 @@ void PersistentLazySegmentTree::validateRange(std::size_t left, std::size_t righ
   }
 }
 
-}
+} // namespace valseg

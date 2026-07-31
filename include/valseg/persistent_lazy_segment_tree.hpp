@@ -147,6 +147,6 @@ private:
   void validateRange(std::size_t left, std::size_t right) const;
 };
 
-}
+} // namespace valseg
 
 #endif
