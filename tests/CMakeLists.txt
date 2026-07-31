@@ -71,3 +71,4 @@ endfunction()
 
 add_valseg_test(brute_force_array_test brute_force_array_test.cpp)
 add_valseg_test(lazy_segment_tree_test lazy_segment_tree_test.cpp)
+add_valseg_test(persistent_lazy_segment_tree_test persistent_lazy_segment_tree_test.cpp)
