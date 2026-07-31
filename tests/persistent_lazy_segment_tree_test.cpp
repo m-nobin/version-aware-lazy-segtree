@@ -40,16 +40,31 @@ TEST(PersistentLazySegmentTreeTest, InitializationPublishesVersionZero) {
 TEST(PersistentLazySegmentTreeTest, HandTracedHistoricalResults) {
   PersistentLazySegmentTree tree({1, 2, 3, 4});
 
+  EXPECT_EQ(tree.versionCount(), 1u);
+  EXPECT_EQ(tree.nodeCount(), 7u);
+  EXPECT_EQ(tree.rangeSum(0, 0, 3), 10);
+
   std::size_t v1 = tree.rangeAdd(0, 3, 5);
-  std::size_t v2 = tree.rangeAdd(1, 2, 2);
 
+  // Full coverage publishes one version and copies only the root.
   EXPECT_EQ(v1, 1u);
-  EXPECT_EQ(v2, 2u);
-
+  EXPECT_EQ(tree.versionCount(), 2u);
+  EXPECT_EQ(tree.nodeCount(), 8u);
   EXPECT_EQ(tree.rangeSum(0, 0, 3), 10);
   EXPECT_EQ(tree.rangeSum(v1, 0, 3), 30);
-  EXPECT_EQ(tree.rangeSum(v2, 0, 3), 34);
   EXPECT_EQ(tree.rangeSum(v1, 1, 2), 15);
+
+  std::size_t v2 = tree.rangeAdd(1, 2, 2);
+
+  // The partial update copies the root, both children, and one leaf per
+  // side; every earlier result must remain unchanged.
+  EXPECT_EQ(v2, 2u);
+  EXPECT_EQ(tree.versionCount(), 3u);
+  EXPECT_EQ(tree.nodeCount(), 13u);
+  EXPECT_EQ(tree.rangeSum(0, 0, 3), 10);
+  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 30);
+  EXPECT_EQ(tree.rangeSum(v1, 1, 2), 15);
+  EXPECT_EQ(tree.rangeSum(v2, 0, 3), 34);
   EXPECT_EQ(tree.rangeSum(v2, 1, 2), 19);
 }
 
@@ -61,10 +76,14 @@ TEST(PersistentLazySegmentTreeTest, FullCoverageUpdateCopiesOnlyTheRoot) {
   PersistentLazySegmentTree tree({1, 2, 3, 4});
 
   std::size_t before = tree.nodeCount();
-  tree.rangeAdd(0, 3, 5);
+  std::size_t v1 = tree.rangeAdd(0, 3, 5);
 
   // Full coverage stops at the root; both subtrees stay shared.
+  EXPECT_EQ(v1, 1u);
+  EXPECT_EQ(tree.versionCount(), 2u);
   EXPECT_EQ(tree.nodeCount(), before + 1u);
+  EXPECT_EQ(tree.rangeSum(0, 0, 3), 10);
+  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 30);
 }
 
 TEST(PersistentLazySegmentTreeTest, ZeroDeltaUpdatePublishesVersionWithoutNodes) {
@@ -76,7 +95,13 @@ TEST(PersistentLazySegmentTreeTest, ZeroDeltaUpdatePublishesVersionWithoutNodes)
   EXPECT_EQ(v1, 1u);
   EXPECT_EQ(tree.versionCount(), 2u);
   EXPECT_EQ(tree.nodeCount(), before);
+
+  // Both versions read identically, including partial and leaf ranges.
+  EXPECT_EQ(tree.rangeSum(0, 0, 2), 6);
+  EXPECT_EQ(tree.rangeSum(0, 0, 0), 1);
   EXPECT_EQ(tree.rangeSum(v1, 0, 2), 6);
+  EXPECT_EQ(tree.rangeSum(v1, 0, 0), 1);
+  EXPECT_EQ(tree.rangeSum(v1, 1, 2), 5);
 }
 
 // ---------------------------------------------------------------------------
