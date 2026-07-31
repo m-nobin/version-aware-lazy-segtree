@@ -1,0 +1,39 @@
+#!/bin/sh
+# Pre-push hook: run the exact formatting check CI enforces
+# (.github/workflows/ci.yml, job "Formatting / ClangFormat 18")
+# so a push never reaches GitHub with formatting violations.
+#
+# Enable once per clone:
+#   git config core.hooksPath .githooks
+#
+# Bypass for a single push (not recommended):
+#   git push --no-verify
+
+set -u
+
+# Resolve a ClangFormat 18 binary, matching the version pinned in CI.
+# A different major version can format differently and pass locally
+# while failing in CI, so no other version is accepted.
+if command -v clang-format-18 >/dev/null 2>&1; then
+  FORMATTER="clang-format-18"
+elif command -v uvx >/dev/null 2>&1; then
+  FORMATTER="uvx clang-format@18.1.8"
+else
+  echo "pre-push: ClangFormat 18 not found." >&2
+  echo "pre-push: install clang-format-18, or install uv so the hook can run" >&2
+  echo "pre-push: 'uvx clang-format@18.1.8' (https://docs.astral.sh/uv/)." >&2
+  exit 1
+fi
+
+if ! find include src tests -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0 |
+  xargs -0 ${FORMATTER} --dry-run --Werror; then
+  echo "" >&2
+  echo "pre-push: formatting check failed (same command CI runs)." >&2
+  echo "pre-push: fix the reported files with:" >&2
+  echo "pre-push:   find include src tests -type f \\( -name '*.cpp' -o -name '*.hpp' \\) -print0 |" >&2
+  echo "pre-push:     xargs -0 ${FORMATTER} -i" >&2
+  echo "pre-push: then commit the result and push again." >&2
+  exit 1
+fi
+
+exit 0
