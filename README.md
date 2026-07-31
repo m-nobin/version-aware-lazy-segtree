@@ -6,14 +6,16 @@
 
 An Advanced Algorithms project exploring how range-add lazy propagation can be combined with partial persistence while preserving correct historical range-sum queries.
 
-> **Current status:** the correctness and performance baselines are implemented and verified. The partially persistent lazy segment tree is the next development phase and is not yet part of the public API.
+> **Current status:** Phase 4's persistent-tree design is complete and reviewed, and both baselines
+> are implemented and verified. Phase 5 implementation is next; the persistent tree is not yet
+> part of the public API.
 
 ## Implemented components
 
-| Component | Purpose | Update | Query | Persistence |
-|---|---|---:|---:|---|
-| `BruteForceArray` | Historical correctness oracle | `O(n)` | `O(n)` worst case | Complete array copy |
-| `LazySegmentTree` | Non-persistent performance baseline | `O(log n)` | `O(log n)` | None |
+| Component         | Purpose                             |     Update |             Query | Persistence         |
+| ----------------- | ----------------------------------- | ---------: | ----------------: | ------------------- |
+| `BruteForceArray` | Historical correctness oracle       |     `O(n)` | `O(n)` worst case | Complete array copy |
+| `LazySegmentTree` | Non-persistent performance baseline | `O(log n)` |        `O(log n)` | None                |
 
 Both components support zero-based, inclusive range-add and range-sum operations using `long long` values.
 
@@ -62,12 +64,12 @@ ctest --preset analyze
 
 ## Verification matrix
 
-| Platform | Compiler | CI preset |
-|---|---|---|
-| Linux | GCC | `ci-linux-gcc` |
-| Linux | Clang | `ci-linux-clang` |
-| Windows | MSVC | `ci-windows-msvc` |
-| macOS | Apple Clang | `ci-macos-clang` |
+| Platform | Compiler    | CI preset         |
+| -------- | ----------- | ----------------- |
+| Linux    | GCC         | `ci-linux-gcc`    |
+| Linux    | Clang       | `ci-linux-clang`  |
+| Windows  | MSVC        | `ci-windows-msvc` |
+| macOS    | Apple Clang | `ci-macos-clang`  |
 
 CI also enforces ClangFormat 18 and runs Linux Clang with AddressSanitizer and UndefinedBehaviorSanitizer. Each compiled job uploads verbose logs and JUnit XML.
 
