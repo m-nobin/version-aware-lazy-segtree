@@ -6,18 +6,21 @@
 
 An Advanced Algorithms project exploring how range-add lazy propagation can be combined with partial persistence while preserving correct historical range-sum queries.
 
-> **Current status:** Phase 4's persistent-tree design is complete and reviewed, and both baselines
-> are implemented and verified. Phase 5 implementation is next; the persistent tree is not yet
-> part of the public API.
+> **Current status:** Phase 5 is under review: the persistent tree and its deterministic test
+> baseline are complete on review branches
+> ([#21](https://github.com/m-nobin/version-aware-lazy-segtree/pull/21),
+> [#22](https://github.com/m-nobin/version-aware-lazy-segtree/pull/22)). Randomized validation,
+> proof, and benchmarks follow in later phases.
 
 ## Implemented components
 
-| Component         | Purpose                             |     Update |             Query | Persistence         |
-| ----------------- | ----------------------------------- | ---------: | ----------------: | ------------------- |
-| `BruteForceArray` | Historical correctness oracle       |     `O(n)` | `O(n)` worst case | Complete array copy |
-| `LazySegmentTree` | Non-persistent performance baseline | `O(log n)` |        `O(log n)` | None                |
+| Component                   | Purpose                                       |     Update |             Query | Persistence                          |
+| --------------------------- | --------------------------------------------- | ---------: | ----------------: | ------------------------------------ |
+| `BruteForceArray`           | Historical correctness oracle                 |     `O(n)` | `O(n)` worst case | Complete array copy                  |
+| `LazySegmentTree`           | Non-persistent performance baseline           | `O(log n)` |        `O(log n)` | None                                 |
+| `PersistentLazySegmentTree` | Partially persistent range-add/range-sum tree | `O(log n)` |        `O(log n)` | Path copying with structural sharing |
 
-Both components support zero-based, inclusive range-add and range-sum operations using `long long` values.
+All components support zero-based, inclusive range-add and range-sum operations using `long long` values. Persistent updates apply to the latest version only, while queries read any published version.
 
 ## Build and verify
 
@@ -26,6 +29,13 @@ Requirements:
 - CMake 3.25 or newer
 - A C++17 compiler
 - Git and network access during the first configure for the pinned GoogleTest dependency
+
+Enable the repository pre-push hook once per clone; it runs the same ClangFormat 18 check as CI
+before every push:
+
+```bash
+git config core.hooksPath .githooks
+```
 
 Configure, build, and run the verbose Debug suite:
 
