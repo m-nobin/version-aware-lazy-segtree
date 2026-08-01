@@ -9,7 +9,7 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 > **Current status:** Phase 5 is complete: the persistent tree and its full deterministic suite
 > are merged
 > ([#21](https://github.com/m-nobin/version-aware-lazy-segtree/pull/21),
-> [#22](https://github.com/m-nobin/version-aware-lazy-segtree/pull/22)), with 64 tests passing
+> [#22](https://github.com/m-nobin/version-aware-lazy-segtree/pull/22)), with 67 tests passing
 > across the supported verification matrix. Randomized validation, proof, and benchmarks follow
 > in later phases.
 

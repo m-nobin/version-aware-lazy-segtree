@@ -136,9 +136,7 @@ Segment Arithmetic
 
 PersistentLazySegmentTree::ValueType
 PersistentLazySegmentTree::segmentLength(std::size_t segmentLeft, std::size_t segmentRight) {
-  // Explicit conversions: indices always fit in ValueType (long long), so
-  // casting each operand before the arithmetic is safe and keeps the
-  // computation in the signed result type.
+  // Indices always fit in ValueType, so the arithmetic stays in the signed type.
   return static_cast<ValueType>(segmentRight) - static_cast<ValueType>(segmentLeft) + 1;
 }
 
