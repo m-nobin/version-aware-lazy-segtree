@@ -10,8 +10,12 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 > are merged
 > ([#21](https://github.com/m-nobin/version-aware-lazy-segtree/pull/21),
 > [#22](https://github.com/m-nobin/version-aware-lazy-segtree/pull/22)), with 67 tests passing
-> across the supported verification matrix. Randomized validation, proof, and benchmarks follow
-> in later phases.
+> across the supported verification matrix. Phase 6 is in progress: the correctness proof and
+> complexity analysis are drafted in [docs/proof.md](docs/proof.md)
+> ([#24](https://github.com/m-nobin/version-aware-lazy-segtree/pull/24)), randomized differential
+> validation is underway
+> ([#8](https://github.com/m-nobin/version-aware-lazy-segtree/issues/8)), and benchmarks follow
+> ([#10](https://github.com/m-nobin/version-aware-lazy-segtree/issues/10)).
 
 ## Implemented components
 
