@@ -95,9 +95,9 @@ TEST(PersistentLazySegmentTreeTest, SingleElementTree) {
 
   EXPECT_EQ(v1, 1u);
   EXPECT_EQ(tree.versionCount(), 2u);
-  EXPECT_EQ(tree.nodeCount(), 2u);             // one new leaf node
-  EXPECT_EQ(tree.rangeSum(0, 0, 0), 7);        // version 0 unchanged
-  EXPECT_EQ(tree.rangeSum(v1, 0, 0), 10);      // 7 + 3
+  EXPECT_EQ(tree.nodeCount(), 2u);        // one new leaf node
+  EXPECT_EQ(tree.rangeSum(0, 0, 0), 7);   // version 0 unchanged
+  EXPECT_EQ(tree.rangeSum(v1, 0, 0), 10); // 7 + 3
 }
 
 // ===========================================================================
@@ -157,13 +157,13 @@ TEST(PersistentLazySegmentTreeTest, HandTracedHistoricalResults) {
 TEST(PersistentLazySegmentTreeTest, FullCoverageUpdateCopiesOnlyTheRoot) {
   PersistentLazySegmentTree tree({1, 2, 3, 4});
 
-  std::size_t before = tree.nodeCount();       // 7
+  std::size_t before = tree.nodeCount(); // 7
   std::size_t v1 = tree.rangeAdd(0, 3, 5);
 
   // Full coverage stops at the root; both subtrees stay shared.
   EXPECT_EQ(v1, 1u);
   EXPECT_EQ(tree.versionCount(), 2u);
-  EXPECT_EQ(tree.nodeCount(), before + 1u);    // only the root was copied
+  EXPECT_EQ(tree.nodeCount(), before + 1u); // only the root was copied
   EXPECT_EQ(tree.rangeSum(0, 0, 3), 10);
   EXPECT_EQ(tree.rangeSum(v1, 0, 3), 30);
 }
@@ -189,9 +189,9 @@ TEST(PersistentLazySegmentTreeTest, PartialUpdateLeftHalfOnly) {
   EXPECT_EQ(tree.rangeSum(0, 0, 3), 100);
 
   // Version 1: left side updated, right side unchanged.
-  EXPECT_EQ(tree.rangeSum(v1, 0, 1), 40);   // ← was 35, corrected
+  EXPECT_EQ(tree.rangeSum(v1, 0, 1), 40); // ← was 35, corrected
   EXPECT_EQ(tree.rangeSum(v1, 2, 3), 70);
-  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 110);  // ← was 105, corrected
+  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 110); // ← was 105, corrected
 }
 
 // Verifies a partial update that touches only the right half of the tree.
@@ -201,7 +201,7 @@ TEST(PersistentLazySegmentTreeTest, PartialUpdateLeftHalfOnly) {
 TEST(PersistentLazySegmentTreeTest, PartialUpdateRightHalfOnly) {
   PersistentLazySegmentTree tree({10, 20, 30, 40});
 
-  std::size_t before = tree.nodeCount();       // 7
+  std::size_t before = tree.nodeCount(); // 7
   std::size_t v1 = tree.rangeAdd(2, 3, 5);
 
   EXPECT_EQ(v1, 1u);
@@ -213,8 +213,8 @@ TEST(PersistentLazySegmentTreeTest, PartialUpdateRightHalfOnly) {
   EXPECT_EQ(tree.rangeSum(0, 0, 1), 30);
   EXPECT_EQ(tree.rangeSum(0, 2, 3), 70);
 
-  EXPECT_EQ(tree.rangeSum(v1, 0, 1), 30);      // left unchanged
-  EXPECT_EQ(tree.rangeSum(v1, 2, 3), 80);      // right updated
+  EXPECT_EQ(tree.rangeSum(v1, 0, 1), 30); // left unchanged
+  EXPECT_EQ(tree.rangeSum(v1, 2, 3), 80); // right updated
   EXPECT_EQ(tree.rangeSum(v1, 0, 3), 110);
 }
 
@@ -243,13 +243,13 @@ TEST(PersistentLazySegmentTreeTest, OverlappingUpdatesAccumulateCorrectly) {
   // Version 1 — only [1,3] updated.
   EXPECT_EQ(tree.rangeSum(v1, 0, 4), 45);
   EXPECT_EQ(tree.rangeSum(v1, 1, 3), 39);
-  EXPECT_EQ(tree.rangeSum(v1, 2, 4), 32);  // 13+14+5
-  EXPECT_EQ(tree.rangeSum(v1, 4, 4), 5);   // element 4 unchanged in v1
+  EXPECT_EQ(tree.rangeSum(v1, 2, 4), 32); // 13+14+5
+  EXPECT_EQ(tree.rangeSum(v1, 4, 4), 5);  // element 4 unchanged in v1
 
   // Version 2 — [2,4] additionally updated on top of v1.
   EXPECT_EQ(tree.rangeSum(v2, 0, 4), 60);
-  EXPECT_EQ(tree.rangeSum(v2, 2, 4), 47);  // 18+19+10
-  EXPECT_EQ(tree.rangeSum(v2, 1, 1), 12);  // element 1: only v1 touched it
+  EXPECT_EQ(tree.rangeSum(v2, 2, 4), 47); // 18+19+10
+  EXPECT_EQ(tree.rangeSum(v2, 1, 1), 12); // element 1: only v1 touched it
 
   // Version 0 isolation: none of the above updates must affect it.
   EXPECT_EQ(tree.rangeSum(0, 0, 4), 15);
@@ -295,14 +295,14 @@ TEST(PersistentLazySegmentTreeTest, SingleLeafUpdateCreatesExactPathLength) {
 
   EXPECT_EQ(v1, 1u);
   EXPECT_EQ(tree.versionCount(), 2u);
-  EXPECT_EQ(tree.nodeCount(), 19u);            // 15 + 4 path nodes
+  EXPECT_EQ(tree.nodeCount(), 19u); // 15 + 4 path nodes
 
   // Only element 3 changes.
   EXPECT_EQ(tree.rangeSum(0, 0, 7), 36);
   EXPECT_EQ(tree.rangeSum(v1, 0, 7), 136);
   EXPECT_EQ(tree.rangeSum(v1, 3, 3), 104);
-  EXPECT_EQ(tree.rangeSum(v1, 0, 2), 6);       // untouched left segment
-  EXPECT_EQ(tree.rangeSum(v1, 4, 7), 26);      // untouched right segment
+  EXPECT_EQ(tree.rangeSum(v1, 0, 2), 6);  // untouched left segment
+  EXPECT_EQ(tree.rangeSum(v1, 4, 7), 26); // untouched right segment
 }
 
 // ===========================================================================
@@ -320,9 +320,9 @@ TEST(PersistentLazySegmentTreeTest, NegativeInitialValues) {
 
   std::size_t v1 = tree.rangeAdd(0, 3, 10);
 
-  EXPECT_EQ(tree.rangeSum(0, 0, 3), -9);       // version 0 unchanged
-  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 31);      // -9 + 10×4
-  EXPECT_EQ(tree.rangeSum(v1, 1, 2), 15);      // (-1+10) + (-4+10)
+  EXPECT_EQ(tree.rangeSum(0, 0, 3), -9);  // version 0 unchanged
+  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 31); // -9 + 10×4
+  EXPECT_EQ(tree.rangeSum(v1, 1, 2), 15); // (-1+10) + (-4+10)
 }
 
 // Verifies that a negative delta subtracts correctly from all elements in
@@ -332,9 +332,9 @@ TEST(PersistentLazySegmentTreeTest, NegativeDelta) {
 
   std::size_t v1 = tree.rangeAdd(0, 3, -3);
 
-  EXPECT_EQ(tree.rangeSum(0, 0, 3), 20);       // version 0 unchanged
-  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 8);       // 20 − 3×4
-  EXPECT_EQ(tree.rangeSum(v1, 1, 2), 4);       // (5−3)×2
+  EXPECT_EQ(tree.rangeSum(0, 0, 3), 20); // version 0 unchanged
+  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 8); // 20 − 3×4
+  EXPECT_EQ(tree.rangeSum(v1, 1, 2), 4); // (5−3)×2
 }
 
 // Verifies that a negative delta applied to a partial range does not affect
@@ -346,10 +346,10 @@ TEST(PersistentLazySegmentTreeTest, NegativeDeltaPartialRange) {
   std::size_t v1 = tree.rangeAdd(1, 2, -4);
 
   EXPECT_EQ(tree.rangeSum(0, 0, 3), 40);
-  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 32);      // 40 − 4×2
-  EXPECT_EQ(tree.rangeSum(v1, 0, 0), 10);      // element 0 unchanged
-  EXPECT_EQ(tree.rangeSum(v1, 3, 3), 10);      // element 3 unchanged
-  EXPECT_EQ(tree.rangeSum(v1, 1, 2), 12);      // (10−4)×2
+  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 32); // 40 − 4×2
+  EXPECT_EQ(tree.rangeSum(v1, 0, 0), 10); // element 0 unchanged
+  EXPECT_EQ(tree.rangeSum(v1, 3, 3), 10); // element 3 unchanged
+  EXPECT_EQ(tree.rangeSum(v1, 1, 2), 12); // (10−4)×2
 }
 
 // Verifies that mixing positive and negative deltas across versions produces
@@ -365,9 +365,9 @@ TEST(PersistentLazySegmentTreeTest, MixedPositiveAndNegativeDeltas) {
 
   EXPECT_EQ(tree.rangeSum(0, 0, 3), 0);
   EXPECT_EQ(tree.rangeSum(v1, 0, 3), 40);
-  EXPECT_EQ(tree.rangeSum(v2, 0, 3), 34);      // 40 − 3×2
+  EXPECT_EQ(tree.rangeSum(v2, 0, 3), 34); // 40 − 3×2
   EXPECT_EQ(tree.rangeSum(v2, 0, 0), 10);
-  EXPECT_EQ(tree.rangeSum(v2, 1, 2), 14);      // (10−3)×2
+  EXPECT_EQ(tree.rangeSum(v2, 1, 2), 14); // (10−3)×2
   EXPECT_EQ(tree.rangeSum(v2, 3, 3), 10);
 }
 
@@ -387,7 +387,7 @@ TEST(PersistentLazySegmentTreeTest, ZeroDeltaUpdatePublishesVersionWithoutNodes)
 
   EXPECT_EQ(v1, 1u);
   EXPECT_EQ(tree.versionCount(), 2u);
-  EXPECT_EQ(tree.nodeCount(), before);         // no new nodes allocated
+  EXPECT_EQ(tree.nodeCount(), before); // no new nodes allocated
 
   // Both versions read identically, including partial and leaf ranges.
   EXPECT_EQ(tree.rangeSum(0, 0, 2), 6);
@@ -412,7 +412,7 @@ TEST(PersistentLazySegmentTreeTest, MultipleZeroDeltaUpdatesStackCorrectly) {
   EXPECT_EQ(v2, 2u);
   EXPECT_EQ(v3, 3u);
   EXPECT_EQ(tree.versionCount(), 4u);
-  EXPECT_EQ(tree.nodeCount(), before);         // still no new nodes
+  EXPECT_EQ(tree.nodeCount(), before); // still no new nodes
 
   // All versions must return the same result.
   EXPECT_EQ(tree.rangeSum(0, 0, 2), 15);
@@ -441,7 +441,7 @@ TEST(PersistentLazySegmentTreeTest, VersionZeroIsolatedAfterManyUpdates) {
   // Version 0 must still reflect the original values exactly.
   EXPECT_EQ(tree.rangeSum(0, 0, 7), 36);
   EXPECT_EQ(tree.rangeSum(0, 0, 0), 1);
-  EXPECT_EQ(tree.rangeSum(0, 3, 5), 15);      // 4+5+6
+  EXPECT_EQ(tree.rangeSum(0, 3, 5), 15); // 4+5+6
   EXPECT_EQ(tree.rangeSum(0, 7, 7), 8);
 }
 
@@ -484,8 +484,8 @@ TEST(PersistentLazySegmentTreeTest, DeepLazyAccumulationResolvedCorrectly) {
   EXPECT_EQ(tree.rangeSum(v3, 0, 3), 24);
 
   // Partial queries must also resolve the full accumulated lazy.
-  EXPECT_EQ(tree.rangeSum(v3, 1, 2), 12);     // 6 per element × 2 elements
-  EXPECT_EQ(tree.rangeSum(v2, 0, 1), 6);      // 3 per element × 2 elements
+  EXPECT_EQ(tree.rangeSum(v3, 1, 2), 12); // 6 per element × 2 elements
+  EXPECT_EQ(tree.rangeSum(v2, 0, 1), 6);  // 3 per element × 2 elements
 }
 
 // Verifies isolation across interleaved partial updates on different regions.
@@ -494,9 +494,9 @@ TEST(PersistentLazySegmentTreeTest, DeepLazyAccumulationResolvedCorrectly) {
 TEST(PersistentLazySegmentTreeTest, InterleavedPartialUpdateIsolation) {
   PersistentLazySegmentTree tree({1, 1, 1, 1});
 
-  std::size_t v1 = tree.rangeAdd(0, 1, 10);   // left half only
-  std::size_t v2 = tree.rangeAdd(2, 3, 20);   // right half only
-  std::size_t v3 = tree.rangeAdd(0, 1, 5);    // left half again
+  std::size_t v1 = tree.rangeAdd(0, 1, 10); // left half only
+  std::size_t v2 = tree.rangeAdd(2, 3, 20); // right half only
+  std::size_t v3 = tree.rangeAdd(0, 1, 5);  // left half again
 
   // v1: left=22, right=2.
   EXPECT_EQ(tree.rangeSum(v1, 0, 1), 22);
@@ -540,7 +540,7 @@ TEST(PersistentLazySegmentTreeTest, FailedUpdatePublishesNothing) {
 TEST(PersistentLazySegmentTreeTest, FailedQueryThrowsAndLeavesStateIntact) {
   PersistentLazySegmentTree tree({1, 2, 3, 4});
 
-  tree.rangeAdd(0, 3, 5);                      // publish version 1
+  tree.rangeAdd(0, 3, 5); // publish version 1
 
   std::size_t versionsBefore = tree.versionCount();
   std::size_t nodesBefore = tree.nodeCount();
@@ -590,9 +590,9 @@ TEST(PersistentLazySegmentTreeTest, InvalidVersionQueryThrows) {
 TEST(PersistentLazySegmentTreeTest, InvalidRangeOnUpdateThrows) {
   PersistentLazySegmentTree tree({1, 2, 3, 4, 5});
 
-  EXPECT_THROW(tree.rangeAdd(3, 2, 1),  std::invalid_argument);  // left > right
-  EXPECT_THROW(tree.rangeAdd(0, 5, 1),  std::out_of_range);       // right >= size
-  EXPECT_THROW(tree.rangeAdd(4, 5, 1),  std::out_of_range);       // right >= size
+  EXPECT_THROW(tree.rangeAdd(3, 2, 1), std::invalid_argument); // left > right
+  EXPECT_THROW(tree.rangeAdd(0, 5, 1), std::out_of_range);     // right >= size
+  EXPECT_THROW(tree.rangeAdd(4, 5, 1), std::out_of_range);     // right >= size
 }
 
 // Verifies all invalid-range conditions for rangeSum:
@@ -600,9 +600,9 @@ TEST(PersistentLazySegmentTreeTest, InvalidRangeOnUpdateThrows) {
 TEST(PersistentLazySegmentTreeTest, InvalidRangeOnQueryThrows) {
   PersistentLazySegmentTree tree({1, 2, 3, 4, 5});
 
-  EXPECT_THROW(tree.rangeSum(1, 0, 4),  std::out_of_range);       // invalid version
-  EXPECT_THROW(tree.rangeSum(0, 3, 2),  std::invalid_argument);   // left > right
-  EXPECT_THROW(tree.rangeSum(0, 0, 5),  std::out_of_range);       // right >= size
+  EXPECT_THROW(tree.rangeSum(1, 0, 4), std::out_of_range);     // invalid version
+  EXPECT_THROW(tree.rangeSum(0, 3, 2), std::invalid_argument); // left > right
+  EXPECT_THROW(tree.rangeSum(0, 0, 5), std::out_of_range);     // right >= size
 }
 
 // ===========================================================================
@@ -616,8 +616,8 @@ TEST(PersistentLazySegmentTreeTest, InvalidRangeOnQueryThrows) {
 // Array: {1_000_000_000_000_000, 1_000_000_000_000_000}
 // After +100_000_000_000_000 to both: sum = 2_200_000_000_000_000.
 TEST(PersistentLazySegmentTreeTest, LargeValuesSumAndUpdateCorrectly) {
-  const long long base  = 1'000'000'000'000'000LL;
-  const long long delta =   100'000'000'000'000LL;
+  const long long base = 1'000'000'000'000'000LL;
+  const long long delta = 100'000'000'000'000LL;
 
   PersistentLazySegmentTree tree({base, base});
 
@@ -625,7 +625,7 @@ TEST(PersistentLazySegmentTreeTest, LargeValuesSumAndUpdateCorrectly) {
 
   std::size_t v1 = tree.rangeAdd(0, 1, delta);
 
-  EXPECT_EQ(tree.rangeSum(0, 0, 1), 2 * base);             // version 0 unchanged
+  EXPECT_EQ(tree.rangeSum(0, 0, 1), 2 * base); // version 0 unchanged
   EXPECT_EQ(tree.rangeSum(v1, 0, 1), 2 * base + 2 * delta);
   EXPECT_EQ(tree.rangeSum(v1, 0, 0), base + delta);
   EXPECT_EQ(tree.rangeSum(v1, 1, 1), base + delta);
@@ -635,7 +635,7 @@ TEST(PersistentLazySegmentTreeTest, LargeValuesSumAndUpdateCorrectly) {
 // negative values combined with a negative delta must not wrap around
 // within the representable long long range used by this test.
 TEST(PersistentLazySegmentTreeTest, LargeNegativeValuesCorrect) {
-  const long long base  = -500'000'000'000'000LL;
+  const long long base = -500'000'000'000'000LL;
   const long long delta = -100'000'000'000'000LL;
 
   PersistentLazySegmentTree tree({base, base, base, base});
