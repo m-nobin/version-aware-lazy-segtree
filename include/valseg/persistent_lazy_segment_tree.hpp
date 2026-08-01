@@ -134,6 +134,8 @@ private:
   static std::size_t build(const std::vector<ValueType>& values, std::vector<Node>& arena,
                            std::size_t segmentLeft, std::size_t segmentRight);
 
+  static ValueType segmentLength(std::size_t segmentLeft, std::size_t segmentRight);
+
   std::size_t update(std::size_t nodeIndex, std::size_t segmentLeft, std::size_t segmentRight,
                      std::size_t queryLeft, std::size_t queryRight, ValueType value);
 
