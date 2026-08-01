@@ -6,11 +6,12 @@
 
 An Advanced Algorithms project exploring how range-add lazy propagation can be combined with partial persistence while preserving correct historical range-sum queries.
 
-> **Current status:** Phase 5 is under review: the persistent tree and its deterministic test
-> baseline are complete on review branches
+> **Current status:** Phase 5 is complete: the persistent tree and its full deterministic suite
+> are merged
 > ([#21](https://github.com/m-nobin/version-aware-lazy-segtree/pull/21),
-> [#22](https://github.com/m-nobin/version-aware-lazy-segtree/pull/22)). Randomized validation,
-> proof, and benchmarks follow in later phases.
+> [#22](https://github.com/m-nobin/version-aware-lazy-segtree/pull/22)), with 64 tests passing
+> across the supported verification matrix. Randomized validation, proof, and benchmarks follow
+> in later phases.
 
 ## Implemented components
 
