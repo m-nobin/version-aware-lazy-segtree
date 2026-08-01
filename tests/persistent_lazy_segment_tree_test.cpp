@@ -8,12 +8,11 @@
 using valseg::PersistentLazySegmentTree;
 
 // ---------------------------------------------------------------------------
-// Baseline suite for the persistent tree.
+// Deterministic suite for the persistent tree, covering issue #7.
 //
-// These exemplar cases establish the testing patterns for the deterministic
-// coverage tracked in issue #7: assert on version numbers returned by
-// rangeAdd, query every affected version after each update, and use
-// versionCount() and nodeCount() as evidence of publication and sharing.
+// Every case asserts the version numbers returned by rangeAdd, queries the
+// affected versions after each update, and uses versionCount() and
+// nodeCount() as evidence of publication and structural sharing.
 // ---------------------------------------------------------------------------
 
 // ===========================================================================
@@ -189,9 +188,9 @@ TEST(PersistentLazySegmentTreeTest, PartialUpdateLeftHalfOnly) {
   EXPECT_EQ(tree.rangeSum(0, 0, 3), 100);
 
   // Version 1: left side updated, right side unchanged.
-  EXPECT_EQ(tree.rangeSum(v1, 0, 1), 40); // ← was 35, corrected
+  EXPECT_EQ(tree.rangeSum(v1, 0, 1), 40);
   EXPECT_EQ(tree.rangeSum(v1, 2, 3), 70);
-  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 110); // ← was 105, corrected
+  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 110);
 }
 
 // Verifies a partial update that touches only the right half of the tree.
@@ -453,14 +452,15 @@ TEST(PersistentLazySegmentTreeTest, EachVersionInChainReturnsCorrectCumulative) 
   PersistentLazySegmentTree tree({0});
 
   std::vector<std::size_t> versions;
+  versions.reserve(10);
   for (int i = 0; i < 10; ++i) {
     versions.push_back(tree.rangeAdd(0, 0, 1));
   }
 
   EXPECT_EQ(tree.rangeSum(0, 0, 0), 0);
 
-  for (int i = 0; i < 10; ++i) {
-    EXPECT_EQ(tree.rangeSum(versions[i], 0, 0), static_cast<long long>(i + 1));
+  for (std::size_t i = 0; i < versions.size(); ++i) {
+    EXPECT_EQ(tree.rangeSum(versions[i], 0, 0), static_cast<long long>(i) + 1);
   }
 }
 
