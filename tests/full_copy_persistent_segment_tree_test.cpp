@@ -93,7 +93,7 @@ TEST(FullCopyPersistentSegmentTreeTest, RangeUpdateCopiesWholeTree) {
   EXPECT_EQ(v1, 1u);
   EXPECT_EQ(tree.versionCount(), 2u);
   // Full-copy tree should allocate another 2n - 1 nodes (7 nodes) for the update.
-  EXPECT_EQ(tree.nodeCount(), 14u); 
+  EXPECT_EQ(tree.nodeCount(), 14u);
   EXPECT_EQ(tree.rangeSum(0, 0, 3), 10);
   EXPECT_EQ(tree.rangeSum(v1, 0, 3), 30);
 }
@@ -116,7 +116,7 @@ TEST(FullCopyPersistentSegmentTreeTest, PartialRangeUpdateCopiesWholeTree) {
   EXPECT_EQ(tree.rangeSum(0, 0, 3), 100);
 
   EXPECT_EQ(tree.rangeSum(v1, 0, 1), 40);
-  EXPECT_EQ(tree.rangeSum(v1, 2, 3), 70); 
+  EXPECT_EQ(tree.rangeSum(v1, 2, 3), 70);
   EXPECT_EQ(tree.rangeSum(v1, 0, 3), 110);
 }
 

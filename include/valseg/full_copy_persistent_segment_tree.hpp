@@ -11,7 +11,7 @@ namespace valseg {
  *
  * This structure serves as the Tier 1 baseline representing the cost of *not*
  * path-copying. On every `rangeAdd`, the entire tree (all 2n-1 nodes) is
- * rebuilt from scratch and pushed into the arena. 
+ * rebuilt from scratch and pushed into the arena.
  *
  * Because the entire tree is rebuilt on every update, there is no need for
  * lazy propagation tags to defer updates. The node structure simply stores

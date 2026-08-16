@@ -140,16 +140,15 @@ std::size_t FullCopyPersistentSegmentTree::fullCopyUpdate(std::size_t nodeIndex,
                                                           std::size_t segmentLeft,
                                                           std::size_t segmentRight,
                                                           std::size_t queryLeft,
-                                                          std::size_t queryRight,
-                                                          ValueType value) {
+                                                          std::size_t queryRight, ValueType value) {
   const Node current = nodes[nodeIndex];
-  
+
   if (segmentLeft == segmentRight) {
-    // Base case: we are at a leaf. If it falls inside the update range, 
+    // Base case: we are at a leaf. If it falls inside the update range,
     // add the delta; otherwise, just copy it exactly.
     ValueType newValue = current.sum;
     if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
-        newValue += value;
+      newValue += value;
     }
     nodes.push_back(Node{noNode, noNode, newValue});
     return nodes.size() - 1;
@@ -175,9 +174,10 @@ Read-Only Historical Query
 =========================================================
 */
 
-FullCopyPersistentSegmentTree::ValueType FullCopyPersistentSegmentTree::query(
-    std::size_t nodeIndex, std::size_t segmentLeft, std::size_t segmentRight,
-    std::size_t queryLeft, std::size_t queryRight) const {
+FullCopyPersistentSegmentTree::ValueType
+FullCopyPersistentSegmentTree::query(std::size_t nodeIndex, std::size_t segmentLeft,
+                                     std::size_t segmentRight, std::size_t queryLeft,
+                                     std::size_t queryRight) const {
   if (segmentRight < queryLeft || segmentLeft > queryRight) {
     return 0;
   }
