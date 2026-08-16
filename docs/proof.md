@@ -29,17 +29,19 @@ index of version `v`'s root. Each node stores `(leftChild, rightChild, sum, lazy
 segment `[s, e]` determined by its position; leaves use the sentinel child index. We write
 `len(s, e) = e − s + 1`.
 
-**Definition (represented value).** For a node `x` covering `[s, e]` reached from a root through
-ancestors with lazy values `λ₁, …, λₖ`, the value that `x` represents for index `i ∈ [s, e]` in
-that version is the leaf-path sum of `lazy` values below `x` plus the leaf value plus
-`λ₁ + ⋯ + λₖ`.
+**Definition (represented value).** Let `x` be a node covering `[s, e]` and `i ∈ [s, e]`. The
+value that `x` represents for `i`, written `valₓ(i)`, is the `sum` of the leaf of `i` below `x`
+plus the `lazy` values of that leaf's proper ancestors up to and including `x` (a leaf's own
+`lazy` is already inside its `sum`, by I2 below). If `x` is reached from a root through proper
+ancestors with lazy values `λ₁, …, λₖ`, then the value of index `i` in that version is
+`valₓ(i) + λ₁ + ⋯ + λₖ`.
 
 ## 3. Invariants
 
 For every reachable node `x` covering `[s, e]` in every published version:
 
-- **I1 (exact sum).** `x.sum` equals the sum of `x`'s segment in that version, excluding lazy
-  values held by `x`'s proper ancestors.
+- **I1 (exact sum).** `x.sum = Σ_{i=s}^{e} valₓ(i)`: the sum of `x`'s segment in that version,
+  excluding lazy values held by `x`'s proper ancestors.
 - **I2 (self-inclusion).** `x.lazy` is included in `x.sum`.
 - **I3 (child exclusion).** `x.lazy` is not included in either child's `sum`; for internal `x`,
   `x.sum = left.sum + right.sum + x.lazy · len(s, e)`.
@@ -110,8 +112,8 @@ flowchart TD
     l1["leaf 1<br/>2"]
     l2["leaf 2<br/>3"]
     l3["leaf 3<br/>4"]
-    l1c["leaf 1′<br/>4"]
-    l2c["leaf 2′<br/>5"]
+    l1c["leaf 1′<br/>sum 4, lazy 2"]
+    l2c["leaf 2′<br/>sum 5, lazy 2"]
 
     r0 --> A
     r0 --> B
@@ -138,15 +140,23 @@ flowchart TD
 
 No arrow ever points from an old node to a new one, which is the graph form of I4.
 
-**Lemma 4 (query counts every lazy value exactly once).** For a tree satisfying I1–I3,
-`query(x, s, e, l, r, Λ)` returns `Σ_{i ∈ [s,e] ∩ [l,r]} (value of i) `, where `Λ` is the sum of
-lazy values on the path strictly above `x`.
+**Lemma 4 (query counts every lazy value exactly once).** For a tree satisfying I1–I3 and any
+accumulator `Λ`, `query(x, s, e, l, r, Λ)` returns `Σ_{i ∈ [s,e] ∩ [l,r]} (valₓ(i) + Λ)`. In
+particular, when `Λ` is the sum of the lazy values on the path strictly above `x`, the result is
+the sum of the version's values over `[s, e] ∩ [l, r]`.
 
 _Proof outline._ Induction on the segment. Disjoint segments contribute `0`. Full coverage returns
-`x.sum + Λ · len(s, e)`; by I1–I2 this counts `x`'s own and descendant lazy values once and each
-ancestor lazy value once through `Λ`. Partial coverage recurses with `Λ + x.lazy`, moving `x`'s
-lazy value from the node into the inherited accumulator, so no contribution is dropped or
-duplicated. ∎
+`x.sum + Λ · len(s, e)`, which by I1 is `Σ valₓ(i) + Λ · len(s, e)`: `x`'s own and descendant lazy
+values are counted once inside `x.sum` (I2), each ancestor lazy value once through `Λ`. Partial
+coverage recurses into both children with `Λ + x.lazy`, moving `x`'s lazy value from the node into
+the inherited accumulator, and `valₓ(i) = val_child(i) + x.lazy`, so no contribution is dropped
+or duplicated. ∎
+
+Two implementation details keep the recursion well defined and read-only. The disjoint test runs
+before the node is read, and a leaf (`s = e`) is either fully covered or disjoint, so the sentinel
+child index of a leaf is never dereferenced; `update` likewise recurses into a child only when
+that child's segment intersects `[l, r]`. `query` is a `const` member that reads `nodes` and
+recurses — it allocates nothing and writes nothing, so its only memory is the `O(h)` call stack.
 
 The descent for `rangeSum(v2, 1, 2)` on the example above shows the accumulator at work — the
 root's deferred `5` reaches each selected leaf exactly once, and dashed nodes are pruned as
@@ -204,27 +214,46 @@ from Lemmas 2, 3, and 5. ∎
 
 ## 6. Complexity analysis
 
-Let `n` be the array size, `h = ⌈log₂ n⌉` the tree height, and `u` the number of successful
-non-zero updates.
+Let `n` be the array size, `h = ⌈log₂ n⌉` the tree height, `U` the number of successful updates,
+and `U₊ ≤ U` the number of those with a non-zero delta.
 
-| Operation           |       Time | Additional space         |
-| ------------------- | ---------: | ------------------------ |
-| `initialize`        |     `O(n)` | `2n − 1` nodes           |
-| `rangeAdd`, `δ ≠ 0` | `O(log n)` | `≤ 4h + 4` copied nodes  |
-| `rangeAdd`, `δ = 0` |     `O(1)` | one root entry           |
-| `rangeSum`          | `O(log n)` | none (call stack `O(h)`) |
-| Total retained      |          — | `O(n + u log n)` nodes   |
+**Proposition 1 (update-frontier locality).** For every successful non-zero `rangeAdd`, each
+invocation of `update` covers a segment that intersects `[l, r]`, appends exactly one copied node,
+and causes no other append. Consequently no disjoint segment is copied, and the number of copied
+nodes equals the number of `update` invocations.
+
+_Proof outline._ `update` is entered at the root and re-entered only for a child whose segment
+intersects `[l, r]` (the `queryLeft <= middle` / `queryRight > middle` guards). Both branches end
+in exactly one `nodes.push_back`. ∎
+
+**Proposition 2 (complexity).** The per-operation bounds below hold; update-side time bounds are
+amortized because `nodes` and `roots` grow as `std::vector`s, query time is worst-case.
+
+| Operation           |                 Time | Additional space                              |
+| ------------------- | -------------------: | --------------------------------------------- |
+| `initialize`        |               `O(n)` | `2n − 1` nodes                                |
+| `rangeAdd`, `δ ≠ 0` | `O(log n)` amortized | `≤ 4(h + 1)` copied nodes                     |
+| `rangeAdd`, `δ = 0` |     `O(1)` amortized | one root entry                                |
+| `rangeSum`          |           `O(log n)` | none (call stack `O(h)`)                      |
+| Total retained      |                    — | `O(n + U₊ log n)` nodes, `U + 1` root entries |
 
 _Argument outline._
 
-- **Build** touches each of the `2n − 1` nodes once.
+- **Build** touches each of the `2n − 1` nodes once; `initialize` reserves that many up front, so
+  the build itself never reallocates.
 - **Update** recursion visits at most four nodes per level (the standard segment-tree boundary
-  argument: after the topmost level where the query range splits, at most two active paths remain,
-  each expanding to at most two visited nodes per level), and appends one copy per visited node.
+  argument: after the topmost level where the update range splits, at most two partially covered
+  nodes remain per level, each of which may visit two children, one of them fully covered and
+  terminating), giving at most `4(h + 1)` invocations across levels `0 … h`; by Proposition 1 that
+  is also the number of appended nodes.
 - **Zero-delta fast path** performs validation and a single `roots.push_back`.
-- **Query** visits the same `O(log n)` frontier read-only and allocates nothing.
-- **Space** is the build cost plus the per-update copies, giving `O(n + u log n)` arena nodes plus
-  `O(u)` root entries.
+- **Query** visits the same `O(log n)` frontier read-only and allocates nothing (Lemma 4).
+- **Space** is the build cost plus the per-update copies, giving `O(n + U₊ log n)` arena nodes.
+  Every successful update, including a zero-delta one, appends exactly one root entry, so `roots`
+  holds `U + 1` entries.
+- **Amortization** applies only to the update side: an individual `push_back` may trigger an
+  `O(current size)` reallocation of the arena or root table, but the amortized cost per append is
+  `O(1)`, and nothing else in `rangeAdd` allocates.
 
 The visited frontier for `rangeAdd(2, 6, δ)` on `n = 8` — seven copies, never more than four
 visited nodes on a level; dashed subtrees are skipped and shared unchanged:
@@ -256,14 +285,22 @@ flowchart TD
     class s1,s2 skip;
 ```
 
-The deterministic suite corroborates the node-copy counts exactly: one copied root per
-full-coverage update, `h + 1` copies per single-leaf update on `n = 8`, and zero copies per
-zero-delta update.
+The deterministic suite (`tests/persistent_lazy_segment_tree_test.cpp`) corroborates the node-copy
+counts exactly through `nodeCount()`: one copied root per full-coverage update, `h + 1` copies per
+single-leaf update on `n = 8`, and zero copies per zero-delta update. The randomized differential
+suite (`tests/differential_validation_test.cpp`) additionally asserts the `4(h + 1)` bound of
+Proposition 2 on every non-zero update it generates.
 
 ## 7. Scope and assumptions
 
 - Updates apply to the latest version only; branching from historical versions is out of scope.
+- The proof assumes `n ≥ 1`. `initialize` with an empty array publishes version 0 with no nodes and
+  the sentinel as root; `rangeAdd` and `rangeSum` then reject every call, so no tree property is
+  exercised.
+- `initialize` replaces the entire history: I4 and Theorem 2 are statements about the versions
+  published since the most recent `initialize`, not across re-initializations.
 - Overflow of `ValueType` is excluded by contract; the large-value tests exercise the extremes the
-  model admits.
+  model admits. Segment lengths are computed in `ValueType`, which assumes `n` fits in it.
 - Allocation failures are covered by Lemma 5 through the checkpoint rollback; no other failure
   modes exist in the operations under proof.
+- The structure is not synchronized; concurrent use requires external serialization.
