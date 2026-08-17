@@ -4,14 +4,16 @@
 
 #include <cstddef>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 using valseg::PointOnlyPersistentSegmentTree;
 
 // Deterministic suite for the point-only persistent segment tree.
 // nodeCount() is the structural evidence: a point update must cost one
-// root-to-leaf path (h + 1 nodes), while a range update must copy every node
-// whose segment intersects the range, growing linearly with the range width.
+// root-to-leaf path (h or h + 1 nodes for h = ceil(log2 n)), while a range
+// update must copy every node whose segment intersects the range, growing
+// linearly with the range width.
 
 namespace {
 
@@ -29,6 +31,19 @@ std::size_t touchedNodes(std::size_t segmentLeft, std::size_t segmentRight, std:
   const std::size_t middle = (segmentLeft + segmentRight) / 2;
   return 1 + touchedNodes(segmentLeft, middle, queryLeft, queryRight) +
          touchedNodes(middle + 1, segmentRight, queryLeft, queryRight);
+}
+
+std::size_t floorLog2(std::size_t n) {
+  std::size_t result = 0;
+  while ((static_cast<std::size_t>(1) << (result + 1)) <= n) {
+    ++result;
+  }
+  return result;
+}
+
+// Smallest h with 2^h >= n: the tree height.
+std::size_t ceilLog2(std::size_t n) {
+  return n <= 1 ? 0 : floorLog2(n - 1) + 1;
 }
 
 } // namespace
@@ -123,20 +138,6 @@ TEST(PointOnlyPersistentSegmentTreeTest, SinglePointUpdateCopiesOnePath) {
   EXPECT_EQ(tree.rangeSum(v1, 0, 1), 30); // shared subtree unchanged
 }
 
-// n = 16, height 4: every single-leaf update appends exactly h + 1 = 5 nodes.
-TEST(PointOnlyPersistentSegmentTreeTest, SingleLeafUpdateCreatesExactPathLength) {
-  PointOnlyPersistentSegmentTree tree(std::vector<long long>(16, 0));
-  const std::size_t pathLength = 5;
-
-  for (std::size_t leaf = 0; leaf < 16; ++leaf) {
-    const std::size_t before = tree.nodeCount();
-    tree.rangeAdd(leaf, leaf, 1);
-    EXPECT_EQ(tree.nodeCount() - before, pathLength) << "leaf " << leaf;
-  }
-  EXPECT_EQ(tree.rangeSum(16, 0, 15), 16);
-  EXPECT_EQ(tree.rangeSum(0, 0, 15), 0); // version 0 still isolated
-}
-
 TEST(PointOnlyPersistentSegmentTreeTest, FullRangeUpdateCopiesWholeTree) {
   PointOnlyPersistentSegmentTree tree({10, 20, 30, 40});
 
@@ -172,36 +173,50 @@ TEST(PointOnlyPersistentSegmentTreeTest, PartialRangeUpdateCopiesOnlyIntersectin
   EXPECT_EQ(tree.rangeSum(v1, 4, 7), 26); // untouched shared subtree [4, 7]
 }
 
-// The quantitative Θ(k + log n) evidence on n = 16: for every leaf range
-// [left, right] the arena must grow by exactly the number of nodes whose
-// segment intersects the range (independently counted by touchedNodes), the
-// full range must copy all 2n − 1 nodes, and no update may exceed 2k + 2h − 1.
+// The quantitative Θ(k + log n) evidence, over perfect and uneven trees: for
+// every range [left, right] the arena must grow by exactly the number of nodes
+// whose segment intersects the range (independently counted by touchedNodes),
+// bounded below by k + floor(log2 n) and above by 2k + 2h − 3 (h >= 2); a point
+// update must cost h or h + 1 nodes, exactly h + 1 when n is a power of two;
+// and the full range must copy all 2n − 1 nodes.
 TEST(PointOnlyPersistentSegmentTreeTest, NodeCountGrowsByIntersectingNodesPerRange) {
-  const std::size_t n = 16;
-  const std::size_t height = 4;
-  PointOnlyPersistentSegmentTree tree(std::vector<long long>(n, 1));
+  constexpr std::size_t sizes[] = {1, 2, 3, 5, 7, 16, 17};
+  for (std::size_t n : sizes) {
+    const std::size_t height = ceilLog2(n);
+    const std::size_t minDepth = floorLog2(n);
+    const bool perfect = (static_cast<std::size_t>(1) << height) == n;
+    PointOnlyPersistentSegmentTree tree(std::vector<long long>(n, 1));
 
-  EXPECT_EQ(tree.nodeCount(), 2 * n - 1);
+    EXPECT_EQ(tree.nodeCount(), 2 * n - 1) << "n=" << n;
 
-  for (std::size_t left = 0; left < n; ++left) {
-    for (std::size_t right = left; right < n; ++right) {
-      const std::size_t k = right - left + 1;
-      const std::size_t before = tree.nodeCount();
-      tree.rangeAdd(left, right, 1);
-      const std::size_t appended = tree.nodeCount() - before;
+    for (std::size_t left = 0; left < n; ++left) {
+      for (std::size_t right = left; right < n; ++right) {
+        const std::size_t k = right - left + 1;
+        const std::size_t before = tree.nodeCount();
+        tree.rangeAdd(left, right, 1);
+        const std::size_t appended = tree.nodeCount() - before;
+        const std::string where = "n=" + std::to_string(n) + " range [" + std::to_string(left) +
+                                  ", " + std::to_string(right) + "]";
 
-      EXPECT_EQ(appended, touchedNodes(0, n - 1, left, right))
-          << "range [" << left << ", " << right << "]";
-      EXPECT_LE(appended, 2 * k + 2 * height - 1) << "range [" << left << ", " << right << "]";
-      EXPECT_GE(appended, k + height) << "range [" << left << ", " << right << "]";
+        EXPECT_EQ(appended, touchedNodes(0, n - 1, left, right)) << where;
+        EXPECT_GE(appended, k + minDepth) << where;
+        if (height >= 2) {
+          EXPECT_LE(appended, 2 * k + 2 * height - 3) << where;
+        }
+        if (k == 1) {
+          EXPECT_TRUE(appended == minDepth + 1 || appended == height + 1) << where;
+          if (perfect) {
+            EXPECT_EQ(appended, height + 1) << where;
+          }
+        }
+        if (k == n) {
+          EXPECT_EQ(appended, 2 * n - 1) << where; // full range copies the whole tree
+        }
+      }
     }
+
+    EXPECT_EQ(tree.rangeSum(0, 0, n - 1), static_cast<long long>(n)) << "n=" << n; // v0 isolated
   }
-
-  const std::size_t before = tree.nodeCount();
-  tree.rangeAdd(0, n - 1, 1);
-  EXPECT_EQ(tree.nodeCount() - before, 2 * n - 1); // full range copies the whole tree
-
-  EXPECT_EQ(tree.rangeSum(0, 0, n - 1), static_cast<long long>(n)); // version 0 isolated
 }
 
 // ---------------------------------------------------------------------------

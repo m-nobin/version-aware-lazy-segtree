@@ -41,6 +41,8 @@ public:
 
   /**
    * @brief Construct version 0 from an initial array.
+   *
+   * @param values Initial array; may be empty.
    */
   explicit FullCopyPersistentSegmentTree(const std::vector<ValueType>& values);
 
@@ -49,6 +51,8 @@ public:
    *
    * Replacement state is built first and swapped in only after the build
    * succeeds, so a failed initialization leaves the tree unchanged.
+   *
+   * @param values Initial array; may be empty.
    */
   void initialize(const std::vector<ValueType>& values);
 
@@ -60,6 +64,9 @@ public:
    * the latest root without allocating nodes. A failed update publishes no
    * version and appends no nodes.
    *
+   * @param left  Left index (inclusive).
+   * @param right Right index (inclusive).
+   * @param value Value to add.
    * @return Version number of the newly published version.
    *
    * @throws std::runtime_error     No initialized version or empty structure.
@@ -72,6 +79,11 @@ public:
    * @brief Return the sum over [left, right] in the given version.
    *
    * Queries allocate nothing and mutate nothing.
+   *
+   * @param version Version to query.
+   * @param left    Left index (inclusive).
+   * @param right   Right index (inclusive).
+   * @return Sum of the elements in [left, right] of that version.
    *
    * @throws std::runtime_error     No initialized version or empty structure.
    * @throws std::out_of_range      Invalid version number.
@@ -111,6 +123,11 @@ private:
     std::size_t rightChild;
     ValueType sum;
   };
+
+  // The node layout is part of the memory-benchmark contract: two child
+  // indices and one sum with no padding, 24 bytes on 64-bit targets.
+  static_assert(sizeof(Node) == 2 * sizeof(std::size_t) + sizeof(ValueType),
+                "Node must pack two child indices and one sum without padding");
 
   /**
    * Sentinel arena index used for leaf children and the empty-array root.

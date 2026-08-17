@@ -24,14 +24,15 @@ namespace valseg {
  * A node stores only its two child indices and the exact segment sum
  * (three 8-byte fields, 24 bytes per node, versus 32 bytes in the lazy tree).
  *
- * Time Complexity:
+ * Time Complexity, with h = ceil(log2 n) the tree height:
  *  Build:            O(n)
  *  Range Add:        Θ(k + log n) for a range of k leaves, appending exactly
  *                    the nodes whose segment intersects the range: the k
- *                    leaves plus every ancestor of one of them, never more
- *                    than 2k + 2h - 1 for tree height h. A single point costs
- *                    h + 1 nodes; the full range costs Θ(n), copying all
- *                    2n - 1 nodes.
+ *                    leaves plus every ancestor of one of them. That is at
+ *                    least k + floor(log2 n) nodes, and at most 2k + 2h - 3
+ *                    nodes once h >= 2. A single point costs h or h + 1
+ *                    nodes (exactly h + 1 when n is a power of two); the
+ *                    full range costs Θ(n), copying all 2n - 1 nodes.
  *  Zero-delta Add:   O(1), reusing the latest root
  *  Historical Sum:   O(log n), allocation-free
  *
@@ -133,6 +134,11 @@ private:
     std::size_t rightChild;
     ValueType sum;
   };
+
+  // The node layout is part of the memory-benchmark contract: two child
+  // indices and one sum with no padding, 24 bytes on 64-bit targets.
+  static_assert(sizeof(Node) == 2 * sizeof(std::size_t) + sizeof(ValueType),
+                "Node must pack two child indices and one sum without padding");
 
   /**
    * Sentinel arena index used for leaf children and the empty-array root.

@@ -1,5 +1,6 @@
 #include <valseg/brute_force_array.hpp>
 #include <valseg/full_copy_persistent_segment_tree.hpp>
+#include <valseg/persistent_lazy_segment_tree.hpp>
 #include <valseg/point_only_persistent_segment_tree.hpp>
 
 #include <gtest/gtest.h>
@@ -18,10 +19,12 @@ using valseg::BruteForceArray;
 //
 // Every baseline shares the PersistentLazySegmentTree interface, so one typed
 // test replays seeded campaigns of mixed latest-version updates and historical
-// queries against BruteForceArray, the historical correctness oracle. A new
-// baseline joins by adding its type to BaselineTypes below.
+// queries against BruteForceArray, the historical correctness oracle; the
+// proposed structure itself runs as a control. A new baseline joins by adding
+// its type to BaselineTypes and its name to BaselineNames below.
 //
-// Campaign layout (fixed, every run reproducible from its seed):
+// Campaign layout (fixed, every run reproducible from its seed for a given
+// standard library):
 //   sizes            n in {1, 2, 5, 16, 64}
 //   seeds            3 per size
 //   operations       2000 per run, about half updates and half queries
@@ -139,8 +142,10 @@ struct BaselineNames {
       return "FullCopy";
     } else if constexpr (std::is_same_v<T, valseg::PointOnlyPersistentSegmentTree>) {
       return "PointOnly";
+    } else if constexpr (std::is_same_v<T, valseg::PersistentLazySegmentTree>) {
+      return "PersistentLazy";
     } else {
-      return "Baseline";
+      static_assert(sizeof(T) == 0, "name the new baseline in BaselineNames");
     }
   }
 };
@@ -150,7 +155,8 @@ struct BaselineNames {
 template <typename Baseline> class BaselineDifferentialTest : public ::testing::Test {};
 
 using BaselineTypes =
-    ::testing::Types<valseg::FullCopyPersistentSegmentTree, valseg::PointOnlyPersistentSegmentTree>;
+    ::testing::Types<valseg::FullCopyPersistentSegmentTree, valseg::PointOnlyPersistentSegmentTree,
+                     valseg::PersistentLazySegmentTree>;
 TYPED_TEST_SUITE(BaselineDifferentialTest, BaselineTypes, BaselineNames);
 
 TYPED_TEST(BaselineDifferentialTest, MatchesBruteForceOracle) {
