@@ -19,20 +19,23 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 >   ([#8](https://github.com/m-nobin/version-aware-lazy-segtree/issues/8)) replays 180 seeded
 >   campaigns (666,000 mixed operations) against the brute-force oracle with zero mismatches;
 >   both were delivered in
->   [#24](https://github.com/m-nobin/version-aware-lazy-segtree/pull/24). 73 tests pass across
->   the supported verification matrix.
+>   [#24](https://github.com/m-nobin/version-aware-lazy-segtree/pull/24).
 > - **Phase 7 — in progress.** Reproducible benchmarks
->   ([#10](https://github.com/m-nobin/version-aware-lazy-segtree/issues/10)); the comparison
+>   ([#10](https://github.com/m-nobin/version-aware-lazy-segtree/issues/10)). The first
+>   comparison baseline, `FullCopyPersistentSegmentTree`, is merged
+>   ([#25](https://github.com/m-nobin/version-aware-lazy-segtree/pull/25)); the remaining
 >   baselines are under review in
->   [#25](https://github.com/m-nobin/version-aware-lazy-segtree/pull/25)–[#29](https://github.com/m-nobin/version-aware-lazy-segtree/pull/29).
+>   [#26](https://github.com/m-nobin/version-aware-lazy-segtree/pull/26)–[#29](https://github.com/m-nobin/version-aware-lazy-segtree/pull/29).
+>   99 tests pass across the supported verification matrix.
 
 ## Implemented components
 
-| Component                   | Purpose                                       |     Update |             Query | Persistence                          |
-| --------------------------- | --------------------------------------------- | ---------: | ----------------: | ------------------------------------ |
-| `BruteForceArray`           | Historical correctness oracle                 |     `O(n)` | `O(n)` worst case | Complete array copy                  |
-| `LazySegmentTree`           | Non-persistent performance baseline           | `O(log n)` |        `O(log n)` | None                                 |
-| `PersistentLazySegmentTree` | Partially persistent range-add/range-sum tree | `O(log n)` |        `O(log n)` | Path copying with structural sharing |
+| Component                       | Purpose                                         |     Update |             Query | Persistence                          |
+| ------------------------------- | ----------------------------------------------- | ---------: | ----------------: | ------------------------------------ |
+| `BruteForceArray`               | Historical correctness oracle                   |     `O(n)` | `O(n)` worst case | Complete array copy                  |
+| `LazySegmentTree`               | Non-persistent performance baseline             | `O(log n)` |        `O(log n)` | None                                 |
+| `PersistentLazySegmentTree`     | Partially persistent range-add/range-sum tree   | `O(log n)` |        `O(log n)` | Path copying with structural sharing |
+| `FullCopyPersistentSegmentTree` | Benchmark baseline: full tree copy per update   |     `O(n)` |        `O(log n)` | Complete tree copy, no sharing       |
 
 All components support zero-based, inclusive range-add and range-sum operations using `long long` values. Persistent updates apply to the latest version only, while queries read any published version. Persistent update time is amortized over arena growth; the bounds are proved in [docs/proof.md](docs/proof.md).
 
