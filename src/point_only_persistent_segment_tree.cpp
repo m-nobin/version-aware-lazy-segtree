@@ -121,17 +121,6 @@ std::size_t PointOnlyPersistentSegmentTree::build(const std::vector<ValueType>& 
 
 /*
 =========================================================
-Segment Arithmetic
-=========================================================
-*/
-
-PointOnlyPersistentSegmentTree::ValueType
-PointOnlyPersistentSegmentTree::segmentLength(std::size_t segmentLeft, std::size_t segmentRight) {
-  return static_cast<ValueType>(segmentRight) - static_cast<ValueType>(segmentLeft) + 1;
-}
-
-/*
-=========================================================
 Point-Only Persistent Range Update
 =========================================================
 */
@@ -140,11 +129,14 @@ std::size_t
 PointOnlyPersistentSegmentTree::pointOnlyUpdate(std::size_t nodeIndex, std::size_t segmentLeft,
                                                 std::size_t segmentRight, std::size_t queryLeft,
                                                 std::size_t queryRight, ValueType value) {
+  // Copy the node by value: appending copies below may reallocate the
+  // arena and invalidate references into it.
   const Node current = nodes[nodeIndex];
 
   if (segmentLeft == segmentRight) {
-    // Leaf node: falls within query range (guaranteed by recursion guards),
-    // so we path-copy this leaf and add the update delta.
+    // Leaf: the recursion guards below only descend into segments that
+    // intersect [queryLeft, queryRight], so this leaf is inside the range.
+    // Copy it with the delta applied.
     nodes.push_back(Node{noNode, noNode, current.sum + value});
     return nodes.size() - 1;
   }
@@ -154,8 +146,10 @@ PointOnlyPersistentSegmentTree::pointOnlyUpdate(std::size_t nodeIndex, std::size
   std::size_t newLeft = current.leftChild;
   std::size_t newRight = current.rightChild;
 
-  // Since we have no lazy tags, we must unconditionally recurse all the way
-  // to the leaves for any child that overlaps with [queryLeft, queryRight].
+  // The defining property of this baseline: with no lazy tag there is no
+  // way to stop at a fully covered node, so every child that intersects
+  // [queryLeft, queryRight] is descended into, all the way to its leaves.
+  // Children outside the range keep their old index and stay shared.
   if (queryLeft <= middle) {
     newLeft = pointOnlyUpdate(current.leftChild, segmentLeft, middle, queryLeft, queryRight, value);
   }
@@ -165,7 +159,7 @@ PointOnlyPersistentSegmentTree::pointOnlyUpdate(std::size_t nodeIndex, std::size
         pointOnlyUpdate(current.rightChild, middle + 1, segmentRight, queryLeft, queryRight, value);
   }
 
-  // The sum of the newly created parent is simply the sum of its children.
+  // The sum of the new node is the sum of its (new or shared) children.
   nodes.push_back(Node{newLeft, newRight, nodes[newLeft].sum + nodes[newRight].sum});
   return nodes.size() - 1;
 }
