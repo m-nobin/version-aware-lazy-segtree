@@ -120,6 +120,22 @@ TEST(FullCopyPersistentSegmentTreeTest, PartialRangeUpdateCopiesWholeTree) {
   EXPECT_EQ(tree.rangeSum(v1, 0, 3), 110);
 }
 
+// After U non-zero updates on n = 16 the arena must hold exactly (2n − 1)(U + 1)
+// nodes: the quantitative "no structural sharing" evidence for this baseline.
+TEST(FullCopyPersistentSegmentTreeTest, NodeCountGrowsByFullTreePerUpdate) {
+  FullCopyPersistentSegmentTree tree(std::vector<long long>(16, 1));
+  const std::size_t nodesPerVersion = 2 * 16 - 1;
+
+  EXPECT_EQ(tree.nodeCount(), nodesPerVersion);
+
+  for (std::size_t u = 1; u <= 10; ++u) {
+    std::size_t version = tree.rangeAdd(u % 16, 15, 1); // varying partial ranges
+    EXPECT_EQ(version, u);
+    EXPECT_EQ(tree.nodeCount(), nodesPerVersion * (u + 1));
+  }
+  EXPECT_EQ(tree.rangeSum(0, 0, 15), 16); // version 0 still isolated
+}
+
 // ---------------------------------------------------------------------------
 // Cumulative updates
 // ---------------------------------------------------------------------------
@@ -205,6 +221,93 @@ TEST(FullCopyPersistentSegmentTreeTest, NegativeInitialValues) {
   EXPECT_EQ(tree.rangeSum(v1, 1, 2), 15); // (−1+10) + (−4+10)
 }
 
+TEST(FullCopyPersistentSegmentTreeTest, NegativeDelta) {
+  FullCopyPersistentSegmentTree tree({5, 5, 5, 5});
+
+  std::size_t v1 = tree.rangeAdd(0, 3, -3);
+
+  EXPECT_EQ(tree.rangeSum(0, 0, 3), 20);
+  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 8); // 20 − 3×4
+  EXPECT_EQ(tree.rangeSum(v1, 1, 2), 4); // (5−3)×2
+}
+
+TEST(FullCopyPersistentSegmentTreeTest, NegativeDeltaPartialRange) {
+  FullCopyPersistentSegmentTree tree({10, 10, 10, 10});
+
+  std::size_t v1 = tree.rangeAdd(1, 2, -4);
+
+  EXPECT_EQ(tree.rangeSum(0, 0, 3), 40);
+  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 32); // 40 − 4×2
+  EXPECT_EQ(tree.rangeSum(v1, 0, 0), 10); // element 0 unchanged
+  EXPECT_EQ(tree.rangeSum(v1, 3, 3), 10); // element 3 unchanged
+  EXPECT_EQ(tree.rangeSum(v1, 1, 2), 12); // (10−4)×2
+}
+
+// v1: +10 to [0,3]. v2: −3 to [1,2].
+TEST(FullCopyPersistentSegmentTreeTest, MixedPositiveAndNegativeDeltas) {
+  FullCopyPersistentSegmentTree tree({0, 0, 0, 0});
+
+  std::size_t v1 = tree.rangeAdd(0, 3, 10);
+  std::size_t v2 = tree.rangeAdd(1, 2, -3);
+
+  EXPECT_EQ(tree.rangeSum(0, 0, 3), 0);
+  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 40);
+  EXPECT_EQ(tree.rangeSum(v2, 0, 3), 34); // 40 − 3×2
+  EXPECT_EQ(tree.rangeSum(v2, 0, 0), 10);
+  EXPECT_EQ(tree.rangeSum(v2, 1, 2), 14); // (10−3)×2
+  EXPECT_EQ(tree.rangeSum(v2, 3, 3), 10);
+}
+
+// ---------------------------------------------------------------------------
+// Historical isolation
+// ---------------------------------------------------------------------------
+
+TEST(FullCopyPersistentSegmentTreeTest, VersionZeroIsolatedAfterManyUpdates) {
+  FullCopyPersistentSegmentTree tree({1, 2, 3, 4, 5, 6, 7, 8});
+
+  for (int i = 0; i < 10; ++i) {
+    tree.rangeAdd(0, 7, 10);
+  }
+
+  EXPECT_EQ(tree.versionCount(), 11u);
+  EXPECT_EQ(tree.rangeSum(0, 0, 7), 36);
+  EXPECT_EQ(tree.rangeSum(0, 0, 0), 1);
+  EXPECT_EQ(tree.rangeSum(0, 3, 5), 15); // 4 + 5 + 6
+  EXPECT_EQ(tree.rangeSum(0, 7, 7), 8);
+}
+
+// Array {0}, ten updates of +1: version k must read k for every k.
+TEST(FullCopyPersistentSegmentTreeTest, EachVersionInChainReturnsCorrectCumulative) {
+  FullCopyPersistentSegmentTree tree({0});
+  std::vector<std::size_t> versions;
+  versions.reserve(10);
+
+  for (int i = 0; i < 10; ++i) {
+    versions.push_back(tree.rangeAdd(0, 0, 1));
+  }
+
+  EXPECT_EQ(tree.rangeSum(0, 0, 0), 0);
+  for (std::size_t i = 0; i < versions.size(); ++i) {
+    EXPECT_EQ(tree.rangeSum(versions[i], 0, 0), static_cast<long long>(i) + 1);
+  }
+}
+
+TEST(FullCopyPersistentSegmentTreeTest, InterleavedPartialUpdateIsolation) {
+  FullCopyPersistentSegmentTree tree({1, 1, 1, 1});
+
+  std::size_t v1 = tree.rangeAdd(0, 1, 10); // left half only
+  std::size_t v2 = tree.rangeAdd(2, 3, 20); // right half only
+  std::size_t v3 = tree.rangeAdd(0, 1, 5);  // left half again
+
+  EXPECT_EQ(tree.rangeSum(v1, 0, 1), 22);
+  EXPECT_EQ(tree.rangeSum(v1, 2, 3), 2);
+  EXPECT_EQ(tree.rangeSum(v2, 0, 1), 22);
+  EXPECT_EQ(tree.rangeSum(v2, 2, 3), 42);
+  EXPECT_EQ(tree.rangeSum(v3, 0, 1), 32);
+  EXPECT_EQ(tree.rangeSum(v3, 2, 3), 42);
+  EXPECT_EQ(tree.rangeSum(0, 0, 3), 4); // version 0 still isolated
+}
+
 // ---------------------------------------------------------------------------
 // Failed-operation isolation
 // ---------------------------------------------------------------------------
@@ -259,4 +362,53 @@ TEST(FullCopyPersistentSegmentTreeTest, InvalidVersionQueryThrows) {
   FullCopyPersistentSegmentTree tree({1, 2, 3});
 
   EXPECT_THROW(tree.rangeSum(1, 0, 2), std::out_of_range);
+}
+
+TEST(FullCopyPersistentSegmentTreeTest, InvalidRangeOnUpdateThrows) {
+  FullCopyPersistentSegmentTree tree({1, 2, 3, 4, 5});
+
+  EXPECT_THROW(tree.rangeAdd(3, 2, 1), std::invalid_argument); // left > right
+  EXPECT_THROW(tree.rangeAdd(0, 5, 1), std::out_of_range);     // right >= size
+  EXPECT_THROW(tree.rangeAdd(4, 5, 1), std::out_of_range);     // right >= size
+}
+
+TEST(FullCopyPersistentSegmentTreeTest, InvalidRangeOnQueryThrows) {
+  FullCopyPersistentSegmentTree tree({1, 2, 3, 4, 5});
+
+  EXPECT_THROW(tree.rangeSum(1, 0, 4), std::out_of_range);     // invalid version
+  EXPECT_THROW(tree.rangeSum(0, 3, 2), std::invalid_argument); // left > right
+  EXPECT_THROW(tree.rangeSum(0, 0, 5), std::out_of_range);     // right >= size
+}
+
+// ---------------------------------------------------------------------------
+// Large 64-bit values
+// ---------------------------------------------------------------------------
+
+TEST(FullCopyPersistentSegmentTreeTest, LargeValuesSumAndUpdateCorrectly) {
+  const long long base = 1'000'000'000'000'000LL;
+  const long long delta = 100'000'000'000'000LL;
+  FullCopyPersistentSegmentTree tree({base, base});
+
+  EXPECT_EQ(tree.rangeSum(0, 0, 1), 2 * base);
+
+  std::size_t v1 = tree.rangeAdd(0, 1, delta);
+
+  EXPECT_EQ(tree.rangeSum(0, 0, 1), 2 * base);
+  EXPECT_EQ(tree.rangeSum(v1, 0, 1), 2 * base + 2 * delta);
+  EXPECT_EQ(tree.rangeSum(v1, 0, 0), base + delta);
+  EXPECT_EQ(tree.rangeSum(v1, 1, 1), base + delta);
+}
+
+TEST(FullCopyPersistentSegmentTreeTest, LargeNegativeValuesCorrect) {
+  const long long base = -500'000'000'000'000LL;
+  const long long delta = -100'000'000'000'000LL;
+  FullCopyPersistentSegmentTree tree({base, base, base, base});
+
+  EXPECT_EQ(tree.rangeSum(0, 0, 3), 4 * base);
+
+  std::size_t v1 = tree.rangeAdd(0, 3, delta);
+
+  EXPECT_EQ(tree.rangeSum(0, 0, 3), 4 * base);
+  EXPECT_EQ(tree.rangeSum(v1, 0, 3), 4 * base + 4 * delta);
+  EXPECT_EQ(tree.rangeSum(v1, 1, 1), base + delta);
 }

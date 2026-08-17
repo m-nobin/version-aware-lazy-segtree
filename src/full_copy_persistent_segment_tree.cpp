@@ -121,17 +121,6 @@ std::size_t FullCopyPersistentSegmentTree::build(const std::vector<ValueType>& v
 
 /*
 =========================================================
-Segment Arithmetic
-=========================================================
-*/
-
-FullCopyPersistentSegmentTree::ValueType
-FullCopyPersistentSegmentTree::segmentLength(std::size_t segmentLeft, std::size_t segmentRight) {
-  return static_cast<ValueType>(segmentRight) - static_cast<ValueType>(segmentLeft) + 1;
-}
-
-/*
-=========================================================
 Full Copy Range Update
 =========================================================
 */
@@ -141,6 +130,8 @@ std::size_t FullCopyPersistentSegmentTree::fullCopyUpdate(std::size_t nodeIndex,
                                                           std::size_t segmentRight,
                                                           std::size_t queryLeft,
                                                           std::size_t queryRight, ValueType value) {
+  // Copy the node by value: appending copies below may reallocate the
+  // arena and invalidate references into it.
   const Node current = nodes[nodeIndex];
 
   if (segmentLeft == segmentRight) {
@@ -156,8 +147,8 @@ std::size_t FullCopyPersistentSegmentTree::fullCopyUpdate(std::size_t nodeIndex,
 
   std::size_t middle = (segmentLeft + segmentRight) / 2;
 
-  // The core mechanism of the full-copy baseline: we NEVER reuse children.
-  // We unconditionally recurse down both sides to copy every single node.
+  // The defining property of this baseline: children are never reused.
+  // Both sides are copied unconditionally, so every version owns 2n - 1 nodes.
   std::size_t newLeft =
       fullCopyUpdate(current.leftChild, segmentLeft, middle, queryLeft, queryRight, value);
   std::size_t newRight =
