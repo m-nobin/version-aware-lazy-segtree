@@ -1,5 +1,5 @@
-#ifndef VALSEG_FULL_COPY_PERSISTENT_SEGMENT_TREE_HPP
-#define VALSEG_FULL_COPY_PERSISTENT_SEGMENT_TREE_HPP
+#ifndef VALSEG_POINT_ONLY_PERSISTENT_SEGMENT_TREE_HPP
+#define VALSEG_POINT_ONLY_PERSISTENT_SEGMENT_TREE_HPP
 
 #include <cstddef>
 #include <vector>
@@ -7,44 +7,53 @@
 namespace valseg {
 
 /**
- * @brief Full-copy persistent segment tree (benchmark baseline).
+ * @brief Point-only persistent segment tree (benchmark baseline).
  *
  * Supports the same operation model as PersistentLazySegmentTree:
  *  - Range Addition Updates on the latest version only
  *  - Range Sum Queries against any published version
  *
- * This baseline is the upper bound of the persistence design space: every
- * non-zero update rebuilds all 2n - 1 nodes of the tree and appends them to
- * the arena, so no node is ever shared between two versions. It exists to
- * measure what path copying and lazy tags save, not to be fast.
+ * This baseline keeps path copying and structural sharing but drops the
+ * lazy tag, so it isolates what the lazy tag buys. It uses the same
+ * index-based, append-only arena as PersistentLazySegmentTree; nodes outside
+ * an update range stay shared between versions. Inside the range, however,
+ * an update cannot stop at a fully covered node: with no tag to defer the
+ * delta it must descend to every leaf in the range, copying every node on
+ * the way.
  *
- * Because every update materializes the full tree, no lazy tags are needed;
- * a node stores only its two child indices and the exact segment sum
+ * A node stores only its two child indices and the exact segment sum
  * (three 8-byte fields, 24 bytes per node, versus 32 bytes in the lazy tree).
  *
- * Time Complexity:
+ * Time Complexity, with h = ceil(log2 n) the tree height:
  *  Build:            O(n)
- *  Range Add:        O(n), appending exactly 2n - 1 copied nodes
+ *  Range Add:        Θ(k + log n) for a range of k leaves, appending exactly
+ *                    the nodes whose segment intersects the range: the k
+ *                    leaves plus every ancestor of one of them. That is at
+ *                    least k + floor(log2 n) nodes, and at most 2k + 2h - 3
+ *                    nodes once h >= 2. A single point costs h or h + 1
+ *                    nodes (exactly h + 1 when n is a power of two); the
+ *                    full range costs Θ(n), copying all 2n - 1 nodes.
  *  Zero-delta Add:   O(1), reusing the latest root
  *  Historical Sum:   O(log n), allocation-free
  *
- * Retained space after U non-zero updates: (2n - 1)(U + 1) nodes, i.e. O(nU).
+ * Retained space after U non-zero updates covering k_1, ..., k_U leaves:
+ * 2n - 1 + sum of Θ(k_i + log n) nodes, i.e. O(n + sum(k_i) + U log n).
  */
-class FullCopyPersistentSegmentTree {
+class PointOnlyPersistentSegmentTree {
 public:
   using ValueType = long long;
 
   /**
    * @brief Construct a tree with no versions.
    */
-  FullCopyPersistentSegmentTree();
+  PointOnlyPersistentSegmentTree();
 
   /**
    * @brief Construct version 0 from an initial array.
    *
    * @param values Initial array; may be empty.
    */
-  explicit FullCopyPersistentSegmentTree(const std::vector<ValueType>& values);
+  explicit PointOnlyPersistentSegmentTree(const std::vector<ValueType>& values);
 
   /**
    * @brief Build version 0, replacing all previous versions and nodes.
@@ -59,10 +68,12 @@ public:
   /**
    * @brief Add value to every element in [left, right] of the latest version.
    *
-   * Publishes exactly one new version. A non-zero value copies the entire
-   * tree (2n - 1 nodes). A zero value publishes a new version that reuses
-   * the latest root without allocating nodes. A failed update publishes no
-   * version and appends no nodes.
+   * Publishes exactly one new version. A non-zero value copies every leaf in
+   * the range and every ancestor of such a leaf (Θ(k + log n) nodes for k
+   * leaves); nodes outside the range are shared with the previous version.
+   * A zero value publishes a new version that reuses the latest root without
+   * allocating nodes. A failed update publishes no version and appends no
+   * nodes.
    *
    * @param left  Left index (inclusive).
    * @param right Right index (inclusive).
@@ -105,9 +116,9 @@ public:
   /**
    * @brief Total number of nodes stored in the arena.
    *
-   * Equals (2n - 1)(U + 1) after U non-zero updates. Read-only evidence for
-   * the no-sharing tests and memory benchmarks; multiply by 24 bytes for the
-   * node payload.
+   * Grows by exactly the number of nodes whose segment intersects the update
+   * range on every non-zero update. Read-only evidence for the sharing tests
+   * and memory benchmarks; multiply by 24 bytes for the node payload.
    */
   std::size_t nodeCount() const;
 
@@ -155,9 +166,9 @@ private:
   static std::size_t build(const std::vector<ValueType>& values, std::vector<Node>& arena,
                            std::size_t segmentLeft, std::size_t segmentRight);
 
-  std::size_t fullCopyUpdate(std::size_t nodeIndex, std::size_t segmentLeft,
-                             std::size_t segmentRight, std::size_t queryLeft,
-                             std::size_t queryRight, ValueType value);
+  std::size_t pointOnlyUpdate(std::size_t nodeIndex, std::size_t segmentLeft,
+                              std::size_t segmentRight, std::size_t queryLeft,
+                              std::size_t queryRight, ValueType value);
 
   ValueType query(std::size_t nodeIndex, std::size_t segmentLeft, std::size_t segmentRight,
                   std::size_t queryLeft, std::size_t queryRight) const;
