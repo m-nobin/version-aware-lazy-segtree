@@ -48,6 +48,8 @@ add_library(valseg
   src/brute_force_array.cpp
   src/lazy_segment_tree.cpp
   src/persistent_lazy_segment_tree.cpp
+  src/full_copy_persistent_segment_tree.cpp
+  src/point_only_persistent_segment_tree.cpp
   src/checkpointing_segment_tree.cpp
 )
 
