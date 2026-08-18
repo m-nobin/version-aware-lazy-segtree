@@ -140,4 +140,6 @@ jobs:
           sudo apt-get install --yes doxygen
 
       - name: Check public-header documentation coverage
-        run: doxygen Doxyfile
+        run: |
+          mkdir -p build/doxygen
+          doxygen Doxyfile

@@ -16,6 +16,8 @@ PROJECT_NUMBER         = 0.1.0
 INPUT                  = include/valseg
 FILE_PATTERNS          = *.hpp
 RECURSIVE              = YES
+# Doxygen creates only the last path component, so the parent must exist first;
+# CI runs `mkdir -p build/doxygen` before invoking this configuration.
 OUTPUT_DIRECTORY       = build/doxygen
 
 # Only what the public headers actually document — never invent coverage by
