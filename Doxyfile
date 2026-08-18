@@ -40,6 +40,12 @@ WARN_AS_ERROR          = FAIL_ON_WARNINGS
 GENERATE_HTML          = YES
 GENERATE_LATEX         = NO
 
+# No Graphviz. This configuration is a documentation-coverage gate, not a
+# documentation site, so it must not depend on `dot` being installed: some
+# Doxygen builds default HAVE_DOT to YES and then fail the run when the binary
+# is missing, which has nothing to do with coverage.
+HAVE_DOT               = NO
+
 # Macro guards and the include guard should not appear as documented entities.
 ENABLE_PREPROCESSING   = YES
 MACRO_EXPANSION        = NO
