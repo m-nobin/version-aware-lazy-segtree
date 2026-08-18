@@ -21,20 +21,20 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 >   both were delivered in
 >   [#24](https://github.com/m-nobin/version-aware-lazy-segtree/pull/24).
 > - **Phase 7 — in progress.** Reproducible benchmarks
->   ([#10](https://github.com/m-nobin/version-aware-lazy-segtree/issues/10)). Four comparison
+>   ([#10](https://github.com/m-nobin/version-aware-lazy-segtree/issues/10)). All five comparison
 >   baselines are merged: `FullCopyPersistentSegmentTree`
 >   ([#25](https://github.com/m-nobin/version-aware-lazy-segtree/pull/25)),
 >   `PointOnlyPersistentSegmentTree`
 >   ([#26](https://github.com/m-nobin/version-aware-lazy-segtree/pull/26)),
 >   `CheckpointingSegmentTree`
->   ([#29](https://github.com/m-nobin/version-aware-lazy-segtree/pull/29)) and
+>   ([#29](https://github.com/m-nobin/version-aware-lazy-segtree/pull/29)),
 >   `BufferedPathCopyingSegmentTree`
->   ([#28](https://github.com/m-nobin/version-aware-lazy-segtree/pull/28)); every baseline is
+>   ([#28](https://github.com/m-nobin/version-aware-lazy-segtree/pull/28)) and
+>   `FatNodePersistentSegmentTree`
+>   ([#27](https://github.com/m-nobin/version-aware-lazy-segtree/pull/27)); every baseline is
 >   replayed against the oracle in
->   [tests/baseline_differential_test.cpp](tests/baseline_differential_test.cpp); the last
->   baseline is under review in
->   [#27](https://github.com/m-nobin/version-aware-lazy-segtree/pull/27).
->   201 tests pass across the supported verification matrix.
+>   [tests/baseline_differential_test.cpp](tests/baseline_differential_test.cpp). 234 tests pass
+>   across the supported verification matrix; the benchmark runner is next.
 
 ## Implemented components
 
@@ -47,6 +47,7 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 | `PointOnlyPersistentSegmentTree` | Benchmark baseline: path copying without lazy tags             | `Θ(k + log n)` for `k` leaves |        `O(log n)` | Path copying to every updated leaf                   |
 | `CheckpointingSegmentTree`       | Benchmark baseline: update log + checkpoint every `K` versions |  `O(log n + n / K)` amortized |    `O(log n + K)` | Full-tree checkpoints + log replay, no sharing       |
 | `BufferedPathCopyingSegmentTree` | Benchmark baseline: path copying with 2-slot node buffer       |                    `O(log n)` |        `O(log n)` | Version-tagged in-node buffer, path copy on overflow |
+| `FatNodePersistentSegmentTree`   | Benchmark baseline: fat nodes with node copying                |                    `O(log n)` |        `O(log n)` | In-place versioned states, copy on overflow          |
 
 All components support zero-based, inclusive range-add and range-sum operations using `long long` values. Persistent updates apply to the latest version only, while queries read any published version. Persistent update time is amortized over arena growth; the bounds are proved in [docs/proof.md](docs/proof.md).
 

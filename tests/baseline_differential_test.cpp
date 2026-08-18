@@ -1,6 +1,7 @@
 #include <valseg/brute_force_array.hpp>
 #include <valseg/buffered_path_copying_segment_tree.hpp>
 #include <valseg/checkpointing_segment_tree.hpp>
+#include <valseg/fat_node_persistent_segment_tree.hpp>
 #include <valseg/full_copy_persistent_segment_tree.hpp>
 #include <valseg/persistent_lazy_segment_tree.hpp>
 #include <valseg/point_only_persistent_segment_tree.hpp>
@@ -157,6 +158,8 @@ struct BaselineNames {
       return "CheckpointingIntervalThree";
     } else if constexpr (std::is_same_v<T, valseg::BufferedPathCopyingSegmentTree>) {
       return "BufferedPathCopying";
+    } else if constexpr (std::is_same_v<T, valseg::FatNodePersistentSegmentTree>) {
+      return "FatNode";
     } else if constexpr (std::is_same_v<T, valseg::PersistentLazySegmentTree>) {
       return "PersistentLazy";
     } else {
@@ -172,7 +175,8 @@ template <typename Baseline> class BaselineDifferentialTest : public ::testing::
 using BaselineTypes =
     ::testing::Types<valseg::FullCopyPersistentSegmentTree, valseg::PointOnlyPersistentSegmentTree,
                      valseg::CheckpointingSegmentTree, CheckpointingIntervalThree,
-                     valseg::BufferedPathCopyingSegmentTree, valseg::PersistentLazySegmentTree>;
+                     valseg::BufferedPathCopyingSegmentTree, valseg::FatNodePersistentSegmentTree,
+                     valseg::PersistentLazySegmentTree>;
 TYPED_TEST_SUITE(BaselineDifferentialTest, BaselineTypes, BaselineNames);
 
 TYPED_TEST(BaselineDifferentialTest, MatchesBruteForceOracle) {
