@@ -30,6 +30,9 @@ namespace valseg {
  */
 class PersistentLazySegmentTree {
 public:
+  /**
+   * @brief Element and sum type for every operation.
+   */
   using ValueType = long long;
 
   /**
@@ -39,6 +42,8 @@ public:
 
   /**
    * @brief Construct version 0 from an initial array.
+   *
+   * @param values Initial array; an empty array publishes an empty version 0.
    */
   explicit PersistentLazySegmentTree(const std::vector<ValueType>& values);
 
@@ -47,6 +52,8 @@ public:
    *
    * Replacement state is built first and swapped in only after the build
    * succeeds, so a failed initialization leaves the tree unchanged.
+   *
+   * @param values Initial array; an empty array publishes an empty version 0.
    */
   void initialize(const std::vector<ValueType>& values);
 
@@ -56,6 +63,10 @@ public:
    * Publishes exactly one new version. A zero value publishes a new version
    * that reuses the latest root without allocating nodes. A failed update
    * publishes no version and appends no nodes.
+   *
+   * @param left  Left index of the updated range (inclusive).
+   * @param right Right index of the updated range (inclusive).
+   * @param value Value added to every element of the range.
    *
    * @return Version number of the newly published version.
    *
@@ -70,6 +81,12 @@ public:
    *
    * Queries allocate nothing and mutate nothing.
    *
+   * @param version Published version to read.
+   * @param left    Left index of the queried range (inclusive).
+   * @param right   Right index of the queried range (inclusive).
+   *
+   * @return Sum over [left, right] in that version.
+   *
    * @throws std::runtime_error     No initialized version or empty structure.
    * @throws std::out_of_range      Invalid version number.
    * @throws std::invalid_argument  left is greater than right.
@@ -79,11 +96,15 @@ public:
 
   /**
    * @brief Number of published versions.
+   *
+   * @return Number of published versions, or zero before initialization.
    */
   std::size_t versionCount() const;
 
   /**
    * @brief Number of elements in every version.
+   *
+   * @return Number of elements, or zero before initialization.
    */
   std::size_t size() const;
 
@@ -91,6 +112,10 @@ public:
    * @brief Total number of nodes stored in the arena.
    *
    * Read-only evidence for structural-sharing tests and memory benchmarks.
+   * Multiply by sizeof(Node) (32 bytes on 64-bit targets, static_asserted
+   * below) for the retained payload in bytes.
+   *
+   * @return Number of nodes retained in the arena.
    */
   std::size_t nodeCount() const;
 
@@ -107,6 +132,15 @@ private:
     ValueType sum;
     ValueType lazy;
   };
+
+  /**
+   * Node layout is part of the benchmark comparison: two arena indices and two
+   * values, 32 bytes on a 64-bit target, against 24 bytes for the tagless
+   * baselines, 88 for the buffered one and 128 for the fat node. Guarded so a
+   * 32-bit target does not fail the build over a documented byte count.
+   */
+  static_assert(sizeof(std::size_t) != 8 || sizeof(Node) == 32,
+                "PersistentLazySegmentTree::Node is documented as 32 bytes on 64-bit targets.");
 
   /**
    * Sentinel arena index used for leaf children and the empty-array root.

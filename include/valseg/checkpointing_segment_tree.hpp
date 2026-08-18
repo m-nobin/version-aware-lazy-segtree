@@ -49,6 +49,9 @@ namespace valseg {
  */
 class CheckpointingSegmentTree {
 public:
+  /**
+   * @brief Element and sum type for every operation.
+   */
   using ValueType = long long;
 
   /**
@@ -128,11 +131,15 @@ public:
 
   /**
    * @brief Number of published versions.
+   *
+   * @return Number of published versions, or zero before initialization.
    */
   std::size_t versionCount() const;
 
   /**
    * @brief Number of elements in every version.
+   *
+   * @return Number of elements, or zero before initialization.
    */
   std::size_t size() const;
 
@@ -145,6 +152,8 @@ public:
    * included, on a non-empty array and 0 on an empty one. Read-only
    * evidence for the checkpoint-schedule tests and memory benchmarks; tree
    * nodes are 16 bytes and log entries 24 bytes.
+   *
+   * @return Number of nodes retained by the structure.
    */
   std::size_t nodeCount() const;
 
@@ -153,6 +162,8 @@ public:
    *
    * Equals floor(U / K) + 1 after U updates; the version-0 checkpoint of an
    * empty array holds no nodes.
+   *
+   * @return Number of stored full-tree checkpoints.
    */
   std::size_t checkpointCount() const;
 

@@ -63,6 +63,9 @@ namespace valseg {
  */
 class BufferedPathCopyingSegmentTree {
 public:
+  /**
+   * @brief Element and sum type for every operation.
+   */
   using ValueType = long long;
 
   /**
@@ -129,11 +132,15 @@ public:
 
   /**
    * @brief Number of published versions.
+   *
+   * @return Number of published versions, or zero before initialization.
    */
   std::size_t versionCount() const;
 
   /**
    * @brief Number of elements in every version.
+   *
+   * @return Number of elements, or zero before initialization.
    */
   std::size_t size() const;
 
@@ -144,6 +151,8 @@ public:
    * update: exactly the visited nodes with a full buffer plus their visited
    * ancestors. Read-only evidence for the buffering tests and memory
    * benchmarks; multiply by 88 bytes for the node payload.
+   *
+   * @return Number of nodes retained by the structure.
    */
   std::size_t nodeCount() const;
 
