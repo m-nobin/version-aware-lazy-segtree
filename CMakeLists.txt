@@ -50,6 +50,7 @@ add_library(valseg
   src/persistent_lazy_segment_tree.cpp
   src/full_copy_persistent_segment_tree.cpp
   src/point_only_persistent_segment_tree.cpp
+  src/checkpointing_segment_tree.cpp
 )
 
 # Canonical alias used by consumers and by CTest targets in this project.
