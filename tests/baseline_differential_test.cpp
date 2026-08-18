@@ -1,5 +1,6 @@
 #include <valseg/brute_force_array.hpp>
 #include <valseg/buffered_path_copying_segment_tree.hpp>
+#include <valseg/checkpointing_segment_tree.hpp>
 #include <valseg/full_copy_persistent_segment_tree.hpp>
 #include <valseg/persistent_lazy_segment_tree.hpp>
 #include <valseg/point_only_persistent_segment_tree.hpp>
@@ -136,6 +137,13 @@ template <typename Baseline> void runCampaign(std::size_t n, std::size_t seedInd
   }
 }
 
+// The checkpointing baseline with a small interval, so each campaign replays
+// across hundreds of checkpoint boundaries instead of the default 500's two.
+struct CheckpointingIntervalThree : valseg::CheckpointingSegmentTree {
+  explicit CheckpointingIntervalThree(const std::vector<long long>& values)
+      : CheckpointingSegmentTree(values, 3) {}
+};
+
 // Names the typed-test instantiations after the baseline under test.
 struct BaselineNames {
   template <typename T> static std::string GetName(int) {
@@ -143,6 +151,10 @@ struct BaselineNames {
       return "FullCopy";
     } else if constexpr (std::is_same_v<T, valseg::PointOnlyPersistentSegmentTree>) {
       return "PointOnly";
+    } else if constexpr (std::is_same_v<T, valseg::CheckpointingSegmentTree>) {
+      return "Checkpointing";
+    } else if constexpr (std::is_same_v<T, CheckpointingIntervalThree>) {
+      return "CheckpointingIntervalThree";
     } else if constexpr (std::is_same_v<T, valseg::BufferedPathCopyingSegmentTree>) {
       return "BufferedPathCopying";
     } else if constexpr (std::is_same_v<T, valseg::PersistentLazySegmentTree>) {
@@ -159,6 +171,7 @@ template <typename Baseline> class BaselineDifferentialTest : public ::testing::
 
 using BaselineTypes =
     ::testing::Types<valseg::FullCopyPersistentSegmentTree, valseg::PointOnlyPersistentSegmentTree,
+                     valseg::CheckpointingSegmentTree, CheckpointingIntervalThree,
                      valseg::BufferedPathCopyingSegmentTree, valseg::PersistentLazySegmentTree>;
 TYPED_TEST_SUITE(BaselineDifferentialTest, BaselineTypes, BaselineNames);
 
