@@ -125,3 +125,21 @@ jobs:
             build/ci-linux-clang-sanitizers/test_results.xml
           if-no-files-found: error
           retention-days: 14
+
+  docs:
+    name: Documentation / Doxygen
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes doxygen
+
+      - name: Check public-header documentation coverage
+        run: |
+          mkdir -p build/doxygen
+          doxygen Doxyfile

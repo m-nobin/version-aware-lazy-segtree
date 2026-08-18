@@ -23,29 +23,67 @@ namespace valseg {
  */
 class LazySegmentTree {
 public:
+  /**
+   * @brief Element and sum type for every operation.
+   */
   using ValueType = long long;
 
+  /**
+   * @brief Construct an empty tree.
+   */
   LazySegmentTree();
 
+  /**
+   * @brief Construct a tree over an initial array.
+   *
+   * @param values Initial array; an empty array leaves the tree empty.
+   */
   explicit LazySegmentTree(const std::vector<ValueType>& values);
 
   /**
-   * @brief Build the segment tree.
+   * @brief Build the segment tree, discarding all previous state.
+   *
+   * @param values Initial array; an empty array leaves the tree empty.
    */
   void initialize(const std::vector<ValueType>& values);
 
   /**
    * @brief Add value to every element in [left, right].
+   *
+   * Mutates the current tree in place; no previous state is retained.
+   *
+   * @param left  Left index of the updated range (inclusive).
+   * @param right Right index of the updated range (inclusive).
+   * @param value Value added to every element of the range.
+   *
+   * @throws std::runtime_error     The tree is empty.
+   * @throws std::invalid_argument  left is greater than right.
+   * @throws std::out_of_range      right is not smaller than size().
    */
   void rangeAdd(std::size_t left, std::size_t right, ValueType value);
 
   /**
    * @brief Return the sum over [left, right].
+   *
+   * Not const: the query pushes pending lazy values into the children it
+   * visits. This is the one interface difference from every persistent
+   * structure in this repository, whose rangeSum takes a version and is const.
+   *
+   * @param left  Left index of the queried range (inclusive).
+   * @param right Right index of the queried range (inclusive).
+   *
+   * @return Sum over [left, right] in the current state.
+   *
+   * @throws std::runtime_error     The tree is empty.
+   * @throws std::invalid_argument  left is greater than right.
+   * @throws std::out_of_range      right is not smaller than size().
    */
   ValueType rangeSum(std::size_t left, std::size_t right);
 
   /**
    * @brief Number of elements.
+   *
+   * @return Number of elements, or zero before initialization.
    */
   std::size_t size() const;
 

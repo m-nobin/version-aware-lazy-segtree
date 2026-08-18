@@ -18,6 +18,9 @@ namespace valseg {
  */
 class BruteForceArray {
 public:
+  /**
+   * @brief Element and sum type for every operation.
+   */
   using ValueType = long long;
 
   /**
@@ -29,6 +32,8 @@ public:
    * @brief Construct Version 0 from an initial array.
    *
    * @param initial Initial array.
+   *
+   * @throws std::bad_alloc Allocation of the initial version failed.
    */
   explicit BruteForceArray(const std::vector<ValueType>& initial);
 
@@ -38,6 +43,9 @@ public:
    * Clears all previous versions.
    *
    * @param initial Initial array.
+   *
+   * @throws std::bad_alloc Allocation of the replacement version failed; the
+   *                        previous history is left unchanged.
    */
   void initialize(const std::vector<ValueType>& initial);
 
@@ -53,6 +61,10 @@ public:
    * @param value Value to add.
    *
    * @return Newly created version number.
+   *
+   * @throws std::out_of_range      baseVersion is not a stored version, or
+   *                                right is not smaller than size().
+   * @throws std::invalid_argument  left is greater than right.
    */
   std::size_t rangeAdd(std::size_t baseVersion, std::size_t left, std::size_t right,
                        ValueType value);
@@ -65,21 +77,35 @@ public:
    * @param right Right index (inclusive).
    *
    * @return Sum over [left, right].
+   *
+   * @throws std::out_of_range      version is not a stored version, or right
+   *                                is not smaller than size().
+   * @throws std::invalid_argument  left is greater than right.
    */
   ValueType rangeSum(std::size_t version, std::size_t left, std::size_t right) const;
 
   /**
    * @brief Get a read-only reference to a version.
+   *
+   * @param version Version to read.
+   *
+   * @return Reference to the stored array of that version.
+   *
+   * @throws std::out_of_range version is not a stored version.
    */
   const std::vector<ValueType>& getVersion(std::size_t version) const;
 
   /**
    * @brief Number of versions currently stored.
+   *
+   * @return Number of stored versions.
    */
   std::size_t versionCount() const;
 
   /**
    * @brief Size of each version.
+   *
+   * @return Number of elements in every version, or zero before initialization.
    */
   std::size_t size() const;
 

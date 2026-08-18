@@ -1,0 +1,57 @@
+# Doxyfile - version-aware-lazy-segtree
+#
+# Purpose: fail the build when a public header is under-documented.
+#
+# Every class, method, parameter and return value in include/valseg must carry
+# a Doxygen comment. This file turns a missing one into an error instead of a
+# warning nobody reads. It is a coverage check, not a documentation site: the
+# generated HTML is a build artifact and is thrown away.
+#
+# Run it:
+#
+#   mkdir -p build/doxygen && doxygen Doxyfile
+#
+# Exit code 0 means every public entity is documented. Any other exit code
+# prints the file and line of each undocumented entity. CI runs the same two
+# commands in the "Documentation / Doxygen" job.
+
+PROJECT_NAME           = "version-aware-lazy-segtree"
+PROJECT_BRIEF          = "Partially persistent lazy segment tree and benchmark baselines"
+PROJECT_NUMBER         = 0.1.0
+
+INPUT                  = include/valseg
+FILE_PATTERNS          = *.hpp
+RECURSIVE              = YES
+# Doxygen creates only the last path component, so the parent must exist first;
+# CI runs `mkdir -p build/doxygen` before invoking this configuration.
+OUTPUT_DIRECTORY       = build/doxygen
+
+# Only what the public headers actually document — never invent coverage by
+# extracting undocumented entities.
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = NO
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+
+# The gate.
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = YES
+WARN_AS_ERROR          = FAIL_ON_WARNINGS
+
+# Output: HTML only, no LaTeX toolchain required in CI.
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+
+# No Graphviz. This configuration is a documentation-coverage gate, not a
+# documentation site, so it must not depend on `dot` being installed: some
+# Doxygen builds default HAVE_DOT to YES and then fail the run when the binary
+# is missing, which has nothing to do with coverage.
+HAVE_DOT               = NO
+
+# Macro guards and the include guard should not appear as documented entities.
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = NO

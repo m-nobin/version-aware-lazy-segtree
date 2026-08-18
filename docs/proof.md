@@ -304,3 +304,61 @@ Proposition 2 on every non-zero update it generates.
 - Allocation failures are covered by Lemma 5 through the checkpoint rollback; no other failure
   modes exist in the operations under proof.
 - The structure is not synchronized; concurrent use requires external serialization.
+
+## 8. Appendix: baseline complexity
+
+This appendix collects, in one place, the bounds already proved and `static_assert`ed in each
+Phase 7 comparison baseline's own header. Nothing is re-derived here — each row is an index into
+the header that owns the argument, and each baseline's deterministic suite asserts its retained
+node count exactly. The purpose is to make the benchmark's expected shape legible before any
+number is measured: the runner should confirm these bounds, not discover them.
+
+`n` = array size, `h = ⌈log₂ n⌉`, `U` = successful updates, `U₊` = those with a non-zero delta,
+`V` = published versions. All structures share one operation model: range-add on the latest
+version, range-sum on any published version, identical validation order and exception types.
+
+| Structure | Update, `δ ≠ 0` | Historical query | Retained nodes | Node bytes | Header |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `PersistentLazySegmentTree` | `O(log n)`, `≤ 4(h + 1)` copies | `O(log n)` | `O(n + U₊ log n)` | 32 | `persistent_lazy_segment_tree.hpp` |
+| `FullCopyPersistentSegmentTree` | `O(n)`, exactly `2n − 1` copies | `O(log n)` | exactly `(2n − 1)(U₊ + 1)` | 24 | `full_copy_persistent_segment_tree.hpp` |
+| `PointOnlyPersistentSegmentTree` | `Θ(k + log n)` over `k` leaves | `O(log n)` | `O(n + Σkᵢ + U₊ log n)` | 24 | `point_only_persistent_segment_tree.hpp` |
+| `CheckpointingSegmentTree` | `O(log n + n / K)` amortized | `O(log n + K)` | `(⌊U / K⌋ + 2)(2n − 1) + U` | 16 + 24/entry | `checkpointing_segment_tree.hpp` |
+| `BufferedPathCopyingSegmentTree` | `O(log n)`, `0 … \|P\|` copies | `O(log n)` | `2n − 1 + Σcᵢ`, `O(n + U₊ log n)` | 88 | `buffered_path_copying_segment_tree.hpp` |
+| `FatNodePersistentSegmentTree` | `O(log n)`, `0 … 4(h + 1)` copies | `O(log n · log K) = O(log n)` | exactly `2n − 1 + Σ_v ⌊m_v / K⌋` | 128 | `fat_node_persistent_segment_tree.hpp` |
+
+Every structure shares the `O(1)` zero-delta path: a `δ = 0` update publishes a version that
+reuses the latest root (or, for the checkpointing baseline, appends one log entry) and allocates
+no tree node.
+
+**`FullCopyPersistentSegmentTree`** materializes every version independently, so nothing is shared
+and the retained-node identity is exact and closed-form. It bounds the design space from above:
+whatever path copying and lazy tags save is measured against it.
+
+**`PointOnlyPersistentSegmentTree`** keeps path copying and structural sharing but drops the lazy
+tag, so an update must descend to every leaf in the range. It isolates the lazy tag's contribution
+alone: identical machinery, one missing mechanism, `Θ(k + log n)` instead of `O(log n)`.
+
+**`CheckpointingSegmentTree`** is the log-plus-snapshot strategy of the systems literature rather
+than a persistence technique: one ephemeral tree, an append-only update log, and a full copy every
+`K` versions. It is the only baseline whose *query* cost depends on which version is read, and the
+only one with a tunable parameter, so it is the one that produces a curve rather than a point.
+`K = 1` degenerates to the full-copy cost model; `K → ∞` replays the entire log.
+
+**`BufferedPathCopyingSegmentTree`** gives each node a two-slot buffer of version-tagged value
+modifications, so a visited node with a free slot absorbs its delta in place and appends nothing.
+Only value deltas are buffered, never child indices, so a copied node forces its visited ancestors
+to copy too. It is a design-space point between path copying and node copying, trading a
+2.75× node against roughly a third of the copies on repeated point updates.
+
+**`FatNodePersistentSegmentTree`** is the classical alternative to path copying (Driscoll, Sarnak,
+Sleator and Tarjan, 1989): a fixed tree shape where each node carries a bounded, version-stamped
+list of its full states, and node copying only on overflow. Because a reader binary-searches at
+most `K` stamps rather than walking a successor chain, access cost is independent of `V` — the
+property that separates a faithful fat node from the naive version-list implementation, and the
+one the benchmark should confirm by holding update and query time flat as `V` grows.
+
+The comparison the benchmark exists to make is therefore not "which is fastest" but which term
+dominates where: copies per update (full-copy, point-only), bytes per node (buffered, fat node),
+replay length per query (checkpointing), or the `U₊ log n` arena growth the proposed structure
+pays. Section 6 gives the proposed structure's bounds; this appendix gives the field it is
+measured against.
