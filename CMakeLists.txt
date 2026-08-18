@@ -107,3 +107,13 @@ include(CTest)
 if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()
+
+# ---------------------------------------------------------------------------
+# Benchmarks
+# ---------------------------------------------------------------------------
+
+option(VALSEG_BUILD_BENCH "Build the benchmark runner" ON)
+
+if(VALSEG_BUILD_BENCH)
+  add_subdirectory(bench)
+endif()
