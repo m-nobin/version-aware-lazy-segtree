@@ -33,8 +33,12 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 >   `FatNodePersistentSegmentTree`
 >   ([#27](https://github.com/m-nobin/version-aware-lazy-segtree/pull/27)); every baseline is
 >   replayed against the oracle in
->   [tests/baseline_differential_test.cpp](tests/baseline_differential_test.cpp). 234 tests pass
->   across the supported verification matrix; the benchmark runner is next.
+>   [tests/baseline_differential_test.cpp](tests/baseline_differential_test.cpp). The benchmark
+>   harness ([#32](https://github.com/m-nobin/version-aware-lazy-segtree/pull/32)) is merged:
+>   eleven workloads (`W1`-`W11`) against all six persistent structures and the non-persistent
+>   control, with dual-binary allocation counting and a cross-structure checksum. 236 tests pass
+>   across the supported verification matrix; the published campaign and result summaries are
+>   next.
 
 ## Implemented components
 
