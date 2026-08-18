@@ -50,6 +50,8 @@ add_library(valseg
   src/persistent_lazy_segment_tree.cpp
   src/full_copy_persistent_segment_tree.cpp
   src/point_only_persistent_segment_tree.cpp
+  src/checkpointing_segment_tree.cpp
+  src/buffered_path_copying_segment_tree.cpp
   src/fat_node_persistent_segment_tree.cpp
 )
 
