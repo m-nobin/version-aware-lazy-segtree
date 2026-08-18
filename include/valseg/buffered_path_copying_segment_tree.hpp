@@ -168,7 +168,7 @@ private:
    *
    * Arena indices stay valid across vector reallocation. Unlike the sibling
    * baselines a node reachable from a published root is mutated in place,
-   * but only by appending an entry to buffer tagged with a newer version;
+   * but only by appending an entry to its buffer, tagged with a newer version;
    * base fields, child indices and older entries are never changed, and a
    * copy flushes every entry into fresh base fields.
    */
@@ -214,8 +214,9 @@ private:
 
   /**
    * Nodes that absorbed an entry in place during the update in progress;
-   * a failed update pops those entries again. Kept as a member so a
-   * successful update allocates nothing beyond copied nodes.
+   * a failed update pops those entries again. Kept as a member so that,
+   * once it has grown to the largest visited set, a successful update
+   * allocates nothing beyond copied nodes.
    */
   std::vector<std::size_t> bufferedThisUpdate;
 
@@ -228,8 +229,17 @@ private:
   static std::size_t build(const std::vector<ValueType>& values, std::vector<Node>& arena,
                            std::size_t segmentLeft, std::size_t segmentRight);
 
+  /**
+   * Sum and lazy of node as read at version: the base fields plus every
+   * buffered entry tagged <= version.
+   */
   static Snapshot snapshotAt(const Node& node, std::size_t version);
 
+  /**
+   * Apply one modification to the node at nodeIndex: append it to a free
+   * buffer slot in place, or copy the node with its buffer flushed. Returns
+   * the index that now holds the modification (the node itself or its copy).
+   */
   std::size_t modify(std::size_t nodeIndex, std::size_t version, ValueType deltaSum,
                      ValueType deltaLazy);
 

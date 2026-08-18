@@ -2,9 +2,11 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 using valseg::BufferedPathCopyingSegmentTree;
@@ -17,6 +19,38 @@ using valseg::BufferedPathCopyingSegmentTree;
 
 namespace {
 
+// Independent oracle: the array of every published version, computed by
+// plain element-wise addition.
+class VersionedArrayOracle {
+public:
+  explicit VersionedArrayOracle(std::vector<long long> initial) {
+    versions.push_back(std::move(initial));
+  }
+
+  void rangeAdd(std::size_t left, std::size_t right, long long value) {
+    std::vector<long long> next = versions.back();
+    for (std::size_t i = left; i <= right; ++i) {
+      next[i] += value;
+    }
+    versions.push_back(std::move(next));
+  }
+
+  long long rangeSum(std::size_t version, std::size_t left, std::size_t right) const {
+    long long sum = 0;
+    for (std::size_t i = left; i <= right; ++i) {
+      sum += versions[version][i];
+    }
+    return sum;
+  }
+
+  std::size_t versionCount() const {
+    return versions.size();
+  }
+
+private:
+  std::vector<std::vector<long long>> versions;
+};
+
 // Independent model of the copy rule over the segment tree on [0, n − 1]:
 // a visited node is copied when its buffer is full or one of its children was
 // copied; a copy starts with an empty buffer; every other visited node takes
@@ -25,23 +59,16 @@ class CopyModel {
 public:
   explicit CopyModel(std::size_t n) : arraySize(n), fill(4 * n + 4, 0) {}
 
-  // Returns the number of nodes the update on [left, right] must copy;
-  // visited() then reports how many nodes that update touched at all.
+  // Returns the number of nodes the update on [left, right] must copy.
   std::size_t update(std::size_t left, std::size_t right) {
     copies = 0;
-    visitedNodes = 0;
     visit(1, 0, arraySize - 1, left, right);
     return copies;
-  }
-
-  std::size_t visited() const {
-    return visitedNodes;
   }
 
 private:
   bool visit(std::size_t id, std::size_t segmentLeft, std::size_t segmentRight,
              std::size_t queryLeft, std::size_t queryRight) {
-    ++visitedNodes;
     bool childCopied = false;
     if (!(queryLeft <= segmentLeft && segmentRight <= queryRight)) {
       const std::size_t middle = (segmentLeft + segmentRight) / 2;
@@ -65,7 +92,6 @@ private:
   std::size_t arraySize;
   std::vector<std::size_t> fill;
   std::size_t copies = 0;
-  std::size_t visitedNodes = 0;
 };
 
 // Depth of the leaf holding index in the tree on [0, n − 1]: the number of
@@ -277,7 +303,11 @@ TEST(BufferedPathCopyingSegmentTreeTest, ChildForcedCopyKeepsTheParentsLazyTag) 
 TEST(BufferedPathCopyingSegmentTreeTest, RepeatedPointUpdatesCopyThePathEveryThirdTime) {
   constexpr std::size_t sizes[] = {1, 2, 3, 5, 7, 16, 17};
   for (std::size_t n : sizes) {
-    for (std::size_t index : {static_cast<std::size_t>(0), n / 2, n - 1}) {
+    // First, middle and last leaf, so both leaf depths of an uneven tree are
+    // exercised; duplicates for n <= 2 are skipped.
+    std::vector<std::size_t> indices{0, n / 2, n - 1};
+    indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+    for (std::size_t index : indices) {
       BufferedPathCopyingSegmentTree tree(std::vector<long long>(n, 0));
       const std::size_t pathNodes = leafDepth(n, index) + 1;
       const std::string where = "n=" + std::to_string(n) + " index=" + std::to_string(index);
@@ -301,16 +331,18 @@ TEST(BufferedPathCopyingSegmentTreeTest, RepeatedPointUpdatesCopyThePathEveryThi
 }
 
 // The quantitative evidence for arbitrary ranges, over perfect and uneven
-// trees: for a fixed sequence of range updates the arena must grow by exactly
-// the number of copies predicted by CopyModel (a visited node is copied when
-// its buffer is full or a child was copied), never by more than the visited
-// nodes; and every intermediate version must still read its own totals.
+// trees: for a fixed sequence of mixed-sign range updates the arena must grow
+// by exactly the number of copies predicted by CopyModel (a visited node is
+// copied when its buffer is full or a child was copied), and afterwards every
+// (version, left, right) must agree with an independent versioned array —
+// which pins the version-tag and forced-copy semantics on every sub-range.
 TEST(BufferedPathCopyingSegmentTreeTest, NodeCountMatchesCopyModelOverRanges) {
   constexpr std::size_t sizes[] = {1, 2, 3, 5, 7, 16, 17};
   for (std::size_t n : sizes) {
-    BufferedPathCopyingSegmentTree tree(std::vector<long long>(n, 1));
+    const std::vector<long long> initial(n, 1);
+    BufferedPathCopyingSegmentTree tree(initial);
+    VersionedArrayOracle oracle(initial);
     CopyModel model(n);
-    std::vector<long long> totals{static_cast<long long>(n)};
 
     EXPECT_EQ(tree.nodeCount(), 2 * n - 1) << "n=" << n;
 
@@ -319,23 +351,30 @@ TEST(BufferedPathCopyingSegmentTreeTest, NodeCountMatchesCopyModelOverRanges) {
     for (std::size_t round = 0; round < 3; ++round) {
       for (std::size_t left = 0; left < n; ++left) {
         for (std::size_t right = left; right < n; ++right) {
+          // Non-zero, mixed-sign delta so no version is a no-op.
+          long long delta = static_cast<long long>((left * 7 + right * 3 + round) % 9) - 4;
+          if (delta == 0) {
+            delta = 5;
+          }
           const std::size_t before = tree.nodeCount();
-          tree.rangeAdd(left, right, 1);
+          tree.rangeAdd(left, right, delta);
+          oracle.rangeAdd(left, right, delta);
           const std::size_t appended = tree.nodeCount() - before;
           const std::size_t expected = model.update(left, right);
-          const std::string where = "n=" + std::to_string(n) + " round=" + std::to_string(round) +
-                                    " range [" + std::to_string(left) + ", " +
-                                    std::to_string(right) + "]";
-          EXPECT_EQ(appended, expected) << where;
-          EXPECT_LE(appended, model.visited()) << where;
-          totals.push_back(totals.back() + static_cast<long long>(right - left + 1));
+          EXPECT_EQ(appended, expected)
+              << "n=" << n << " round=" << round << " range [" << left << ", " << right << "]";
         }
       }
     }
 
-    for (std::size_t version = 0; version < totals.size(); ++version) {
-      EXPECT_EQ(tree.rangeSum(version, 0, n - 1), totals[version])
-          << "n=" << n << " version=" << version;
+    ASSERT_EQ(tree.versionCount(), oracle.versionCount()) << "n=" << n;
+    for (std::size_t version = 0; version < oracle.versionCount(); ++version) {
+      for (std::size_t left = 0; left < n; ++left) {
+        for (std::size_t right = left; right < n; ++right) {
+          EXPECT_EQ(tree.rangeSum(version, left, right), oracle.rangeSum(version, left, right))
+              << "n=" << n << " version=" << version << " range [" << left << ", " << right << "]";
+        }
+      }
     }
   }
 }
