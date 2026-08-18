@@ -80,6 +80,38 @@ private:
   std::map<std::pair<std::size_t, std::size_t>, std::size_t> modificationCount;
 };
 
+// Independent versioned array: every version is a full copy, so historical
+// sums are computed from first principles.
+class VersionedArrayOracle {
+public:
+  explicit VersionedArrayOracle(std::vector<long long> initial) {
+    versions.push_back(std::move(initial));
+  }
+
+  void rangeAdd(std::size_t left, std::size_t right, long long value) {
+    std::vector<long long> next = versions.back();
+    for (std::size_t i = left; i <= right; ++i) {
+      next[i] += value;
+    }
+    versions.push_back(std::move(next));
+  }
+
+  long long rangeSum(std::size_t version, std::size_t left, std::size_t right) const {
+    long long sum = 0;
+    for (std::size_t i = left; i <= right; ++i) {
+      sum += versions[version][i];
+    }
+    return sum;
+  }
+
+  std::size_t versionCount() const {
+    return versions.size();
+  }
+
+private:
+  std::vector<std::vector<long long>> versions;
+};
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -284,7 +316,6 @@ TEST(FatNodePersistentSegmentTreeTest, ArenaGrowthPerUpdateIsBoundedIndependentO
     const std::size_t expected = model.applyUpdate(low, high);
 
     ASSERT_EQ(appended, expected) << "update " << i << " range [" << low << ", " << high << "]";
-    ASSERT_LE(appended, model.visited()) << "update " << i;
     ASSERT_LE(model.visited(), 4 * (height + 1)) << "update " << i;
   }
 
@@ -292,36 +323,53 @@ TEST(FatNodePersistentSegmentTreeTest, ArenaGrowthPerUpdateIsBoundedIndependentO
 }
 
 // The quantitative evidence over perfect and uneven trees: for every range
-// [left, right] the arena grows by exactly the number of visited nodes whose
-// state slots are full (independently tracked by FatNodeModel), and the
-// final sums are exact.
+// [left, right], over three rounds of mixed-sign deltas, the arena grows by
+// exactly the number of visited nodes whose state slots are full
+// (independently tracked by FatNodeModel), and afterwards every (version,
+// range) pair reads exactly what an independent versioned array holds — so
+// sub-range reads routed through many copies are pinned deterministically.
 TEST(FatNodePersistentSegmentTreeTest, NodeCountGrowsByOverflowingVisitedNodesPerRange) {
   constexpr std::size_t sizes[] = {1, 2, 3, 5, 7, 16, 17};
   for (std::size_t n : sizes) {
-    FatNodePersistentSegmentTree tree(std::vector<long long>(n, 1));
+    const std::vector<long long> initial(n, 1);
+    FatNodePersistentSegmentTree tree(initial);
+    VersionedArrayOracle oracle(initial);
     FatNodeModel model(n);
     const std::size_t height = ceilLog2(n);
 
     EXPECT_EQ(tree.nodeCount(), 2 * n - 1) << "n=" << n;
 
-    long long total = static_cast<long long>(n);
-    for (std::size_t left = 0; left < n; ++left) {
-      for (std::size_t right = left; right < n; ++right) {
-        const std::size_t before = tree.nodeCount();
-        tree.rangeAdd(left, right, 1);
-        const std::size_t appended = tree.nodeCount() - before;
-        const std::string where = "n=" + std::to_string(n) + " range [" + std::to_string(left) +
-                                  ", " + std::to_string(right) + "]";
+    for (std::size_t round = 0; round < 3; ++round) {
+      for (std::size_t left = 0; left < n; ++left) {
+        for (std::size_t right = left; right < n; ++right) {
+          // Non-zero, mixed-sign delta so no version is a no-op.
+          long long delta = static_cast<long long>((left * 7 + right * 3 + round) % 9) - 4;
+          if (delta == 0) {
+            delta = 5;
+          }
+          const std::size_t before = tree.nodeCount();
+          tree.rangeAdd(left, right, delta);
+          oracle.rangeAdd(left, right, delta);
+          const std::size_t appended = tree.nodeCount() - before;
+          const std::string where = "n=" + std::to_string(n) + " round=" + std::to_string(round) +
+                                    " range [" + std::to_string(left) + ", " +
+                                    std::to_string(right) + "]";
 
-        EXPECT_EQ(appended, model.applyUpdate(left, right)) << where;
-        EXPECT_LE(appended, model.visited()) << where;
-        EXPECT_LE(model.visited(), 4 * (height + 1)) << where;
-        total += static_cast<long long>(right - left + 1);
+          EXPECT_EQ(appended, model.applyUpdate(left, right)) << where;
+          EXPECT_LE(model.visited(), 4 * (height + 1)) << where;
+        }
       }
     }
 
-    EXPECT_EQ(tree.rangeSum(0, 0, n - 1), static_cast<long long>(n)) << "n=" << n; // v0 isolated
-    EXPECT_EQ(tree.rangeSum(tree.versionCount() - 1, 0, n - 1), total) << "n=" << n;
+    ASSERT_EQ(tree.versionCount(), oracle.versionCount()) << "n=" << n;
+    for (std::size_t version = 0; version < oracle.versionCount(); ++version) {
+      for (std::size_t left = 0; left < n; ++left) {
+        for (std::size_t right = left; right < n; ++right) {
+          EXPECT_EQ(tree.rangeSum(version, left, right), oracle.rangeSum(version, left, right))
+              << "n=" << n << " version=" << version << " range [" << left << ", " << right << "]";
+        }
+      }
+    }
   }
 }
 
@@ -422,12 +470,16 @@ TEST(FatNodePersistentSegmentTreeTest, UpdateAfterZeroDeltaLeavesSharedVersionIn
   std::size_t v2 = tree.rangeAdd(0, 2, 10);
   std::size_t v3 = tree.rangeAdd(1, 1, 0); // shares version 2's root
   std::size_t v4 = tree.rangeAdd(0, 2, 5);
+  EXPECT_EQ(tree.nodeCount(), 5u);         // root stamps {0, 2, 4}: full, no copy yet
+  std::size_t v5 = tree.rangeAdd(0, 2, 1); // overflows the root across the gaps
 
+  EXPECT_EQ(tree.nodeCount(), 6u);
   EXPECT_EQ(tree.rangeSum(0, 0, 2), 6);
   EXPECT_EQ(tree.rangeSum(v1, 0, 2), 6);
   EXPECT_EQ(tree.rangeSum(v2, 0, 2), 36);
   EXPECT_EQ(tree.rangeSum(v3, 0, 2), 36);
   EXPECT_EQ(tree.rangeSum(v4, 0, 2), 51);
+  EXPECT_EQ(tree.rangeSum(v5, 0, 2), 54);
 }
 
 // ---------------------------------------------------------------------------

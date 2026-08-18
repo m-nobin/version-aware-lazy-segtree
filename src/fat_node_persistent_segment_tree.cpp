@@ -158,12 +158,11 @@ Fat-Node State Access
 */
 
 const FatNodePersistentSegmentTree::Modification&
-FatNodePersistentSegmentTree::stateAt(std::size_t nodeIndex, std::size_t version) const {
+FatNodePersistentSegmentTree::stateAt(const Node& node, std::size_t version) {
   // Stamps are strictly increasing, so the state in effect at `version` is
   // the last one whose stamp is not greater than it. Callers only pass
   // nodes that are live at `version`, so the creation state (slot 0) is
   // always a candidate and the search never lands before it.
-  const Node& node = nodes[nodeIndex];
   const auto end = node.history.begin() + static_cast<std::ptrdiff_t>(node.count);
   const auto after = std::upper_bound(
       node.history.begin(), end, version,
@@ -172,8 +171,7 @@ FatNodePersistentSegmentTree::stateAt(std::size_t nodeIndex, std::size_t version
 }
 
 const FatNodePersistentSegmentTree::Modification&
-FatNodePersistentSegmentTree::latestState(std::size_t nodeIndex) const {
-  const Node& node = nodes[nodeIndex];
+FatNodePersistentSegmentTree::latestState(const Node& node) {
   return node.history[node.count - 1];
 }
 
@@ -197,10 +195,10 @@ void FatNodePersistentSegmentTree::reserveForUpdate() {
 }
 
 std::size_t FatNodePersistentSegmentTree::record(std::size_t nodeIndex, const Modification& state) {
-  Node& node = nodes[nodeIndex];
-  if (node.count < HISTORY_CAPACITY) {
+  if (nodes[nodeIndex].count < HISTORY_CAPACITY) {
     // Fat-node append: the node keeps its index, so its parent's existing
     // child index stays valid for the new version.
+    Node& node = nodes[nodeIndex];
     node.history[node.count] = state;
     ++node.count;
     return nodeIndex;
@@ -229,7 +227,7 @@ std::size_t FatNodePersistentSegmentTree::update(std::size_t nodeIndex, std::siz
   // Copy the latest state by value: appending fresh nodes below may
   // reallocate the arena and invalidate references into it. Updates only
   // apply to the latest version, so the latest state is the one to extend.
-  Modification next = latestState(nodeIndex);
+  Modification next = latestState(nodes[nodeIndex]);
   next.version = version;
 
   const ValueType length = segmentLength(segmentLeft, segmentRight);
@@ -258,8 +256,8 @@ std::size_t FatNodePersistentSegmentTree::update(std::size_t nodeIndex, std::siz
 
   // Child sums exclude this node's lazy tag, so the invariant
   // sum = left.sum + right.sum + lazy * length reconstructs the exact sum.
-  next.sum =
-      latestState(next.leftChild).sum + latestState(next.rightChild).sum + next.lazy * length;
+  next.sum = latestState(nodes[next.leftChild]).sum + latestState(nodes[next.rightChild]).sum +
+             next.lazy * length;
 
   return record(nodeIndex, next);
 }
@@ -277,7 +275,7 @@ FatNodePersistentSegmentTree::ValueType FatNodePersistentSegmentTree::query(
     return 0;
   }
 
-  const Modification& current = stateAt(nodeIndex, version);
+  const Modification& current = stateAt(nodes[nodeIndex], version);
 
   if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
     // The node's own lazy value is already included in its sum, so full

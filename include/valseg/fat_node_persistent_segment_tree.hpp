@@ -53,11 +53,11 @@ namespace valseg {
  *
  * Retained space: a logical node that has received m modifications occupies
  * 1 + floor(m / K) arena nodes, so after U non-zero updates that visited
- * M nodes in total (M = sum over the update paths, Theta(U log n) in the
- * worst case) the arena holds exactly 2n - 1 + sum over nodes of
- * floor(m_v / K) nodes, at most 2n - 1 + M / K, i.e. 128 / K ~ 42.7 bytes
- * per modification amortized against 32 bytes per copied node in
- * PersistentLazySegmentTree.
+ * M nodes in total (M <= 4(h + 1) U) the arena holds exactly
+ * 2n - 1 + sum over nodes of floor(m_v / K) nodes, at most 2n - 1 + M / K:
+ * on top of a fixed 128 (2n - 1)-byte build (four times the lazy tree's),
+ * growth costs 128 / K ~ 42.7 bytes per modification amortized against
+ * 32 bytes per copied node in PersistentLazySegmentTree.
  */
 class FatNodePersistentSegmentTree {
 public:
@@ -229,8 +229,8 @@ private:
 
   static ValueType segmentLength(std::size_t segmentLeft, std::size_t segmentRight);
 
-  const Modification& stateAt(std::size_t nodeIndex, std::size_t version) const;
-  const Modification& latestState(std::size_t nodeIndex) const;
+  static const Modification& stateAt(const Node& node, std::size_t version);
+  static const Modification& latestState(const Node& node);
 
   void reserveForUpdate();
   std::size_t record(std::size_t nodeIndex, const Modification& state);
