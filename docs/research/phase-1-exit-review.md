@@ -11,9 +11,9 @@ the independent reader has signed the
 [claim-evidence matrix](claim-evidence-matrix.md), and no unresolved
 implementation defect remains in the reviewed scope.
 
-**Formal phase verdict: exits on merge.** The closeout commits are on the two
-Phase 1 pull requests; the phase is exited when PR #34 and then PR #35 merge
-with green CI and the merged revisions are recorded below.
+**Formal phase verdict: exited on 30 August 2026.** PR #34 merged into `main`
+as `317dac7` and PR #35 as `f8a184f`, each with green CI on its merged
+revision; the record is in the final integration table below.
 
 Overall rating for the implementation and evidence package: **9.5/10**. The
 deduction is for release governance, not a known code or research-model defect.
@@ -109,8 +109,8 @@ persistent lazy aggregate tree, and do not put *boundary*, *optimality* or
    matrix and approved Route B on 30 August 2026.
 2. Done: the closeout changes are committed and pushed to the Phase 1 pull
    requests; CI runs on the pushed revisions.
-3. Resolve any review findings, merge PR #34 before PR #35, and record the
-   merged revisions in this review.
+3. Done: PR #34 merged as `317dac7`, then PR #35 as `f8a184f`; both recorded
+   below.
 
 Phase 2 planning can proceed in parallel, but PR3/PR4 theorem results must not
 be treated as accepted and must not merge before these three closeout actions
@@ -121,8 +121,8 @@ are complete.
 | Field | Value |
 | --- | --- |
 | Independent review | Recorded 30 August 2026, claim-evidence matrix section 10 |
-| PR #34 merged revision | Pending |
-| PR #35 merged revision | Pending |
-| Fresh required CI | Pending |
-| Phase 1 exit declared by | Pending |
-| Exit date | Pending |
+| PR #34 merged revision | `317dac7` (squash of `3d85cd2`), 30 August 2026 |
+| PR #35 merged revision | `f8a184f` (squash of `761807a`), 30 August 2026 |
+| Fresh required CI | Green on `3d85cd2` and `761807a` (pull request and push runs) |
+| Phase 1 exit declared by | Mohammad Nobinur, repository owner |
+| Exit date | 30 August 2026 |

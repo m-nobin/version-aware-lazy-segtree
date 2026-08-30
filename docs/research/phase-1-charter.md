@@ -99,3 +99,5 @@ The evidence-backed implementation assessment and final action list are in
 - 30 August 2026: corrected the taxonomy's action-order statement, added the
   remaining audit-minimum rows and eight-field audit table, and recorded the
   independent reader's approval.
+- 30 August 2026: Phase 1 exited; PR #34 merged as `317dac7` and PR #35 as
+  `f8a184f`.

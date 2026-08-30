@@ -7,9 +7,10 @@
 An Advanced Algorithms project exploring how range-add lazy propagation can be combined with partial persistence while preserving correct historical range-sum queries.
 
 > **Current status**
-> Route B Phase 1 has passed every exit check, including the independent reader's sign-off
-> recorded in the claim-evidence matrix; the phase exits when its two pull requests merge. See
-> the [Phase 1 exit review](docs/research/phase-1-exit-review.md).
+> Route B Phase 1 (evidence and model lock) is complete: both pull requests are merged and the
+> independent reader's sign-off is recorded in the claim-evidence matrix. Phase 2 (theorems and
+> the predictive model) is next. See the
+> [Phase 1 exit review](docs/research/phase-1-exit-review.md).
 
 ## Implemented components
 
