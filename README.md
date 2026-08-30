@@ -25,6 +25,13 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 | `FatNodePersistentSegmentTree`   | Benchmark baseline: fat nodes with node copying                |                    `O(log n)` |        `O(log n)` | In-place versioned states, copy on overflow          |
 | `CopyOnPushSegmentTree`          | Measurement subject under `bench/`: path copying that pushes tags |                 `O(log n)` |        `O(log n)` | Path copying, tag pushed into copied children        |
 
+[include/valseg/policy.hpp](include/valseg/policy.hpp) defines the aggregate/action policy model
+these strategies are analysed under: `SumAddPolicy`, `MinAddPolicy` and `AffineSumModPolicy` with
+their algebraic laws and compile-time capability facts; the strategy-by-strategy audit is in
+[docs/research/capability-taxonomy.md](docs/research/capability-taxonomy.md). The existing
+structures remain SumAdd-only; the policies feed the research programme, not a new public API for
+the trees.
+
 All components support zero-based, inclusive range-add and range-sum operations using `long long` values. Persistent updates apply to the latest version only, while queries read any published version. Persistent update time is amortized over arena growth; the bounds are proved in [docs/proof.md](docs/proof.md).
 
 ## Build and verify
