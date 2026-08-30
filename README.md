@@ -10,8 +10,10 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 > Route B Phase 1 (evidence and model lock) is complete: both pull requests are merged and the
 > independent reader's sign-off is recorded in the claim-evidence matrix. Phase 2 (theorems and
 > the predictive model) has started with the observational commutativity boundary,
-> [docs/proof.md](docs/proof.md) section 9, drafted and awaiting independent proof review. See the
-> [Phase 1 exit review](docs/research/phase-1-exit-review.md).
+> [docs/proof.md](docs/proof.md) section 9, drafted and awaiting independent proof review. The
+> Gate G1 record is section 9 of the
+> [claim-evidence matrix](docs/research/claim-evidence-matrix.md); phase charters and exit
+> reviews are working documents kept outside the repository.
 
 ## Implemented components
 
@@ -116,7 +118,7 @@ bench/analysis/             Locked pilot analysis and figure/table generation
 CMakeLists.txt              Build and tooling configuration
 CMakePresets.json           Developer, release, analysis, and CI presets
 docs/proof.md               Correctness proof, complexity analysis and the action-order boundary theorem
-docs/research/              Phase charter, exit review, claim matrix and capability model
+docs/research/              Claim-evidence matrix and capability model
 paper/                      Version-controlled manuscript source
 ```
 
