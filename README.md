@@ -35,11 +35,11 @@ their algebraic laws and compile-time capability facts; the strategy-by-strategy
 [docs/research/capability-taxonomy.md](docs/research/capability-taxonomy.md).
 [include/valseg/policy_trees.hpp](include/valseg/policy_trees.hpp) holds the policy-generic
 research instruments the boundary theorem is stated for: `RetainedTagPersistentTree<Policy>` (the
-subject; refuses a policy whose induced actions do not commute at compile time),
+subject; refuses at compile time a policy that does not declare `kInducedActionsCommute`),
 `CopyOnPushPersistentTree<Policy>` (the ablation), `PointMaterializedPersistentTree<Policy>` and
 `PushedLazyTree<Policy>`. Their SumAdd instantiations match `PersistentLazySegmentTree` and
-`CopyOnPushSegmentTree` in arena size after every update and in every answer on the tested
-histories. The existing structures remain SumAdd-only; the
+`CopyOnPushSegmentTree` in arena size after every update and in every probed answer on the
+tested histories. The existing structures remain SumAdd-only; the
 policies and templates feed the research programme, not a new public API for the trees.
 
 All components support zero-based, inclusive range-add and range-sum operations using `long long` values. Persistent updates apply to the latest version only, while queries read any published version. Persistent update time is amortized over arena growth; the bounds are proved in [docs/proof.md](docs/proof.md).

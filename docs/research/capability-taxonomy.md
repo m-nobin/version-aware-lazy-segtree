@@ -86,7 +86,7 @@ root-to-leaf path outermost-first, and the tree order does not record which
 tag is newer. Both chronological orders occur, on `n = 4`:
 
 - `rangeAdd(0, 3, g)` then `rangeAdd(1, 2, f)`: the second update copies the
-  root and retains `g` on it, then places `f` on leaf 1. The query applies
+  root and retains `g` on it, then places `f` on leaves 1 and 2. The query applies
   `g` outside `f`, so it computes `rho(g)(rho(f)(x))` where the semantics
   require `rho(f)(rho(g)(x))`: reversed.
 - `rangeAdd(1, 2, f)` then `rangeAdd(0, 3, g)`: leaf 1 carries `f`, the
@@ -136,7 +136,7 @@ checked by the CTest case `retained_tag_rejects_affine_compile_fail`),
 `PointMaterializedPersistentTree<Policy>` and `PushedLazyTree<Policy>`. The
 SumAdd instantiations of the first two match `PersistentLazySegmentTree`
 and `bench/copy_on_push_segment_tree.hpp` in arena size after every update
-and in every answer on the tested histories (`tests/policy_trees_test.cpp`).
+and in every probed answer on the tested histories (`tests/policy_trees_test.cpp`).
 The public SumAdd classes are unchanged.
 
 ## 4. Strategy capability matrix
@@ -152,7 +152,7 @@ obligation; no strategy is claimed beyond what its mechanism preserves.
 | Ordinary lazy tree (control) | `include/valseg/lazy_segment_tree.hpp`; generic form `PushedLazyTree` in `include/valseg/policy_trees.hpp` | In-place push-down; latest state only | Arbitrary valid action monoids; no history | Textbook lazy propagation; chronological order preserved. Theorem 9.8. |
 | Point-only persistence | `include/valseg/point_only_persistent_segment_tree.hpp`; generic form `PointMaterializedPersistentTree` in `include/valseg/policy_trees.hpp` | Path-copies to every affected leaf; no tags | Arbitrary valid action monoids | Actions are fully materialized at leaves in order; update cost grows with range width. Theorem 9.8. |
 | Full copy | `include/valseg/full_copy_persistent_segment_tree.hpp` | Complete tagless tree copy per update | Arbitrary valid action monoids | Every version is a materialized tree; no deferred state at all. Audited from source in `docs/proof.md` section 9.7. |
-| Buffered path copying | `include/valseg/buffered_path_copying_segment_tree.hpp` | Retains sum and lazy deltas in a per-node version-stamped buffer; path-copies on overflow | Same class as the subject: policies with commuting induced actions | Source audit in `docs/proof.md` section 9.7: full coverage composes the delta into the node's version-stamped `lazy`, partial coverage retains it, queries accumulate outermost-first; Lemma 9.1 applies with the tag read at the queried version. Not generalized in code. |
+| Buffered path copying | `include/valseg/buffered_path_copying_segment_tree.hpp` | Retains sum and lazy deltas in a per-node version-stamped buffer; path-copies on overflow | Same class as the subject for the state-storing form of the buffer: policies with commuting induced actions. The implemented additive-delta entries are a SumAdd refinement. | Source audit in `docs/proof.md` section 9.7: full coverage composes the delta into the node's version-stamped `lazy`, partial coverage retains it, queries accumulate outermost-first; Lemma 9.1 applies with the tag read at the queried version. Not generalized in code. |
 | Fat nodes | `include/valseg/fat_node_persistent_segment_tree.hpp` | Versioned `{version, children, sum, lazy}` states in-node (capacity 3); copies on overflow | Same class as the subject: policies with commuting induced actions | Source audit in `docs/proof.md` section 9.7: `next.lazy += value` on full coverage, retained on partial coverage, accumulated outermost-first on query. Not generalized in code. |
 | Checkpoint plus log | `include/valseg/checkpointing_segment_tree.hpp` | Full checkpoint tree every `K` versions plus an update log; a historical query reads the nearest checkpoint at or before the version and adds each later logged update's projected contribution | SumAdd and separately proved query-projectable policies only | See section 5. |
 

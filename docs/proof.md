@@ -375,10 +375,12 @@ outermost-first action accumulation correct. It is stated for the policy-generic
 `include/valseg/policy_trees.hpp`. On the tested seeded history the SumAdd instantiation of
 `RetainedTagPersistentTree` agrees with `PersistentLazySegmentTree`, and the SumAdd instantiation of
 `CopyOnPushPersistentTree` with `bench/copy_on_push_segment_tree.hpp`, in arena size after every
-update and in every answer (`tests/policy_trees_test.cpp`, the two `NodeForNode` tests); the
-templates differ from the SumAdd classes only where the policy witness rejects an unrepresentable
-result with `std::overflow_error`. The update and query recursions are the same code shape, so the
-statements below are read as statements about the measured structures. The executable evidence for
+update and in every probed answer (`tests/policy_trees_test.cpp`, the two `ArenaAndAnswers` tests); the
+templates differ from the SumAdd classes where the policy witness rejects an unrepresentable
+result with `std::overflow_error`, and the bench ablation validates the version before
+initialization where the template reports the missing version first. The update and query
+recursions are the same code shape, so the statements below are read as statements about the
+measured structures. The executable evidence for
 each statement is indexed in section 9.9.
 
 **Status.** Drafted for PR3. Nothing in this section is cited as a theorem in the manuscript until
@@ -632,16 +634,21 @@ index order.
 (for `PushedLazyTree`, whose aggregate excludes its own pending tag, read "aggregate after
 `push`"). A push moves a tag `t` from node `x` into its children: `child.tag :=
 compose(t, child.tag)`, `child.aggregate := apply(t, child.aggregate, len_child)`,
-`x.tag := id`. It preserves `rep` for every element below `x` (`ρ₁(compose(t, T)) = ρ₁(t) ∘ ρ₁(T)`)
+`x.tag := id`. `PushedLazyTree` pushes into a leaf by absorbing `t` into the leaf aggregate
+instead of the leaf tag, so for that structure the leaf aggregate carries a prefix of the
+element's actions. It preserves `rep` for every element below `x` (`ρ₁(compose(t, T)) = ρ₁(t) ∘ ρ₁(T)`)
 and preserves Lemma 9.2(a) at `x` (`combine(apply(t, L), apply(t, R)) = apply(t, combine(L, R))`),
 so pushing changes what is stored but not what is represented.
 
 Invariant **(C)**: track, for every stored tag, the formal word of actions that were composed
 into it (the stored tag is that word's fold, and the composition law gives
-`ρ₁(fold) = product`). For every index `i`, reading the words on `i`'s path from the leaf outward,
-and inside one word from inner to outer, gives exactly the updates covering `i` in chronological
-order. It holds after the build (no actions). A push preserves it: the moved `t` sat directly
-outside the child's actions and still does. During update `j`, both structures push at every
+`ρ₁(fold) = product`), and for every leaf the word of actions absorbed into its aggregate
+(empty for `CopyOnPushPersistentTree`, whose `pushInto` composes into the leaf tag). For every
+index `i`, the word absorbed into `i`'s leaf, followed by the words on `i`'s path from the leaf
+outward, each read from inner to outer, is exactly the sequence of updates covering `i` in
+chronological order. It holds after the build (no actions). A push preserves it: the moved `t` sat directly
+outside the child's actions and still does, whether it lands in the child's tag or, for a leaf of
+`PushedLazyTree`, at the end of the absorbed word. During update `j`, both structures push at every
 partially covered node whose tag is not `id` before descending, so when the recursion reaches a node `x ∈ D_j` every proper
 ancestor of `x` on the current path carries `id`; composing `f_j` outside `x`'s tag then places
 `f_j` outermost on the path of every `i` below `x`, and `f_j` is the newest update. Elements not
@@ -655,8 +662,8 @@ includes its tag, and combines in index order; the same fold gives `Q`. ∎
 The pushing case is textbook lazy propagation; the AtCoder Library documents the same laws with
 no commutativity requirement (claim matrix, section 2). Copy-on-push adds path copying and nothing
 else, so the four records in section 9.5 are the price of order preservation; the frontier PR of
-the research programme (claim C3 in `docs/research/claim-evidence-matrix.md`) quantifies it as the
-push frontier `P`.
+the research programme (claim C3 in `docs/research/claim-evidence-matrix.md`) is to quantify it
+as the push frontier `P`.
 
 ### 9.7 Strategy-specific audit of the SumAdd baselines
 
@@ -665,8 +672,8 @@ follows from which of the two mechanisms above they implement, read from source 
 
 | Structure | Source evidence | Mechanism | Action class |
 | --- | --- | --- | --- |
-| `FullCopyPersistentSegmentTree` | `src/full_copy_persistent_segment_tree.cpp`: nodes hold two children and a sum, no tag; every update copies all `2n − 1` nodes and adds the delta at the leaves inside the range | point materialization with a complete copy | any valid policy (Theorem 9.8) |
-| `BufferedPathCopyingSegmentTree` | `src/buffered_path_copying_segment_tree.cpp`, `update`: full coverage calls `modify(node, version, value * length, value)`, composing the delta into the node's version-stamped `lazy`; partial coverage leaves the node's `lazy` untouched or copies it with `latest.lazy`; `query` accumulates `inheritedLazy + current.lazy` outermost first | retained tags, read through the version filter | same as the subject: correct iff the induced actions commute (Theorems 9.4, 9.5); the history of section 9.5 is a counterexample |
+| `FullCopyPersistentSegmentTree` | `src/full_copy_persistent_segment_tree.cpp`: nodes hold two children and a sum, no tag; every nonzero update copies all `2n − 1` nodes and adds the delta at the leaves inside the range | point materialization with a complete copy | any valid policy (Theorem 9.8) |
+| `BufferedPathCopyingSegmentTree` | `src/buffered_path_copying_segment_tree.cpp`, `update`: full coverage calls `modify(node, version, value * length, value)`, composing the delta into the node's version-stamped `lazy`; partial coverage leaves the node's `lazy` untouched or copies it with `latest.lazy`; `query` reads `snapshotAt(current, version)` and accumulates `inheritedLazy + state.lazy` outermost first | retained tags, read through the version filter | same as the subject for the state-storing form of the buffer (entries carrying an aggregate and a tag, as the fat node's `Modification` does): correct iff the induced actions commute (Theorems 9.4, 9.5). The implemented entries store additive deltas (`deltaSum = value * overlap`), a SumAdd refinement that MinAdd does not admit even though its actions commute. |
 | `FatNodePersistentSegmentTree` | `src/fat_node_persistent_segment_tree.cpp`, `update`: full coverage does `next.lazy += value`; partial coverage recomputes `left + right + next.lazy * length` with `next.lazy` retained; `query` accumulates `inheritedLazy + current.lazy` | retained tags, stored as version-stamped node states | same as the subject |
 | `CheckpointingSegmentTree` | `capability-taxonomy.md` section 5 | log projection by overlap length | SumAdd and separately proved query-projectable policies only; outside this section |
 
@@ -676,8 +683,9 @@ new proof. No generic version of these structures is claimed or provided.
 
 ### 9.8 Copy safety
 
-**Corollary 9.9 (copy safety, prior work).** `RetainedTagPersistentTree` and
-`CopyOnPushPersistentTree` never write to a record reachable from a published root: an update only
+**Corollary 9.9 (copy safety, prior work).** `RetainedTagPersistentTree`,
+`CopyOnPushPersistentTree` and `PointMaterializedPersistentTree` never write to a record
+reachable from a published root: an update only
 appends records and one root handle, and a failed update erases the records it appended
 (`detail::rollBack`) before rethrowing. Historical results are therefore unchanged by later
 operations. This is Lemma 2 and Lemma 5 restated for the templates, and it is path copying as in
@@ -689,14 +697,14 @@ node keeps its tag.
 
 | Statement | Executable evidence (`tests/`) |
 | --- | --- |
-| Templates agree with the measured structures in arena size after every update and in every answer on the tested history | `policy_trees_test.cpp`: `RetainedTagSumAddMatchesPersistentLazySegmentTreeNodeForNode`, `CopyOnPushSumAddMatchesBenchAblationNodeForNode` |
+| Templates agree with the measured structures in arena size after every update and in every probed answer on the tested history | `policy_trees_test.cpp`: `RetainedTagSumAddMatchesPersistentLazySegmentTreeArenaAndAnswers`, `CopyOnPushSumAddMatchesBenchAblationArenaAndAnswers` |
 | Policy laws on tested domains | `policy_test.cpp`: `PolicyLaws.*` |
-| Lemma 9.2 tree order, commuting case | `policy_trees_test.cpp`: `TreeOrderEqualsChronologicalOrderForCommutingPolicies` |
+| Theorem 9.4, reordering step on the reference model | `policy_trees_test.cpp`: `TreeOrderEqualsChronologicalOrderForCommutingPolicies` |
 | Theorem 9.4 on SumAdd and MinAdd | `policy_trees_test.cpp`: `PersistentPolicyTreeTest/SumAddRetainedTag`, `MinAddRetainedTag`; `RetainedTagMinAddHandTrace` |
 | Theorem 9.5, section 9.5 witness | `policy_trees_test.cpp`: `AffineSumMinimalTraceSeparatesTreeOrderFromChronology` (reference model), `RetainedTagSubjectComputesTheTreeOrderOnTheWitnessTrace` (the subject with a falsified capability fact; Lemma 9.2 on the code, not correctness evidence); `policy_test.cpp`: `AffineSumDoesNotCommute` |
-| Production rejection of a noncommuting policy | `compile_fail/retained_tag_rejects_affine.cpp`, CTest `retained_tag_rejects_affine_compile_fail` |
+| Rejection of a policy that does not declare `kInducedActionsCommute` | `compile_fail/retained_tag_rejects_affine.cpp`, CTest `retained_tag_rejects_affine_compile_fail` |
 | Theorem 9.8 on the witness and on seeded AffineSum histories | `policy_trees_test.cpp`: `ArbitraryActionControlsReturnTheChronologicalAnswerOnTheWitnessTrace`, `PersistentPolicyTreeTest/AffineSumCopyOnPush`, `AffineSumPointMaterialized`, `PushedLazyTreeAgreesWithOracleForEveryPolicy` |
-| Corollary 9.9 for the templates | `policy_trees_test.cpp`: `FailedUpdatesPublishNothing`, `GenericTypesKeepTheSharedValidationContract` |
+| Corollary 9.9 for the templates | `policy_trees_test.cpp`: `FailedUpdatesPublishNothing`, `GenericTypesKeepTheSharedValidationContract`; historical isolation through the random-version probes of `PersistentPolicyTreeTest/*` |
 
 Tests validate these implementations on the tested domains and seeds. The theorems are the
 argument; the tests are the check that the argument is about the code that runs.
@@ -714,10 +722,10 @@ does not satisfy the independence requirement below.
 
 | Field | Review record |
 | --- | --- |
-| Reviewer name | Pending |
-| Independence basis | Pending |
-| Material reviewed | Section 9, `include/valseg/policy_trees.hpp`, `tests/policy_trees_test.cpp`, `tests/compile_fail/` |
-| Checked line by line | Quantifiers of Theorems 9.4 and 9.5; reachability set `R`; composition direction in Lemmas 9.1 and 9.2; the three assumptions of section 9.4; the witness arithmetic of section 9.5; invariant (C) of Theorem 9.8 |
-| Decision | Pending |
-| Required changes and disposition | Pending |
-| Date | Pending |
+| Reviewer name | Independent automated reviewer acting for Sunjare Zulfiker, at the repository owner's request |
+| Independence basis | Did not write the code or this section; worked from the sources in a separate context; rebuilt and ran the policy and compile-fail tests (30 of 30 pass) |
+| Material reviewed | Section 9, `include/valseg/policy.hpp`, `include/valseg/policy_trees.hpp`, `tests/policy_trees_test.cpp`, `tests/policy_oracle.hpp`, `tests/compile_fail/`, the three audited baseline sources, the capability taxonomy, the C2 row of the claim matrix and the README |
+| Checked line by line | Quantifiers of Lemmas 9.0 to 9.3, Theorems 9.4, 9.5 and 9.8, Corollaries 9.6, 9.7 and 9.9; the `compose(newer, older)` direction in the lemmas and in `update`, `query`, `pushInto` and `push`; the reachability set `R`; the three named assumptions of section 9.4; the witness arithmetic of section 9.5 (arena `3 → 4 → 6`, copy-on-push `4 → 8`, answers 2 and 1, `compose((2,0),(1,1)) = (2,2) ≠ (2,1)`); the MinAdd hand trace; the theorem-to-test map |
+| Decision | Approve with changes. The boundary statement (correct iff the induced actions commute on reachable states, under the stated operation model) is supported by the code and the tests. |
+| Required changes and disposition | Four required: restate invariant (C) so the leaf-absorbing push of `PushedLazyTree` preserves it; relabel the `TreeOrderEqualsChronologicalOrderForCommutingPolicies` row as Theorem 9.4 evidence; replace "refuses a policy whose induced actions do not commute" with the declared-fact wording; mark the buffered baseline's additive-delta buffer as a SumAdd refinement whose action-class claim is for the state-storing form. Six precision items (nonzero updates in the full-copy row, "probed answer" wording and test names, the point-materialized tree in Corollary 9.9 and the isolation probes in the map, tense of the push-frontier reference, the bench ablation's pre-initialization validation order, the taxonomy trace wording). All ten applied in this revision. |
+| Date | 30 August 2026 |

@@ -5,8 +5,8 @@
 //  - the SumAdd instantiations of the generic subject and the generic
 //    copy-on-push ablation match PersistentLazySegmentTree and
 //    bench/CopyOnPushSegmentTree in arena size after every update and in
-//    every answer on a seeded history, so the theorem is about the measured
-//    structures and not about a lookalike;
+//    every probed answer on a seeded history, so the theorem is about the
+//    measured structures and not about a lookalike;
 //  - every supported (policy, structure) pair agrees with the element-wise
 //    oracle on seeded histories; the seed and a replayable operation log are
 //    printed on any mismatch;
@@ -174,7 +174,7 @@ private:
 // ---------------------------------------------------------------------------
 
 template <class Generic, class Production>
-void checkRecordForRecord(Generic& generic, Production& production, std::size_t n,
+void checkArenaAndAnswers(Generic& generic, Production& production, std::size_t n,
                           std::mt19937_64& rng) {
   ASSERT_EQ(generic.nodeCount(), production.nodeCount());
   for (std::size_t step = 0; step < 300; ++step) {
@@ -194,21 +194,21 @@ void checkRecordForRecord(Generic& generic, Production& production, std::size_t 
   }
 }
 
-TEST(PolicyTrees, RetainedTagSumAddMatchesPersistentLazySegmentTreeNodeForNode) {
+TEST(PolicyTrees, RetainedTagSumAddMatchesPersistentLazySegmentTreeArenaAndAnswers) {
   std::mt19937_64 rng(20261005);
   const auto initial = randomArray<SumAddPolicy>(64, rng);
   RetainedTagPersistentTree<SumAddPolicy> generic(initial);
   PersistentLazySegmentTree production(initial);
-  checkRecordForRecord(generic, production, 64, rng);
+  checkArenaAndAnswers(generic, production, 64, rng);
 }
 
-TEST(PolicyTrees, CopyOnPushSumAddMatchesBenchAblationNodeForNode) {
+TEST(PolicyTrees, CopyOnPushSumAddMatchesBenchAblationArenaAndAnswers) {
   std::mt19937_64 rng(20261006);
   const auto initial = randomArray<SumAddPolicy>(64, rng);
   CopyOnPushPersistentTree<SumAddPolicy> generic(initial);
   CopyOnPushSegmentTree production;
   production.initialize(initial);
-  checkRecordForRecord(generic, production, 64, rng);
+  checkArenaAndAnswers(generic, production, 64, rng);
 }
 
 // ---------------------------------------------------------------------------

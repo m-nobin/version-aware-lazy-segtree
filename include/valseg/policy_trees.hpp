@@ -19,7 +19,9 @@ namespace valseg {
  *    SumAdd replaced by a policy. It retains a copied node's tag through a
  *    partial descent and accumulates ancestor tags outermost-first on a
  *    query, so it is correct exactly when the policy's induced action
- *    transformations commute. It refuses any other policy at compile time.
+ *    transformations commute. It refuses at compile time any policy that does
+ *    not declare kInducedActionsCommute; the declaration is the policy's
+ *    claim, which the compiler propagates and does not prove.
  *  - CopyOnPushPersistentTree is the ablation from bench/, generalized: the
  *    same layout and invariant, but a partial descent past a tagged node
  *    first pushes the tag into copied children. That preserves chronological
@@ -31,7 +33,7 @@ namespace valseg {
  *
  * The SumAdd instantiations follow the production structures: on the seeded
  * history in tests/policy_trees_test.cpp the arena size after every update and
- * every answer equal PersistentLazySegmentTree's and CopyOnPushSegmentTree's;
+ * every probed answer equal PersistentLazySegmentTree's and CopyOnPushSegmentTree's;
  * they differ only where the policy rejects an unrepresentable result, which
  * the SumAdd classes leave to their representable-input precondition. The
  * public SumAdd classes are unchanged; these templates are the research
