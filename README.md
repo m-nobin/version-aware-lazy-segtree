@@ -7,38 +7,7 @@
 An Advanced Algorithms project exploring how range-add lazy propagation can be combined with partial persistence while preserving correct historical range-sum queries.
 
 > **Current status**
->
-> - **Phase 5 — complete.** The persistent tree and its full deterministic suite are merged
->   ([#21](https://github.com/m-nobin/version-aware-lazy-segtree/pull/21),
->   [#22](https://github.com/m-nobin/version-aware-lazy-segtree/pull/22)).
-> - **Phase 6 — complete.** The correctness proof and complexity analysis live in
->   [docs/proof.md](docs/proof.md)
->   ([#9](https://github.com/m-nobin/version-aware-lazy-segtree/issues/9)), and randomized
->   differential validation in
->   [tests/differential_validation_test.cpp](tests/differential_validation_test.cpp)
->   ([#8](https://github.com/m-nobin/version-aware-lazy-segtree/issues/8)) replays 180 seeded
->   campaigns (666,000 mixed operations) against the brute-force oracle with zero mismatches;
->   both were delivered in
->   [#24](https://github.com/m-nobin/version-aware-lazy-segtree/pull/24).
-> - **Phase 7 — in progress.** Reproducible benchmarks
->   ([#10](https://github.com/m-nobin/version-aware-lazy-segtree/issues/10)). All five comparison
->   baselines are merged: `FullCopyPersistentSegmentTree`
->   ([#25](https://github.com/m-nobin/version-aware-lazy-segtree/pull/25)),
->   `PointOnlyPersistentSegmentTree`
->   ([#26](https://github.com/m-nobin/version-aware-lazy-segtree/pull/26)),
->   `CheckpointingSegmentTree`
->   ([#29](https://github.com/m-nobin/version-aware-lazy-segtree/pull/29)),
->   `BufferedPathCopyingSegmentTree`
->   ([#28](https://github.com/m-nobin/version-aware-lazy-segtree/pull/28)) and
->   `FatNodePersistentSegmentTree`
->   ([#27](https://github.com/m-nobin/version-aware-lazy-segtree/pull/27)); every baseline is
->   replayed against the oracle in
->   [tests/baseline_differential_test.cpp](tests/baseline_differential_test.cpp). The benchmark
->   harness ([#32](https://github.com/m-nobin/version-aware-lazy-segtree/pull/32)) is merged:
->   eleven workloads (`W1`-`W11`) against all six persistent structures and the non-persistent
->   control, with dual-binary allocation counting and a cross-structure checksum. 236 tests pass
->   across the supported verification matrix; the published campaign and result summaries are
->   next.
+> The repository is in active development.
 
 ## Implemented components
 
@@ -52,6 +21,7 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 | `CheckpointingSegmentTree`       | Benchmark baseline: update log + checkpoint every `K` versions |  `O(log n + n / K)` amortized |    `O(log n + K)` | Full-tree checkpoints + log replay, no sharing       |
 | `BufferedPathCopyingSegmentTree` | Benchmark baseline: path copying with 2-slot node buffer       |                    `O(log n)` |        `O(log n)` | Version-tagged in-node buffer, path copy on overflow |
 | `FatNodePersistentSegmentTree`   | Benchmark baseline: fat nodes with node copying                |                    `O(log n)` |        `O(log n)` | In-place versioned states, copy on overflow          |
+| `CopyOnPushSegmentTree`          | Measurement subject under `bench/`: path copying that pushes tags |                 `O(log n)` |        `O(log n)` | Path copying, tag pushed into copied children        |
 
 All components support zero-based, inclusive range-add and range-sum operations using `long long` values. Persistent updates apply to the latest version only, while queries read any published version. Persistent update time is amortized over arena growth; the bounds are proved in [docs/proof.md](docs/proof.md).
 
@@ -122,11 +92,22 @@ CI also enforces ClangFormat 18 and runs Linux Clang with AddressSanitizer and U
 include/valseg/             Public headers
 src/                        Library implementations
 tests/                      Deterministic and randomized differential GoogleTest suites
+bench/                      Benchmark harness and workloads
 .github/workflows/ci.yml    Cross-platform CI
 CMakeLists.txt              Build and tooling configuration
 CMakePresets.json           Developer, release, analysis, and CI presets
 docs/proof.md               Correctness proof and complexity analysis
+docs/research/              Claim-evidence matrix and research positioning
+paper/                      Version-controlled manuscript source
 ```
+
+## Benchmarks
+
+`bench/` replays twelve workloads against every implemented persistence
+strategy; see [bench/README.md](bench/README.md). Measured campaign data, the
+analysis pipeline and the generated report are kept out of version control;
+the recorded campaign is an **exploratory pilot** (one machine, no registered
+protocol) whose provenance is recorded beside the local data.
 
 ## Documentation
 

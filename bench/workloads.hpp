@@ -31,7 +31,8 @@ enum class VersionPick {
   Latest,       ///< the newest version
   Uniform,      ///< uniform over every published version
   OldAndRecent, ///< alternating: uniform over all, then the newest 5%
-  Zipf          ///< Zipfian over recency rank; see Workload::skew
+  Zipf,         ///< Zipfian over recency rank; see Workload::skew
+  Ancient       ///< uniform over the oldest share of versions; see AgeShare
 };
 
 /**
@@ -45,7 +46,8 @@ enum class VariantAxis {
   RangeWidth,         ///< update range width in elements
   Zipf,               ///< Zipf exponent theta for VersionPick::Zipf
   HotShare,           ///< width of the hot window as a fraction of n
-  ZeroDeltaShare      ///< share of updates whose delta is 0
+  ZeroDeltaShare,     ///< share of updates whose delta is 0
+  AgeShare            ///< share of the version history a query may read from
 };
 
 /**
@@ -104,8 +106,8 @@ const Workload* findWorkload(const std::string& id);
  * @brief Name of a variant axis as it appears in the CSV.
  *
  * @param axis Axis to name.
- * @return "none", "k", "updates", "width", "theta", "hot_share" or
- *         "zero_delta_share".
+ * @return "none", "k", "updates", "width", "theta", "hot_share",
+ *         "zero_delta_share" or "age_share".
  */
 const char* axisName(VariantAxis axis);
 

@@ -57,3 +57,21 @@ Desktop.ini
 # Temporary files
 *.tmp
 *.temp
+
+# Local benchmark data, analysis pipeline and generated report; kept out of
+# version control on purpose. Provenance lives beside the data in
+# bench/results/README.md.
+bench/analysis/
+bench/results/
+docs/benchmarking/
+
+# LaTeX intermediates and rebuildable PDFs
+paper/main.pdf
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.toc
+*.synctex.gz

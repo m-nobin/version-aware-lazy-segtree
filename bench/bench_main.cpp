@@ -1,13 +1,22 @@
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
+#include <numeric>
+#include <random>
 #include <string>
 #include <vector>
+
+#if defined(__APPLE__)
+#include <pthread.h>
+#include <sys/qos.h>
+#endif
 
 #include "adapters.hpp"
 #include "allocation_counter.hpp"
@@ -22,6 +31,69 @@ namespace {
 #ifndef VALSEG_BENCH_COMPILER
 #define VALSEG_BENCH_COMPILER "unknown"
 #endif
+#ifndef VALSEG_BENCH_FLAGS
+#define VALSEG_BENCH_FLAGS "unknown"
+#endif
+
+using Clock = std::chrono::steady_clock;
+
+std::int64_t nanosSince(Clock::time_point start) {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - start).count();
+}
+
+/**
+ * What one clock pair costs and what it can resolve.
+ *
+ * Every timed operation here is bracketed by two clock reads, so whatever a
+ * back-to-back pair reports is added to every measurement. On a machine whose
+ * timer ticks at tens of nanoseconds that is a large fraction of the cheapest
+ * operation in the campaign, and a benchmark that does not report it is
+ * quietly publishing the timer.
+ */
+struct ClockCalibration {
+  std::int64_t overheadNs = 0;   ///< median interval a pair reports over no work
+  std::int64_t resolutionNs = 0; ///< smallest non-zero interval seen
+};
+
+ClockCalibration calibrateClock() {
+  constexpr std::size_t kSamples = 20000;
+  std::vector<std::int64_t> pairs;
+  pairs.reserve(kSamples);
+  for (std::size_t i = 0; i < kSamples; ++i) {
+    const Clock::time_point start = Clock::now();
+    pairs.push_back(nanosSince(start));
+  }
+  std::vector<std::int64_t> sorted = pairs;
+  std::sort(sorted.begin(), sorted.end());
+
+  ClockCalibration calibration;
+  calibration.overheadNs = sorted[sorted.size() / 2];
+  for (const std::int64_t value : sorted) {
+    if (value > 0) {
+      calibration.resolutionNs = value;
+      break;
+    }
+  }
+  return calibration;
+}
+
+/**
+ * Raise this thread to the interactive quality-of-service class.
+ *
+ * Apple silicon has performance and efficiency cores with different clocks and
+ * different caches, and the scheduler is free to move a background thread onto
+ * an efficiency core part-way through a trial. That turns a structure
+ * comparison into a core-placement comparison. Asking for the interactive
+ * class is the portable request that keeps the run on performance cores; it is
+ * a request, not a guarantee, so the environment file records that it was made.
+ */
+bool requestPerformanceCores() {
+#if defined(__APPLE__)
+  return pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0) == 0;
+#else
+  return false;
+#endif
+}
 
 /**
  * One memory reading taken part-way through a trial, so allocated-node growth
@@ -35,14 +107,48 @@ struct Sample {
 };
 
 /**
+ * Quantiles of a per-operation latency sample, in nanoseconds.
+ */
+struct Latency {
+  std::int64_t p50 = 0;
+  std::int64_t p90 = 0;
+  std::int64_t p99 = 0;
+  std::int64_t p999 = 0;
+  std::int64_t max = 0;
+};
+
+Latency quantiles(std::vector<std::uint32_t>& values) {
+  Latency latency;
+  if (values.empty()) {
+    return latency;
+  }
+  std::sort(values.begin(), values.end());
+  const auto at = [&values](double fraction) {
+    const double position = fraction * static_cast<double>(values.size() - 1);
+    const std::size_t index = static_cast<std::size_t>(position);
+    return static_cast<std::int64_t>(values[index]);
+  };
+  latency.p50 = at(0.50);
+  latency.p90 = at(0.90);
+  latency.p99 = at(0.99);
+  latency.p999 = at(0.999);
+  latency.max = static_cast<std::int64_t>(values.back());
+  return latency;
+}
+
+/**
  * Everything one replay of one operation stream produced.
  */
 struct TrialResult {
   std::size_t updates = 0;
   std::size_t queries = 0;
   std::int64_t buildNs = 0;
+  std::size_t buildNodes = 0;
   std::int64_t updateNs = 0;
   std::int64_t queryNs = 0;
+  std::int64_t batchNs = -1;
+  Latency updateLatency;
+  Latency queryLatency;
   std::size_t nodes = 0;
   std::size_t bytes = 0;
   std::size_t allocPeak = 0;
@@ -53,18 +159,13 @@ struct TrialResult {
   std::vector<Sample> samples;
 };
 
-using Clock = std::chrono::steady_clock;
-
-std::int64_t nanosSince(Clock::time_point start) {
-  return std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - start).count();
-}
-
 /**
- * Replay one operation stream against one structure.
+ * Replay one operation stream against one structure, timing every operation.
  *
- * Update and query time are accumulated separately; the clock is read once per
- * operation, which costs tens of nanoseconds against operations that cost
- * hundreds to thousands, and costs every structure the same.
+ * Update and query time are accumulated separately and every operation's
+ * latency is kept, so the campaign reports a distribution rather than a single
+ * average. The per-operation clock pair is the price of that; its cost is
+ * calibrated once per process and reported next to every number it touched.
  *
  * A trial stops early and reports status "memory_cap" when retained bytes pass
  * the cap. That is a result, not a failure: it is where a structure becomes
@@ -80,6 +181,12 @@ TrialResult runTrial(const std::vector<ValueType>& initial, const std::vector<Op
   const Clock::time_point buildStart = Clock::now();
   adapter.build(initial);
   result.buildNs = nanosSince(buildStart);
+  result.buildNodes = adapter.nodes();
+
+  std::vector<std::uint32_t> updateSamples;
+  std::vector<std::uint32_t> querySamples;
+  updateSamples.reserve(stream.size());
+  querySamples.reserve(stream.size());
 
   const std::size_t sampleEvery = std::max<std::size_t>(1, stream.size() / 20);
 
@@ -88,12 +195,18 @@ TrialResult runTrial(const std::vector<ValueType>& initial, const std::vector<Op
     if (op.isUpdate) {
       const Clock::time_point start = Clock::now();
       adapter.update(op.left, op.right, op.delta);
-      result.updateNs += nanosSince(start);
+      const std::int64_t elapsed = nanosSince(start);
+      result.updateNs += elapsed;
+      updateSamples.push_back(static_cast<std::uint32_t>(
+          std::min<std::int64_t>(elapsed, std::numeric_limits<std::uint32_t>::max())));
       ++result.updates;
     } else {
       const Clock::time_point start = Clock::now();
       const ValueType answer = adapter.query(op.version, op.left, op.right);
-      result.queryNs += nanosSince(start);
+      const std::int64_t elapsed = nanosSince(start);
+      result.queryNs += elapsed;
+      querySamples.push_back(static_cast<std::uint32_t>(
+          std::min<std::int64_t>(elapsed, std::numeric_limits<std::uint32_t>::max())));
       ++result.queries;
       result.checksum = result.checksum * 1000003ULL + static_cast<std::uint64_t>(answer);
     }
@@ -112,6 +225,8 @@ TrialResult runTrial(const std::vector<ValueType>& initial, const std::vector<Op
     }
   }
 
+  result.updateLatency = quantiles(updateSamples);
+  result.queryLatency = quantiles(querySamples);
   result.nodes = adapter.nodes();
   result.bytes = adapter.bytes();
   const AllocationStats allocation = allocationStats();
@@ -121,8 +236,44 @@ TrialResult runTrial(const std::vector<ValueType>& initial, const std::vector<Op
   return result;
 }
 
+/**
+ * Replay the same stream with two clock reads in total.
+ *
+ * This exists to price the instrumentation the timed replay carries. The
+ * difference between this total and the timed replay's update plus query total
+ * is the cost of the per-operation clock pairs and of keeping the latency
+ * samples, measured rather than assumed.
+ *
+ * It stops at the same cap, so a capped cell compares like with like.
+ */
+template <typename Adapter>
+std::int64_t runBatched(const std::vector<ValueType>& initial,
+                        const std::vector<Operation>& stream, std::size_t checkpointInterval,
+                        std::size_t capBytes) {
+  Adapter adapter(checkpointInterval);
+  adapter.build(initial);
+
+  volatile ValueType sink = 0;
+  const Clock::time_point start = Clock::now();
+  for (const Operation& op : stream) {
+    if (op.isUpdate) {
+      adapter.update(op.left, op.right, op.delta);
+    } else {
+      sink = adapter.query(op.version, op.left, op.right);
+    }
+    if (adapter.bytes() > capBytes) {
+      break;
+    }
+  }
+  const std::int64_t elapsed = nanosSince(start);
+  (void)sink;
+  return elapsed;
+}
+
 using RunFunction = TrialResult (*)(const std::vector<ValueType>&, const std::vector<Operation>&,
                                     std::size_t, std::size_t);
+using BatchFunction = std::int64_t (*)(const std::vector<ValueType>&,
+                                       const std::vector<Operation>&, std::size_t, std::size_t);
 
 /**
  * One structure under measurement.
@@ -130,18 +281,27 @@ using RunFunction = TrialResult (*)(const std::vector<ValueType>&, const std::ve
 struct Structure {
   const char* name;
   RunFunction run;
+  BatchFunction batch;
   bool historical;
 };
 
 const std::vector<Structure>& structures() {
   static const std::vector<Structure> table = {
-      {"lazy", &runTrial<LazyAdapter>, false},
-      {"persistent", &runTrial<PersistentAdapter<PersistentLazySegmentTree>>, true},
-      {"full-copy", &runTrial<PersistentAdapter<FullCopyPersistentSegmentTree>>, true},
-      {"point-only", &runTrial<PersistentAdapter<PointOnlyPersistentSegmentTree>>, true},
-      {"checkpointing", &runTrial<PersistentAdapter<CheckpointingSegmentTree>>, true},
-      {"buffered", &runTrial<PersistentAdapter<BufferedPathCopyingSegmentTree>>, true},
-      {"fat-node", &runTrial<PersistentAdapter<FatNodePersistentSegmentTree>>, true},
+      {"lazy", &runTrial<LazyAdapter>, &runBatched<LazyAdapter>, false},
+      {"persistent", &runTrial<PersistentAdapter<PersistentLazySegmentTree>>,
+       &runBatched<PersistentAdapter<PersistentLazySegmentTree>>, true},
+      {"copy-on-push", &runTrial<PersistentAdapter<CopyOnPushSegmentTree>>,
+       &runBatched<PersistentAdapter<CopyOnPushSegmentTree>>, true},
+      {"full-copy", &runTrial<PersistentAdapter<FullCopyPersistentSegmentTree>>,
+       &runBatched<PersistentAdapter<FullCopyPersistentSegmentTree>>, true},
+      {"point-only", &runTrial<PersistentAdapter<PointOnlyPersistentSegmentTree>>,
+       &runBatched<PersistentAdapter<PointOnlyPersistentSegmentTree>>, true},
+      {"checkpointing", &runTrial<PersistentAdapter<CheckpointingSegmentTree>>,
+       &runBatched<PersistentAdapter<CheckpointingSegmentTree>>, true},
+      {"buffered", &runTrial<PersistentAdapter<BufferedPathCopyingSegmentTree>>,
+       &runBatched<PersistentAdapter<BufferedPathCopyingSegmentTree>>, true},
+      {"fat-node", &runTrial<PersistentAdapter<FatNodePersistentSegmentTree>>,
+       &runBatched<PersistentAdapter<FatNodePersistentSegmentTree>>, true},
   };
   return table;
 }
@@ -158,10 +318,14 @@ struct Options {
   std::size_t trials = 5;
   std::size_t capMiB = 4096;
   std::size_t warmup = 1;
+  std::size_t cappedTrials = 2;
+  std::size_t batchTrials = 2;
+  std::size_t warmupSeconds = 20;
   std::string trace;
   bool smoke = false;
   bool list = false;
   bool outDirGiven = false;
+  bool shuffle = true;
 };
 
 [[noreturn]] void fail(const std::string& message) {
@@ -179,6 +343,14 @@ Options parse(int argc, char** argv) {
       options.list = true;
     } else if (flag == "--smoke") {
       options.smoke = true;
+    } else if (flag == "--warmup-seconds" && hasValue) {
+      options.warmupSeconds = static_cast<std::size_t>(std::strtoull(value.c_str(), nullptr, 10));
+      ++i;
+    } else if (flag == "--batch-trials" && hasValue) {
+      options.batchTrials = static_cast<std::size_t>(std::strtoull(value.c_str(), nullptr, 10));
+      ++i;
+    } else if (flag == "--no-shuffle") {
+      options.shuffle = false;
     } else if (flag == "--workload" && hasValue) {
       options.workloadFilter = value;
       ++i;
@@ -201,6 +373,9 @@ Options parse(int argc, char** argv) {
     } else if (flag == "--warmup" && hasValue) {
       options.warmup = static_cast<std::size_t>(std::strtoull(value.c_str(), nullptr, 10));
       ++i;
+    } else if (flag == "--capped-trials" && hasValue) {
+      options.cappedTrials = static_cast<std::size_t>(std::strtoull(value.c_str(), nullptr, 10));
+      ++i;
     } else if (flag == "--trace" && hasValue) {
       options.trace = value;
       ++i;
@@ -210,8 +385,10 @@ Options parse(int argc, char** argv) {
     } else if (flag == "--help") {
       std::cout << "usage: valseg_bench [--workload W1|all] [--structure NAME|all]\n"
                    "                    [--out-dir DIR] [--tag SUFFIX] [--seed N]\n"
-                   "                    [--trials N] [--warmup N] [--cap-mib N]\n"
-                   "                    [--trace FILE] [--smoke] [--list]\n";
+                   "                    [--trials N] [--warmup N] [--warmup-seconds N]\n"
+                   "                    [--capped-trials N]\n"
+                   "                    [--cap-mib N] [--trace FILE] [--batch-trials N]\n"
+                   "                    [--no-shuffle] [--smoke] [--list]\n";
       std::exit(0);
     } else {
       fail("unknown or incomplete option: " + flag);
@@ -219,6 +396,9 @@ Options parse(int argc, char** argv) {
   }
   if (options.trials == 0) {
     fail("--trials must be at least 1");
+  }
+  if (options.cappedTrials == 0) {
+    fail("--capped-trials must be at least 1");
   }
   if (options.smoke && !options.outDirGiven) {
     options.outDir = ".";
@@ -301,7 +481,7 @@ std::vector<Operation> loadTrace(const std::string& path, std::size_t& size) {
  */
 Workload traceWorkload(std::size_t size) {
   Workload workload;
-  workload.id = "W12";
+  workload.id = "WT";
   workload.summary = "replayed trace";
   workload.sizes = {size};
   workload.operations = 0;
@@ -352,7 +532,25 @@ Workload shrink(const Workload& workload) {
   return small;
 }
 
-void writeEnvironment(const std::string& path, const Options& options, int argc, char** argv) {
+/**
+ * The checkpoint interval a structure runs at when the workload is not
+ * sweeping it.
+ *
+ * K balances an O(log n + n / K) update against an O(log n + K) query, so the
+ * balancing choice is K = sqrt(n). Picking it from theory rather than by hand
+ * matters: K is the one tuning knob any structure in this comparison has, and
+ * a hand-chosen value invites the reading that it was chosen to lose. W7
+ * sweeps K on the same traffic and reports where the measured optimum
+ * actually falls.
+ */
+std::size_t balancedInterval(std::size_t size) {
+  return std::max<std::size_t>(1, static_cast<std::size_t>(std::llround(std::sqrt(
+                                      static_cast<double>(size)))));
+}
+
+void writeEnvironment(const std::string& path, const Options& options,
+                      const ClockCalibration& calibration, bool performanceCores, int argc,
+                      char** argv) {
   std::ofstream out(path);
   if (!out) {
     fail("cannot write " + path);
@@ -361,18 +559,85 @@ void writeEnvironment(const std::string& path, const Options& options, int argc,
   out << "generated_utc=" << now << "\n";
   out << "build_type=" << VALSEG_BENCH_BUILD_TYPE << "\n";
   out << "compiler=" << VALSEG_BENCH_COMPILER << "\n";
+  out << "compile_flags=" << VALSEG_BENCH_FLAGS << "\n";
+  out << "cpp_standard=" << __cplusplus << "\n";
   out << "pointer_bits=" << sizeof(void*) * 8 << "\n";
   out << "base_seed=" << options.seed << "\n";
   out << "trials=" << options.trials << "\n";
   out << "warmup_trials=" << options.warmup << "\n";
+  out << "warmup_seconds=" << options.warmupSeconds << "\n";
+  out << "capped_trials=" << options.cappedTrials << "\n";
   out << "allocation_counting=" << (allocationCountingEnabled() ? "on" : "off") << "\n";
   out << "memory_cap_mib=" << options.capMiB << "\n";
+  out << "clock_overhead_ns=" << calibration.overheadNs << "\n";
+  out << "clock_resolution_ns=" << calibration.resolutionNs << "\n";
+  out << "performance_core_qos=" << (performanceCores ? "requested" : "unavailable") << "\n";
+  out << "execution_order=" << (options.shuffle ? "shuffled_per_trial" : "fixed") << "\n";
+  out << "batch_trials=" << options.batchTrials << "\n";
   out << "command=";
   for (int i = 0; i < argc; ++i) {
     out << (i == 0 ? "" : " ") << argv[i];
   }
   out << "\n";
 }
+
+/**
+ * Put the machine into steady state before anything is recorded.
+ *
+ * A freshly started process does not run at the speed it will settle at. The
+ * processor has not been asked for sustained work yet, and the allocator has
+ * not grown a heap, so its first large requests fault in pages the later ones
+ * reuse. Measured on this campaign, the first recorded trial of a cell came in
+ * around 1.7 times its own steady-state cost and the effect took several
+ * trials to decay -- and discarding more trials did not fix it, because the
+ * ramp is a property of elapsed load rather than of how many replays have run.
+ *
+ * So the warm-up is a duration, not a count: replay a representative stream
+ * until the clock says the machine has been busy long enough. It cycles
+ * through the structures rather than warming one of them, because the effect
+ * is proportional to how much a structure allocates and the allocator's caches
+ * are per size class -- warming only the 32-byte-node structures left the one
+ * that copies whole trees still paying it. Discarded per-cell trials still run
+ * on top of this and handle the cache state of the particular cell.
+ *
+ * Full copying is left out: it reaches the memory limit within a few thousand
+ * updates at these sizes, so it cannot be cycled, and it is excluded from the
+ * throughput comparison for the same reason.
+ */
+void warmUp(std::size_t seconds, std::size_t size, std::uint64_t seed, std::size_t capBytes) {
+  if (seconds == 0) {
+    return;
+  }
+  Workload representative = *findWorkload("W1");
+  representative.operations = 20000;
+  const std::size_t warmSize = std::min<std::size_t>(size, 100000);
+  const std::vector<ValueType> initial = initialArray(warmSize, seed);
+  const std::vector<Operation> stream = generate(representative, warmSize, 0.0, seed);
+  const std::size_t interval = balancedInterval(warmSize);
+  const Clock::time_point deadline =
+      Clock::now() + std::chrono::seconds(static_cast<std::int64_t>(seconds));
+
+  while (Clock::now() < deadline) {
+    for (const Structure& structure : structures()) {
+      if (std::string(structure.name) == "full-copy") {
+        continue;
+      }
+      structure.batch(initial, stream, interval, capBytes);
+      if (Clock::now() >= deadline) {
+        break;
+      }
+    }
+  }
+}
+
+/**
+ * One structure at one point of a workload's variant axis.
+ */
+struct Job {
+  const Structure* structure;
+  double variant;
+  std::size_t interval;
+};
 
 int run(int argc, char** argv) {
   const Options options = parse(argc, argv);
@@ -382,6 +647,9 @@ int run(int argc, char** argv) {
     return 0;
   }
 
+  const bool performanceCores = requestPerformanceCores();
+  const ClockCalibration calibration = calibrateClock();
+
   const std::size_t capBytes = options.capMiB * 1024 * 1024;
   const std::string suffix = options.tag.empty() ? std::string() : "_" + options.tag;
 
@@ -390,11 +658,15 @@ int run(int argc, char** argv) {
   if (!runs || !memory) {
     fail("cannot write CSV into " + options.outDir + " (does it exist?)");
   }
-  writeEnvironment(options.outDir + "/environment" + suffix + ".txt", options, argc, argv);
+  writeEnvironment(options.outDir + "/environment" + suffix + ".txt", options, calibration,
+                   performanceCores, argc, argv);
 
-  runs << "workload,structure,n,axis,variant,seed,trial,updates,queries,"
-          "build_ns,update_ns,query_ns,nodes,bytes,alloc_peak_bytes,alloc_live_bytes,"
-          "alloc_count,checksum,status\n";
+  runs << "workload,structure,n,axis,variant,k,seed,trial,exec_order,updates,queries,"
+          "build_ns,build_nodes,update_ns,query_ns,batch_ns,"
+          "update_p50,update_p90,update_p99,update_p999,update_max,"
+          "query_p50,query_p90,query_p99,query_p999,query_max,"
+          "nodes,bytes,alloc_peak_bytes,alloc_live_bytes,alloc_count,"
+          "clock_overhead_ns,clock_resolution_ns,checksum,status\n";
   memory << "workload,structure,n,axis,variant,seed,trial,op_index,versions,nodes,bytes\n";
 
   // (workload, n, variant, seed, trial) -> checksum of the first persistent
@@ -402,6 +674,11 @@ int run(int argc, char** argv) {
   // does not, since it answers historical queries against the latest state.
   std::map<std::string, std::uint64_t> expected;
   std::size_t mismatches = 0;
+
+  // A cell that reached the memory cap has already reported its result. Its
+  // remaining trials would re-measure a truncated replay, so they are skipped
+  // once the cap has been seen this many times.
+  std::map<std::string, std::size_t> cappedSeen;
 
   std::vector<Workload> plan = workloads();
   std::vector<Operation> traceStream;
@@ -418,70 +695,132 @@ int run(int argc, char** argv) {
     const Workload workload = options.smoke ? shrink(original) : original;
 
     for (const std::size_t size : workload.sizes) {
-      for (const Structure& structure : structures()) {
-        if (options.structureFilter != "all" && options.structureFilter != structure.name) {
-          continue;
-        }
+      const std::size_t defaultInterval = balancedInterval(size);
+      warmUp(options.warmupSeconds, size, options.seed, capBytes);
 
-        // K is a parameter of exactly one structure. Every other structure
-        // runs the sweep's traffic once, at the default interval.
-        std::vector<double> variants = workload.variants;
-        if (workload.axis == VariantAxis::CheckpointInterval &&
-            std::string(structure.name) != "checkpointing") {
-          variants = {500.0};
-        }
+      // Trials are the outer loop and structures the inner one, so every
+      // structure is measured under whatever the machine was doing during that
+      // trial rather than one structure owning the first minute and another
+      // the last. Within a trial the order is shuffled, and the order a
+      // measurement ran in is recorded, so an order effect can be tested for
+      // instead of assumed away.
+      for (std::size_t attempt = 0; attempt < options.warmup + options.trials; ++attempt) {
+        const bool recorded = attempt >= options.warmup;
+        const std::size_t trial = recorded ? attempt - options.warmup : attempt;
+        const std::uint64_t seed = options.seed + attempt;
+        const std::vector<ValueType> initial = initialArray(size, seed);
 
-        for (const double variant : variants) {
-          // Warm-up trials run and are thrown away: the first replay of a
-          // cell pays for cold caches and for the allocator growing its arena,
-          // and that cost belongs to no structure in particular.
-          for (std::size_t attempt = 0; attempt < options.warmup + options.trials; ++attempt) {
-            const bool recorded = attempt >= options.warmup;
-            const std::size_t trial = recorded ? attempt - options.warmup : attempt;
-            const std::uint64_t seed = options.seed + attempt;
-            const std::vector<ValueType> initial = initialArray(size, seed);
-            const std::vector<Operation> stream =
-                workload.id == "W12" ? traceStream : generate(workload, size, variant, seed);
-
-            std::size_t interval = 500;
-            if (workload.axis == VariantAxis::CheckpointInterval) {
-              interval = variant == 0.0 ? stream.size() + 1 : static_cast<std::size_t>(variant);
+        for (const double variant : workload.variants) {
+          std::vector<Job> jobs;
+          for (const Structure& structure : structures()) {
+            if (options.structureFilter != "all" && options.structureFilter != structure.name) {
+              continue;
             }
+            std::size_t interval = defaultInterval;
+            if (workload.axis == VariantAxis::CheckpointInterval) {
+              // K is a parameter of exactly one structure. Every other
+              // structure runs the sweep's traffic once, at the balanced
+              // interval, and is reported at the first sweep point only.
+              if (std::string(structure.name) != "checkpointing") {
+                if (variant != workload.variants.front()) {
+                  continue;
+                }
+              } else {
+                interval = variant == 0.0 ? 0 : static_cast<std::size_t>(variant);
+              }
+            }
+            jobs.push_back({&structure, variant, interval});
+          }
+          if (jobs.empty()) {
+            continue;
+          }
 
-            const TrialResult result = structure.run(initial, stream, interval, capBytes);
-            if (!recorded) {
+          if (options.shuffle) {
+            std::mt19937_64 orderRng(seed ^ 0x5deece66dULL ^ static_cast<std::uint64_t>(size));
+            std::shuffle(jobs.begin(), jobs.end(), orderRng);
+          }
+
+          const std::vector<Operation> stream =
+              workload.id == "WT" ? traceStream : generate(workload, size, variant, seed);
+
+          // An unbounded interval means "never checkpoint": the log is
+          // replayed from version zero. It is the K -> infinity end of the
+          // sweep and has to be expressed as a number the structure will
+          // never reach.
+          const std::size_t unbounded = stream.size() + 2;
+
+          for (std::size_t position = 0; position < jobs.size(); ++position) {
+            const Job& job = jobs[position];
+            const std::size_t interval = job.interval == 0 ? unbounded : job.interval;
+
+            const std::string cellKey = workload.id + "|" + job.structure->name + "|" +
+                                        std::to_string(size) + "|" + std::to_string(job.variant);
+            if (recorded && cappedSeen[cellKey] >= options.cappedTrials) {
               continue;
             }
 
+            // The uninstrumented replay prices the instrumentation, so which
+            // of the two passes runs first matters: whichever runs second
+            // inherits a warm allocator and a warm cache. The order alternates
+            // with the trial index so the advantage cancels across trials
+            // instead of being handed to one pass every time.
+            const bool priceInstrumentation = recorded && trial < options.batchTrials;
+            const bool batchFirst = priceInstrumentation && trial % 2 == 1;
+
+            std::int64_t batchNs = -1;
+            if (batchFirst) {
+              batchNs = job.structure->batch(initial, stream, interval, capBytes);
+            }
+            const TrialResult result = job.structure->run(initial, stream, interval, capBytes);
+            if (!recorded) {
+              continue;
+            }
+            if (std::string(result.status) == "memory_cap") {
+              ++cappedSeen[cellKey];
+            }
+            if (priceInstrumentation && !batchFirst) {
+              batchNs = job.structure->batch(initial, stream, interval, capBytes);
+            }
+
             const std::string cell = workload.id + "|" + std::to_string(size) + "|" +
-                                     std::to_string(variant) + "|" + std::to_string(seed);
-            if (structure.historical && std::string(result.status) == "ok") {
+                                     std::to_string(job.variant) + "|" + std::to_string(seed);
+            if (job.structure->historical && std::string(result.status) == "ok") {
               const auto inserted = expected.emplace(cell, result.checksum);
               if (!inserted.second && inserted.first->second != result.checksum) {
-                std::cerr << "checksum mismatch: " << cell << " on " << structure.name << "\n";
+                std::cerr << "checksum mismatch: " << cell << " on " << job.structure->name << "\n";
                 ++mismatches;
               }
             }
 
-            const std::string key = workload.id + "," + structure.name + "," +
+            const std::string key = workload.id + "," + job.structure->name + "," +
                                     std::to_string(size) + "," + axisName(workload.axis) + "," +
-                                    std::to_string(variant) + "," + std::to_string(seed) + "," +
-                                    std::to_string(trial);
+                                    std::to_string(job.variant);
+            const std::string memoryKey =
+                key + "," + std::to_string(seed) + "," + std::to_string(trial);
 
-            runs << key << ',' << result.updates << ',' << result.queries << ',' << result.buildNs
-                 << ',' << result.updateNs << ',' << result.queryNs << ',' << result.nodes << ','
-                 << result.bytes << ',' << result.allocPeak << ',' << result.allocLive << ','
-                 << result.allocCount << ',' << result.checksum << ',' << result.status << '\n';
+            runs << key << ',' << job.interval << ',' << seed << ',' << trial << ',' << position
+                 << ',' << result.updates << ',' << result.queries << ',' << result.buildNs << ','
+                 << result.buildNodes << ',' << result.updateNs << ',' << result.queryNs << ','
+                 << batchNs << ',' << result.updateLatency.p50 << ',' << result.updateLatency.p90
+                 << ',' << result.updateLatency.p99 << ',' << result.updateLatency.p999 << ','
+                 << result.updateLatency.max << ',' << result.queryLatency.p50 << ','
+                 << result.queryLatency.p90 << ',' << result.queryLatency.p99 << ','
+                 << result.queryLatency.p999 << ',' << result.queryLatency.max << ','
+                 << result.nodes << ',' << result.bytes << ',' << result.allocPeak << ','
+                 << result.allocLive << ',' << result.allocCount << ',' << calibration.overheadNs
+                 << ',' << calibration.resolutionNs << ',' << result.checksum << ','
+                 << result.status << '\n';
 
             for (const Sample& sample : result.samples) {
-              memory << key << ',' << sample.opIndex << ',' << sample.versions << ','
+              memory << memoryKey << ',' << sample.opIndex << ',' << sample.versions << ','
                      << sample.nodes << ',' << sample.bytes << '\n';
             }
           }
+          runs.flush();
         }
       }
     }
-    std::cout << "done " << workload.id << '\n';
+    std::cout << "done " << workload.id << std::endl;
   }
 
   if (mismatches > 0) {

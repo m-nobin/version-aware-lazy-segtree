@@ -13,6 +13,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "copy_on_push_segment_tree.hpp"
 #include "workloads.hpp"
 
 namespace valseg::bench {
@@ -110,7 +111,10 @@ public:
           tree.size() == 0 ? 0 : (tree.checkpointCount() + 1) * (2 * tree.size() - 1);
       const std::size_t entries = tree.nodeCount() - treeNodes;
       return treeNodes * 16 + entries * 24;
-    } else if constexpr (std::is_same_v<Tree, PersistentLazySegmentTree>) {
+    } else if constexpr (std::is_same_v<Tree, PersistentLazySegmentTree> ||
+                         std::is_same_v<Tree, CopyOnPushSegmentTree>) {
+      // Identical node layout, on purpose: the two differ in tag policy only,
+      // so retained bytes differ only by the node count each policy produces.
       return tree.nodeCount() * 32;
     } else if constexpr (std::is_same_v<Tree, BufferedPathCopyingSegmentTree>) {
       return tree.nodeCount() * 88;
