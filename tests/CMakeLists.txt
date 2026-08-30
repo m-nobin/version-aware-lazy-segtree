@@ -81,3 +81,23 @@ add_valseg_test(buffered_path_copying_segment_tree_test buffered_path_copying_se
 add_valseg_test(fat_node_persistent_segment_tree_test fat_node_persistent_segment_tree_test.cpp)
 add_valseg_test(copy_on_push_segment_tree_test copy_on_push_segment_tree_test.cpp)
 add_valseg_test(policy_test policy_test.cpp)
+add_valseg_test(policy_trees_test policy_trees_test.cpp)
+
+# ---------------------------------------------------------------------------
+# Compile-fail test: the tag-retaining subject must reject a policy whose
+# induced actions do not commute. The target is excluded from the default
+# build; the CTest case builds it on demand and passes only when the compiler
+# output names the static_assert, so an accidental successful build fails.
+# ---------------------------------------------------------------------------
+
+add_executable(retained_tag_rejects_affine EXCLUDE_FROM_ALL
+  compile_fail/retained_tag_rejects_affine.cpp)
+target_link_libraries(retained_tag_rejects_affine PRIVATE valseg::valseg)
+target_compile_features(retained_tag_rejects_affine PRIVATE cxx_std_17)
+
+add_test(NAME retained_tag_rejects_affine_compile_fail
+         COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}
+                 --target retained_tag_rejects_affine --config $<CONFIG>)
+set_tests_properties(retained_tag_rejects_affine_compile_fail PROPERTIES
+  PASS_REGULAR_EXPRESSION "kInducedActionsCommute"
+  LABELS "compile-fail")

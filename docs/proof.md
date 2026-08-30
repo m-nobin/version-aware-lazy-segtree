@@ -6,6 +6,11 @@ stated in the design contract
 ([Planned Versioned Tree](https://github.com/m-nobin/version-aware-lazy-segtree/wiki/Planned-Versioned-Tree)).
 Completes [issue #9](https://github.com/m-nobin/version-aware-lazy-segtree/issues/9).
 
+Sections 1 to 8 are the SumAdd proof and complexity analysis. Section 9 generalizes the
+correctness argument to an arbitrary aggregate/action policy and characterizes when retaining tags
+is correct at all; it is the theorem of the Route B programme's PR3 and is not cited as a result
+until its review record (section 9.10) is complete.
+
 ## 1. Preliminaries
 
 Fix an initial array `A⁰ = (a₀, …, aₙ₋₁)` of `n` values from `ValueType`. The structure publishes a
@@ -362,3 +367,357 @@ dominates where: copies per update (full-copy, point-only), bytes per node (buff
 replay length per query (checkpointing), or the `U₊ log n` arena growth the proposed structure
 pays. Section 6 gives the proposed structure's bounds; this appendix gives the field it is
 measured against.
+
+## 9. Observational commutativity boundary
+
+This section answers RQ1 of the research plan: which algebraic property makes retained,
+outermost-first action accumulation correct. It is stated for the policy-generic templates in
+`include/valseg/policy_trees.hpp`. On the tested seeded history the SumAdd instantiation of
+`RetainedTagPersistentTree` agrees with `PersistentLazySegmentTree`, and the SumAdd instantiation of
+`CopyOnPushPersistentTree` with `bench/copy_on_push_segment_tree.hpp`, in arena size after every
+update and in every answer (`tests/policy_trees_test.cpp`, the two `NodeForNode` tests); the
+templates differ from the SumAdd classes only where the policy witness rejects an unrepresentable
+result with `std::overflow_error`. The update and query recursions are the same code shape, so the
+statements below are read as statements about the measured structures. The executable evidence for
+each statement is indexed in section 9.9.
+
+**Status.** Drafted for PR3. Nothing in this section is cited as a theorem in the manuscript until
+the review record in section 9.10 is completed by a reader who did not implement the code.
+
+### 9.1 Setting
+
+A policy is `(S, A, combine, e, compose, id, apply)` satisfying the laws of
+`docs/research/capability-taxonomy.md` section 2; `e` is `aggregateIdentity()`, `id` is
+`actionIdentity()`, and `compose(g, f)` applies `f` first. Write `ρ_len(f)(x) = apply(f, x, len)`
+for the transformation an action induces on aggregates of length `len`.
+
+Fix the set `S₁⁰ ⊆ S` of admissible initial element values. The **reachable states** are
+
+```text
+R = { ρ₁(h_k) ∘ ⋯ ∘ ρ₁(h₁)(a) : a ∈ S₁⁰, k ≥ 0, h₁, …, h_k ∈ A }
+```
+
+and `R_len = { combine(x₁, …, x_len) : xᵢ ∈ R }` (any bracketing, by associativity) are the
+reachable aggregates of length `len`, with `R₀ = { e }`. Because the operation model admits point
+actions on any index from any initial array over `S₁⁰`, every tuple over `R` is the element array
+of some segment in some reachable version, so `R_len` is exactly the set of valid aggregates of
+length `len` that the policy laws are quantified over. Every aggregate a structure stores or
+returns lies in some `R_len`, so the laws are only ever used on reachable states.
+
+**Lemma 9.0 (closure).** `ρ_len(f)(R_len) ⊆ R_len` for every `f` and `len ≥ 1`, and
+`apply(f, combine(x₁, …, x_len), len) = combine(ρ₁(f)(x₁), …, ρ₁(f)(x_len))`.
+
+_Proof._ The distribution law `apply(f, combine(x, y), lenX + lenY) = combine(apply(f, x, lenX),
+apply(f, y, lenY))`, applied `len − 1` times, and `apply(f, x, 1) = ρ₁(f)(x)`. ∎
+
+A **history** is `H = (u₁, …, u_m)` with `u_j = (l_j, r_j, f_j)`, applied to `A⁰ ∈ (S₁⁰)ⁿ`. The
+**chronological semantics** is the per-element array
+
+```text
+Aʲ[i] = ρ₁(f_j)(Aʲ⁻¹[i])   if l_j ≤ i ≤ r_j,    Aʲ[i] = Aʲ⁻¹[i]   otherwise,
+```
+
+and the chronological answer to a query is `Q(v, l, r) = combine(Aᵛ[l], …, Aᵛ[r])` folded in
+index order. `tests/policy_oracle.hpp` (`ElementWiseOracle`) computes exactly this, so "agrees
+with the oracle" below means "computes `Q`".
+
+The canonical partition of `[0, n − 1]` is the one every structure in this repository builds:
+node `[s, e]` splits at `⌊(s + e) / 2⌋`. For a range `[l, r]`, its **canonical decomposition**
+`D(l, r)` is the set of canonical nodes at which the update recursion takes the full-coverage
+branch: the maximal canonical intervals contained in `[l, r]`. They partition `[l, r]`, so each
+`i ∈ [l, r]` lies in exactly one node of `D(l, r)`, and no node of `D(l, r)` is an ancestor of
+another.
+
+### 9.2 What the retained-tag tree computes
+
+Let `D_j = D(l_j, r_j)`. For a version `v` and a canonical node `c`, the **placed tag** is the
+chronological composition of the actions whose decomposition contains `c`:
+
+```text
+T_v(c) = compose(f_{j_k}, compose(…, compose(f_{j_2}, f_{j_1})))   for j₁ < ⋯ < j_k ≤ v, c ∈ D_{j_t},
+T_v(c) = id                                                        if no such update exists.
+```
+
+**Lemma 9.1 (tag retention).** In `RetainedTagPersistentTree`, the record reachable from
+`roots[v]` for canonical node `c` carries tag `T_v(c)`.
+
+_Proof._ Induction over updates. The build stores `id` everywhere. For update `j` the recursion
+visits exactly the canonical nodes whose interval meets `[l_j, r_j]`. At `c ∈ D_j` it appends a
+copy with tag `compose(f_j, old tag)`, which is `T_j(c)` by definition. At a partially covered
+node it appends a copy that keeps the old tag, and `c ∉ D_j`, so `T_j(c) = T_{j−1}(c)`. Every
+other node is shared unchanged, and is likewise outside `D_j`. An update whose action is `id`
+shares the latest root, and `compose(id, T) = T`. ∎
+
+For an index `i` let `c₀, c₁, …, c_h` be its root-to-leaf path, `c₀` the root and `c_h` the leaf.
+Define the **tree-order value** of `i` in version `v`, and its restriction below a node `x = c_d`:
+
+```text
+rep_v(i)   = ρ₁(T_v(c₀)) ∘ ρ₁(T_v(c₁)) ∘ ⋯ ∘ ρ₁(T_v(c_h)) (A⁰[i])
+rep_v^x(i) = ρ₁(T_v(c_d)) ∘ ⋯ ∘ ρ₁(T_v(c_h)) (A⁰[i])
+```
+
+The leaf's tag is applied first and the root's last: deeper tags are inner, ancestor tags are
+outer. This is the order the code applies them in, and it is independent of when the actions were
+issued.
+
+**Lemma 9.2 (tree-order semantics).** For every version `v` of `RetainedTagPersistentTree`:
+
+- (a) every record `x` covering `[s, e]` satisfies `x.aggregate = combine(rep_v^x(s), …, rep_v^x(e))`;
+- (b) `rangeAggregate(v, l, r) = combine(rep_v(l), …, rep_v(r))`.
+
+Both hold for every valid policy, commuting or not: the lemma says what the structure computes,
+not whether that is the intended answer.
+
+_Proof._ (a) Induction over updates and, inside one update, over the recursion. After the build,
+all tags are `id`, `ρ₁(id)` is the identity by the `apply(id, x, len) = x` law, leaves store
+`A⁰[i]`, and internal aggregates are the combine of their children, which by associativity is the
+index-order fold. Full coverage at `x`: the copy stores `apply(f, x.aggregate, len)`, which by
+Lemma 9.0 is `combine(ρ₁(f)(rep^x(s)), …, ρ₁(f)(rep^x(e)))`; its tag is `compose(f, T(x))`, and
+`ρ₁(compose(f, T(x))) = ρ₁(f) ∘ ρ₁(T(x))` by the composition law, so the new `rep^{x'}(i)` is
+exactly `ρ₁(f)(rep^x(i))`, with the shared children and everything below them unchanged. Partial
+coverage at `x`: the copy stores `apply(T(x), combine(left'.aggregate, right'.aggregate), len)`
+with tag `T(x)`; by the induction hypothesis on the children and associativity the inner combine
+is the fold of `rep^{child}(i)` over `[s, e]`, and Lemma 9.0 turns the outer `apply` into
+`ρ₁(T(x))` on each element, which is `rep^{x'}(i)`.
+
+(b) `rangeAggregate` calls `query(root, 0, n − 1, l, r, id)`. Let `Λ` at node `x = c_d` be the
+inherited composition `compose(T(c₀), compose(T(c₁), …, T(c_{d−1})))`, outermost first, as the
+descent builds it with `next = compose(inherited, x.tag)`. Claim:
+`query(x, s, e, l, r, Λ) = combine over i ∈ [s, e] ∩ [l, r] of ρ₁(Λ)(rep^x(i))`, with the empty
+fold equal to `e`. A disjoint segment returns `e`. A fully covered segment returns
+`apply(Λ, x.aggregate, len)`, which by (a) and Lemma 9.0 is the claimed fold. A partially covered
+segment combines the two children's results, computed with `compose(Λ, T(x))`, and
+`ρ₁(compose(Λ, T(x))) = ρ₁(Λ) ∘ ρ₁(T(x))` moves this node's tag inside the accumulator exactly
+once; the identity law for `combine` absorbs an empty side. At the root `Λ = id`. ∎
+
+The reference model `TreeOrderModel` in `tests/policy_trees_test.cpp` is this definition executed
+without aggregates or sharing; it is what the counterexample in section 9.5 is run against.
+
+The retained-tag tree is **correct for `H`** if `rangeAggregate(v, l, r) = Q(v, l, r)` for every
+`v ≤ m` and every `0 ≤ l ≤ r < n`.
+
+### 9.3 Sufficiency
+
+**Lemma 9.3 (length-one reduction).** If `ρ₁(f)` and `ρ₁(g)` commute on `R`, then `ρ_len(f)` and
+`ρ_len(g)` commute on `R_len` for every `len ≥ 1`.
+
+_Proof._ For `X = combine(x₁, …, x_len)`, Lemma 9.0 gives
+`ρ_len(g)(ρ_len(f)(X)) = combine(ρ₁(g)(ρ₁(f)(x₁)), …)`, and swapping each pair on `R` gives the
+other order. ∎
+
+So the "for every length" wording of `kInducedActionsCommute` in `policy.hpp` and the length-one
+condition below are the same condition under the policy laws.
+
+**Theorem 9.4 (sufficiency).** If `ρ₁(f) ∘ ρ₁(g) = ρ₁(g) ∘ ρ₁(f)` on `R` for all `f, g ∈ A`, then
+`RetainedTagPersistentTree` is correct for every history from every initial array over `S₁⁰`.
+
+_Proof._ Fix `v` and `i`. By definition `rep_v(i)` is the product of `ρ₁(T_v(c_d))` over the path,
+and by the composition law each `ρ₁(T_v(c_d))` is the product `ρ₁(f_{j_k}) ∘ ⋯ ∘ ρ₁(f_{j_1})` of
+the actions placed on `c_d`. Since `i` lies in exactly one node of each `D_j`, `rep_v(i)` is a
+product with one factor `ρ₁(f_j)` for each update `j ≤ v` covering `i`, in some order, applied to
+`A⁰[i] ∈ R`. `Aᵛ[i]` is the same factors in chronological order. Any reordering is a sequence of
+adjacent swaps; each swap is applied to a state in `R` (Lemma 9.0 at length one keeps every
+prefix in `R`) and the hypothesis makes it an equality. So `rep_v(i) = Aᵛ[i]`, and Lemma 9.2(b)
+gives `rangeAggregate(v, l, r) = combine(Aᵛ[l], …, Aᵛ[r]) = Q(v, l, r)`. ∎
+
+### 9.4 Conditional necessity
+
+**Theorem 9.5 (necessity).** Assume the operation model admits arrays of size `n ≥ 2` over any
+initial values in `S₁⁰`, any action at any range, and single-element queries. If
+`RetainedTagPersistentTree` is correct for every history, then `ρ₁(f)` and `ρ₁(g)` commute on `R`
+for all `f, g ∈ A`.
+
+_Proof._ Let `x ∈ R`, so `x = ρ₁(h_k) ∘ ⋯ ∘ ρ₁(h₁)(a)` with `a ∈ S₁⁰`, and let `f, g ∈ A`. Take
+`n = 2`, `A⁰ = (a, b)` for any `b ∈ S₁⁰`, and the history
+
+```text
+h₁, …, h_k on [0, 0];   then g on [0, 1];   then f on [0, 0].
+```
+
+Let `v = k + 2`. By Lemma 9.1 the root carries `T_v(root) = g` and leaf 0 carries
+`T_v(leaf 0) = compose(f, compose(h_k, …, h₁))`, so by Lemma 9.2
+`rangeAggregate(v, 0, 0) = rep_v(0) = ρ₁(g)(ρ₁(f)(x))` (the single-element fold is the element,
+by the identity law of `combine`). The chronological value is `Aᵛ[0] = ρ₁(f)(ρ₁(g)(x))`.
+Correctness for this history equates them. For general `n ≥ 2` use `g` on `[0, n − 1]` and `f` on
+`[0, 0]`; the intermediate nodes on leaf 0's path keep tag `id`. ∎
+
+**What the assumptions do.**
+
+- *Reachability.* The conclusion is about `R`, the states histories can produce, not all of `S`.
+  A policy whose induced actions fail to commute only on unreachable states is still correct, and
+  the theorem does not claim otherwise. This is why the boundary is observational.
+- *Ancestor/descendant order.* The proof needs the pair `(g above, f below)` to be realizable:
+  a full-range action followed by a point action does it for every `n ≥ 2`. Every `f` and `g` can
+  be placed this way, so no restriction on `A` is needed beyond the operation model.
+- *Order separation.* Correctness must be observable. A width-one query returns the element
+  itself (the query combines `e` on whichever side the disjoint sibling lies, the oracle folds from
+  `e` on the left, and both identity laws of `combine` make each equal to the element), so any
+  difference between `ρ₁(g)ρ₁(f)(x)` and `ρ₁(f)ρ₁(g)(x)` is visible. If the
+  interface only exposed wider aggregates, the theorem would additionally need `combine` to
+  separate the two orders on some reachable neighbourhood; the plan's order-separation assumption
+  is that condition, and the repository's operation model discharges it.
+
+**Corollary 9.6 (boundary).** Under the assumptions of Theorem 9.5, `RetainedTagPersistentTree` is
+correct for every history if and only if the induced transformations of the policy commute
+pairwise on `R`. (Theorem 9.4 for one direction, Theorem 9.5 for the other.)
+
+**Corollary 9.7 (faithful actions).** `ρ₁ : A → (R → R)` is a monoid homomorphism:
+`ρ₁(compose(g, f)) = ρ₁(g) ∘ ρ₁(f)` and `ρ₁(id)` is the identity. If `ρ₁` is injective (the
+action representation is **faithful** on `R`), then the induced transformations commute if and
+only if `compose(f, g) = compose(g, f)` for all `f, g`: the boundary is syntactic commutativity of
+the action monoid.
+
+_Proof._ `ρ₁(f) ∘ ρ₁(g) = ρ₁(g) ∘ ρ₁(f)` is `ρ₁(compose(f, g)) = ρ₁(compose(g, f))`, and injectivity
+lifts it to the actions. ∎
+
+Instantiations:
+
+- `SumAddPolicy` and `MinAddPolicy`: `ρ₁(d)(x) = x + d`, faithful whenever `R` is nonempty; the
+  additive monoid commutes, so both are correct on the subject
+  (`kInducedActionsCommute = true`, and the seeded oracle tests).
+- `AffineSumModPolicy<p>` with `p` prime and `R` nonempty: `R` is closed under every shift
+  `x ↦ x + b`, so `R = Z_p`; two maps `ax + b` that agree on two distinct residues agree as pairs,
+  so the representation is faithful, and
+  `compose((2, 0), (1, 1)) = (2, 2) ≠ (2, 1) = compose((1, 1), (2, 0))`. The subject is
+  therefore incorrect for it, and section 9.5 exhibits the history.
+- Without faithfulness the syntactic direction fails: give the additive action an extra field that
+  `apply` ignores and `compose` concatenates. The monoid is syntactically noncommutative, the
+  induced transformations commute, and the subject is correct. The paper therefore claims the
+  observational statement, not that syntactic commutativity is necessary.
+
+### 9.5 Minimal counterexample
+
+`n = 2`, `AffineSumModPolicy<13>`, `A⁰ = (0, 0)`, `g = (2, 0)` (double) on `[0, 1]`, then
+`f = (1, 1)` (increment) on `[0, 0]`.
+
+```mermaid
+flowchart LR
+    subgraph chronological["Chronological: f after g"]
+        c0["0"] -->|"g: x ↦ 2x"| c1["0"] -->|"f: x ↦ x + 1"| c2["1"]
+    end
+    subgraph treeorder["Tree order: root tag outside leaf tag"]
+        t0["0"] -->|"leaf 0 tag f"| t1["1"] -->|"root tag g"| t2["2"]
+    end
+```
+
+Version 1 copies the root with tag `(2, 0)` and aggregate `0`. Version 2 descends past the root,
+which keeps its tag, and copies leaf 0 with aggregate `apply((1, 1), 0, 1) = 1` and tag `(1, 1)`.
+The query `rangeAggregate(2, 0, 0)` reaches leaf 0 with `Λ = (2, 0)` and returns
+`apply((2, 0), 1, 1) = 2`; the chronological answer is `1`. The same history on
+`CopyOnPushPersistentTree` pushes the root's `(2, 0)` into two copied leaves before touching leaf
+0, so leaf 0 ends with aggregate `1` and tag `compose((1, 1), (2, 0)) = (2, 1)`, and the query
+returns `1`; the second update appends four records where the subject appends two (the first
+appends one in both). This is the trace of
+`capability-taxonomy.md` section 2.2 at its smallest size, and the pair of actions is the one
+`tests/policy_test.cpp` (`AffineSumDoesNotCommute`) checks at the policy level. The trace is also
+executed on `RetainedTagPersistentTree` itself, instantiated with a test-local policy that inherits
+`AffineSumModPolicy<13>` and falsifies `kInducedActionsCommute`
+(`RetainedTagSubjectComputesTheTreeOrderOnTheWitnessTrace`): the arena grows `3 → 4 → 6` and the
+query returns `2`, the tree-order value. That test checks Lemma 9.2 on the code; it is not
+correctness evidence for anything.
+
+### 9.6 Order-preserving strategies
+
+**Theorem 9.8.** For every valid policy, `CopyOnPushPersistentTree`,
+`PointMaterializedPersistentTree` and `PushedLazyTree` compute `Q` (the last for the latest
+version only).
+
+_Proof._ *Point materialization.* There are no tags. An update replaces the aggregate of every
+leaf in its range by `ρ₁(f_j)` of the old one and recomputes each copied internal node as the
+combine of its children, so leaf aggregates are `Aᵛ[i]` by induction and a query folds them in
+index order.
+
+*Pushing.* Both remaining structures keep the node convention of Lemma 9.2, so
+`rep_v(i)`, the product of the tags on `i`'s path applied leaf first, is defined the same way
+(for `PushedLazyTree`, whose aggregate excludes its own pending tag, read "aggregate after
+`push`"). A push moves a tag `t` from node `x` into its children: `child.tag :=
+compose(t, child.tag)`, `child.aggregate := apply(t, child.aggregate, len_child)`,
+`x.tag := id`. It preserves `rep` for every element below `x` (`ρ₁(compose(t, T)) = ρ₁(t) ∘ ρ₁(T)`)
+and preserves Lemma 9.2(a) at `x` (`combine(apply(t, L), apply(t, R)) = apply(t, combine(L, R))`),
+so pushing changes what is stored but not what is represented.
+
+Invariant **(C)**: track, for every stored tag, the formal word of actions that were composed
+into it (the stored tag is that word's fold, and the composition law gives
+`ρ₁(fold) = product`). For every index `i`, reading the words on `i`'s path from the leaf outward,
+and inside one word from inner to outer, gives exactly the updates covering `i` in chronological
+order. It holds after the build (no actions). A push preserves it: the moved `t` sat directly
+outside the child's actions and still does. During update `j`, both structures push at every
+partially covered node whose tag is not `id` before descending, so when the recursion reaches a node `x ∈ D_j` every proper
+ancestor of `x` on the current path carries `id`; composing `f_j` outside `x`'s tag then places
+`f_j` outermost on the path of every `i` below `x`, and `f_j` is the newest update. Elements not
+below any node of `D_j` are not covered by `u_j` and their paths are only pushed. Hence (C) holds
+in every version, so `rep_v(i) = Aᵛ[i]`.
+
+`CopyOnPushPersistentTree` uses the query of Lemma 9.2(b) unchanged, so it returns `Q`.
+`PushedLazyTree` pushes on entry and returns the aggregate at a fully covered node, which then
+includes its tag, and combines in index order; the same fold gives `Q`. ∎
+
+The pushing case is textbook lazy propagation; the AtCoder Library documents the same laws with
+no commutativity requirement (claim matrix, section 2). Copy-on-push adds path copying and nothing
+else, so the four records in section 9.5 are the price of order preservation; the frontier PR of
+the research programme (claim C3 in `docs/research/claim-evidence-matrix.md`) quantifies it as the
+push frontier `P`.
+
+### 9.7 Strategy-specific audit of the SumAdd baselines
+
+The remaining persistent baselines are SumAdd-only and were not generalized. Their action class
+follows from which of the two mechanisms above they implement, read from source at this commit.
+
+| Structure | Source evidence | Mechanism | Action class |
+| --- | --- | --- | --- |
+| `FullCopyPersistentSegmentTree` | `src/full_copy_persistent_segment_tree.cpp`: nodes hold two children and a sum, no tag; every update copies all `2n − 1` nodes and adds the delta at the leaves inside the range | point materialization with a complete copy | any valid policy (Theorem 9.8) |
+| `BufferedPathCopyingSegmentTree` | `src/buffered_path_copying_segment_tree.cpp`, `update`: full coverage calls `modify(node, version, value * length, value)`, composing the delta into the node's version-stamped `lazy`; partial coverage leaves the node's `lazy` untouched or copies it with `latest.lazy`; `query` accumulates `inheritedLazy + current.lazy` outermost first | retained tags, read through the version filter | same as the subject: correct iff the induced actions commute (Theorems 9.4, 9.5); the history of section 9.5 is a counterexample |
+| `FatNodePersistentSegmentTree` | `src/fat_node_persistent_segment_tree.cpp`, `update`: full coverage does `next.lazy += value`; partial coverage recomputes `left + right + next.lazy * length` with `next.lazy` retained; `query` accumulates `inheritedLazy + current.lazy` | retained tags, stored as version-stamped node states | same as the subject |
+| `CheckpointingSegmentTree` | `capability-taxonomy.md` section 5 | log projection by overlap length | SumAdd and separately proved query-projectable policies only; outside this section |
+
+The buffered and fat-node placements satisfy Lemma 9.1 with the tag read at version `v`, so their
+represented values are the tree-order values of Lemma 9.2 and the two theorems transfer without
+new proof. No generic version of these structures is claimed or provided.
+
+### 9.8 Copy safety
+
+**Corollary 9.9 (copy safety, prior work).** `RetainedTagPersistentTree` and
+`CopyOnPushPersistentTree` never write to a record reachable from a published root: an update only
+appends records and one root handle, and a failed update erases the records it appended
+(`detail::rollBack`) before rethrowing. Historical results are therefore unchanged by later
+operations. This is Lemma 2 and Lemma 5 restated for the templates, and it is path copying as in
+Sarnak and Tarjan (1986); nothing in this section changes or improves the persistence mechanism.
+The contribution of section 9 is the order analysis of what path copying computes when the copied
+node keeps its tag.
+
+### 9.9 Theorem-to-test map
+
+| Statement | Executable evidence (`tests/`) |
+| --- | --- |
+| Templates agree with the measured structures in arena size after every update and in every answer on the tested history | `policy_trees_test.cpp`: `RetainedTagSumAddMatchesPersistentLazySegmentTreeNodeForNode`, `CopyOnPushSumAddMatchesBenchAblationNodeForNode` |
+| Policy laws on tested domains | `policy_test.cpp`: `PolicyLaws.*` |
+| Lemma 9.2 tree order, commuting case | `policy_trees_test.cpp`: `TreeOrderEqualsChronologicalOrderForCommutingPolicies` |
+| Theorem 9.4 on SumAdd and MinAdd | `policy_trees_test.cpp`: `PersistentPolicyTreeTest/SumAddRetainedTag`, `MinAddRetainedTag`; `RetainedTagMinAddHandTrace` |
+| Theorem 9.5, section 9.5 witness | `policy_trees_test.cpp`: `AffineSumMinimalTraceSeparatesTreeOrderFromChronology` (reference model), `RetainedTagSubjectComputesTheTreeOrderOnTheWitnessTrace` (the subject with a falsified capability fact; Lemma 9.2 on the code, not correctness evidence); `policy_test.cpp`: `AffineSumDoesNotCommute` |
+| Production rejection of a noncommuting policy | `compile_fail/retained_tag_rejects_affine.cpp`, CTest `retained_tag_rejects_affine_compile_fail` |
+| Theorem 9.8 on the witness and on seeded AffineSum histories | `policy_trees_test.cpp`: `ArbitraryActionControlsReturnTheChronologicalAnswerOnTheWitnessTrace`, `PersistentPolicyTreeTest/AffineSumCopyOnPush`, `AffineSumPointMaterialized`, `PushedLazyTreeAgreesWithOracleForEveryPolicy` |
+| Corollary 9.9 for the templates | `policy_trees_test.cpp`: `FailedUpdatesPublishNothing`, `GenericTypesKeepTheSharedValidationContract` |
+
+Tests validate these implementations on the tested domains and seeds. The theorems are the
+argument; the tests are the check that the argument is about the code that runs.
+
+### 9.10 Review record
+
+To be completed by a reader who did not implement `policy_trees.hpp` or this section. A
+repository author may prepare the record but may not self-attest it.
+
+Adversarial pre-review, 30 August 2026, by an automated reviewer that did not write the code or
+this section: no blocking finding; three should-fix items (execute the witness trace on the subject
+itself, correct the full-copy source description, replace "record for record" by the agreement
+actually tested) and ten wording or precision items, all applied in this revision. This pre-review
+does not satisfy the independence requirement below.
+
+| Field | Review record |
+| --- | --- |
+| Reviewer name | Pending |
+| Independence basis | Pending |
+| Material reviewed | Section 9, `include/valseg/policy_trees.hpp`, `tests/policy_trees_test.cpp`, `tests/compile_fail/` |
+| Checked line by line | Quantifiers of Theorems 9.4 and 9.5; reachability set `R`; composition direction in Lemmas 9.1 and 9.2; the three assumptions of section 9.4; the witness arithmetic of section 9.5; invariant (C) of Theorem 9.8 |
+| Decision | Pending |
+| Required changes and disposition | Pending |
+| Date | Pending |
