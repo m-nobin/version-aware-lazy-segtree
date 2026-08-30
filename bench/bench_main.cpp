@@ -524,20 +524,20 @@ void printList() {
  * exercising every code path in it.
  */
 Workload shrink(const Workload& workload) {
-  Workload small = workload;
-  small.sizes = {256};
-  small.operations = workload.operations == 0 ? 0 : 400;
-  small.queryTail = workload.queryTail == 0 ? 0 : 100;
-  for (double& variant : small.variants) {
-    if (small.axis == VariantAxis::UpdateBudget) {
+  Workload shrunk = workload;
+  shrunk.sizes = {256};
+  shrunk.operations = workload.operations == 0 ? 0 : 400;
+  shrunk.queryTail = workload.queryTail == 0 ? 0 : 100;
+  for (double& variant : shrunk.variants) {
+    if (shrunk.axis == VariantAxis::UpdateBudget) {
       variant = std::min(variant, 300.0);
-    } else if (small.axis == VariantAxis::RangeWidth) {
+    } else if (shrunk.axis == VariantAxis::RangeWidth) {
       variant = std::min(variant, 256.0);
     }
   }
-  small.variants.erase(std::unique(small.variants.begin(), small.variants.end()),
-                       small.variants.end());
-  return small;
+  shrunk.variants.erase(std::unique(shrunk.variants.begin(), shrunk.variants.end()),
+                        shrunk.variants.end());
+  return shrunk;
 }
 
 /**
