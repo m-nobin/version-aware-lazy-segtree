@@ -40,7 +40,7 @@ static_assert(PointMaterializedPersistentTree<Affine>::kRecordBytes ==
               2 * I + sizeof(std::uint64_t));
 
 TEST(RecordLayout, DocumentedTotalsHoldOnSixtyFourBitTargets) {
-  if (sizeof(std::size_t) != 8) {
+  if constexpr (sizeof(std::size_t) != 8) {
     GTEST_SKIP() << "documented totals assume 8-byte indices";
   }
   EXPECT_EQ(RetainedTagPersistentTree<SumAddPolicy>::kRecordBytes, 32u);
