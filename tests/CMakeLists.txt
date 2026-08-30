@@ -84,6 +84,8 @@ add_valseg_test(policy_test policy_test.cpp)
 add_valseg_test(policy_trees_test policy_trees_test.cpp)
 add_valseg_test(frontier_test frontier_test.cpp)
 add_valseg_test(record_layout_test record_layout_test.cpp)
+add_valseg_test(structural_counts_test structural_counts_test.cpp)
+target_include_directories(structural_counts_test PRIVATE ${PROJECT_SOURCE_DIR}/bench)
 
 # ---------------------------------------------------------------------------
 # Compile-fail test: the tag-retaining subject must reject a policy whose

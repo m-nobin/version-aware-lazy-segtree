@@ -9,12 +9,18 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 > **Current status**
 > Route B Phase 1 (evidence and model lock) is complete: both pull requests are merged and the
 > independent reader's sign-off is recorded in the claim-evidence matrix. Phase 2 (theorems,
-> frontier identities and the cost model) is complete pending this pull request: the
+> frontier identities and the cost model) passed Gate G2: the
 > observational commutativity boundary ([docs/proof.md](docs/proof.md) section 9) and the
 > frontier identities (section 10) are merged and independently reviewed; the lower-bound
-> attempt of section 10 found a counterexample, so no optimality claim is made and the plan's
-> fallback title is selected at Gate G2. The physical and predictive cost model is specified in
-> [docs/research/cost-model.md](docs/research/cost-model.md) and independently reviewed. The
+> attempt of section 10 found a counterexample, so no optimality claim is made and the adopted
+> paper title is:
+>
+> **Partial Persistence Strategies for In-Memory Segment Trees under Additive Range Updates:
+> Structural Space Characterizations and a Controlled Space–Time Study**
+>
+> The physical and predictive cost model is specified in
+> [docs/research/cost-model.md](docs/research/cost-model.md), including stream-group holdout
+> separation and a hashable two-stage fit/evaluate artifact. The
 > Gate G1 record is section 9 of the
 > [claim-evidence matrix](docs/research/claim-evidence-matrix.md); the Gate G2 exit record,
 > phase charters and exit reviews are working documents kept outside the repository.

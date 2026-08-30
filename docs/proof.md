@@ -986,8 +986,9 @@ programme, and none is proposed.
 **Consequences.**
 
 1. The subject is not allocation-optimal in `R`. The claim "tag retention is frontier-optimal in
-   model `R`" is withdrawn, and the plan's fallback applies: section 10 reports exact
-   characterizations, not optimality, and the word *optimality* is removed from every claim.
+   model `R`" is withdrawn, and the adopted title's scope applies: section 10 reports exact
+   structural characterizations, not optimality, and the word *optimality* is removed from every
+   claim.
 2. `|Partial(u)|` is a natural next candidate for a lower bound, but `R` as fixed permits `O(1)`
    record state that carries an action together with an interval, and with such state a single
    update can be absorbed into one new root record; a bound then needs an amortized argument

@@ -4,6 +4,7 @@ Checks: >-
   clang-analyzer-*,
   bugprone-*,
   -bugprone-easily-swappable-parameters,
+  -bugprone-random-generator-seed,
   performance-*,
   portability-*
 WarningsAsErrors: '*'

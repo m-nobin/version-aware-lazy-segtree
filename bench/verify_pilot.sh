@@ -30,6 +30,9 @@ fi
   shasum -a 256 --status -c raw.sha256
 )
 
+uv run --frozen --project "$root/bench/analysis" \
+  python -m unittest discover -s "$root/bench/analysis/tests" -v
+
 uv run --frozen --project "$root/bench/analysis" "$root/bench/analysis/report.py"
 
 for artifact in \

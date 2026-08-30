@@ -18,12 +18,10 @@
 #include <sys/qos.h>
 #endif
 
-#include <valseg/frontier.hpp>
-#include <valseg/policy.hpp>
-
 #include "adapters.hpp"
 #include "allocation_counter.hpp"
 #include "process_memory.hpp"
+#include "structural_counts.hpp"
 #include "workloads.hpp"
 
 namespace valseg::bench {
@@ -657,64 +655,6 @@ struct Job {
 };
 
 /**
- * Machine-independent structural counts of one operation stream, from the
- * executable frontier definitions rather than from any structure.
- *
- * Every count is a sum over the stream: F over non-zero updates (the records
- * the tag-retaining subject appends), P over the same updates in the
- * copy-on-push tag model (the subject and the ablation differ by 2P), N over
- * non-zero updates (tagless path copying), F over queries (the records a
- * query reads), and the log entries a checkpoint-plus-log query at the given
- * interval replays. These are the candidate predictors of
- * the cost model in docs/research/cost-model.md.
- */
-struct StructuralCounts {
-  std::size_t updates = 0;
-  std::size_t nonZeroUpdates = 0;
-  std::size_t queries = 0;
-  std::size_t updateVisits = 0;
-  std::size_t pushes = 0;
-  std::size_t intersecting = 0;
-  std::size_t queryVisits = 0;
-  std::size_t replayEntries = 0;
-};
-
-StructuralCounts structuralCounts(const std::vector<Operation>& stream, std::size_t size,
-                                  std::size_t interval) {
-  StructuralCounts counts;
-  PushCountingModel<SumAddPolicy> pushes(size);
-  for (const Operation& op : stream) {
-    if (op.isUpdate) {
-      ++counts.updates;
-      if (op.delta == 0) {
-        continue;
-      }
-      ++counts.nonZeroUpdates;
-      const FrontierCounts frontier = frontierCounts(size, op.left, op.right);
-      counts.updateVisits += frontier.visited();
-      counts.pushes += pushes.apply(op.left, op.right, op.delta);
-      // N by Proposition 10.8, in O(log n); intersectingNodes enumerates the
-      // range and is the definition, not the way to count a million-element
-      // stream.
-      counts.intersecting +=
-          frontier.partial + 2 * (op.right - op.left + 1) - frontier.decomposition;
-    } else {
-      ++counts.queries;
-      // Records a query reads: the visited set F. The recursion is also
-      // entered at the disjoint children of partial nodes, but reads nothing
-      // there, so those invocations are not counted.
-      counts.queryVisits += frontierCounts(size, op.left, op.right).visited();
-      // The log holds every update; a checkpoint sits at every multiple of
-      // the interval, so a query at version v replays v mod interval entries.
-      // A query at the latest version reads the live tree and replays
-      // nothing; no frozen workload reads the latest version.
-      counts.replayEntries += interval == 0 ? op.version : op.version % interval;
-    }
-  }
-  return counts;
-}
-
-/**
  * Write structural_<tag>-W*.csv: one row per (workload, n, variant, seed)
  * for the seeds the timing campaign records under the same options, so the
  * rows join the runs CSV on those columns. No structure is built and nothing
@@ -736,8 +676,10 @@ int runStructural(const Options& options) {
     if (!out) {
       fail("cannot write CSV into " + options.outDir + " (does it exist?)");
     }
-    out << "workload,n,axis,variant,seed,k,updates,nonzero_updates,queries,"
-           "sum_update_visits,sum_pushes,sum_intersecting,sum_query_visits,sum_replay_entries\n";
+    out << "workload,n,axis,variant,seed,k,stream_fingerprint,updates,nonzero_updates,queries,"
+           "sum_update_visits,sum_checkpoint_update_visits,sum_pushes,sum_intersecting,"
+           "sum_query_visits,sum_replay_entries,sum_query_version_distance,"
+           "full_coverage_updates,full_coverage_queries,latest_version_queries\n";
     for (const std::size_t size : workload.sizes) {
       for (std::size_t attempt = options.warmup; attempt < options.warmup + options.trials;
            ++attempt) {
@@ -750,14 +692,17 @@ int runStructural(const Options& options) {
           }
           const StructuralCounts counts = structuralCounts(stream, size, interval);
           out << workload.id << ',' << size << ',' << axisName(workload.axis) << ','
-              << std::to_string(variant) << ',' << seed << ',' << interval << ',' << counts.updates
+              << std::to_string(variant) << ',' << seed << ',' << interval << ','
+              << fingerprintText(streamFingerprint(stream, size, seed)) << ',' << counts.updates
               << ',' << counts.nonZeroUpdates << ',' << counts.queries << ',' << counts.updateVisits
-              << ',' << counts.pushes << ',' << counts.intersecting << ',' << counts.queryVisits
-              << ',' << counts.replayEntries << '\n';
+              << ',' << counts.checkpointUpdateVisits << ',' << counts.pushes << ','
+              << counts.intersecting << ',' << counts.queryVisits << ',' << counts.replayEntries
+              << ',' << counts.queryVersionDistance << ',' << counts.fullCoverageUpdates << ','
+              << counts.fullCoverageQueries << ',' << counts.latestVersionQueries << '\n';
         }
       }
     }
-    std::cout << "structural " << workload.id << std::endl;
+    std::cout << "structural " << workload.id << '\n';
   }
   return 0;
 }
@@ -952,7 +897,7 @@ int run(int argc, char** argv) {
         }
       }
     }
-    std::cout << "done " << workload.id << std::endl;
+    std::cout << "done " << workload.id << '\n';
   }
 
   if (mismatches > 0) {
