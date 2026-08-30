@@ -132,6 +132,10 @@ private:
     ValueType lazy;
   };
 
+  // The same 32-byte layout as PersistentLazySegmentTree::Node, on purpose.
+  static_assert(sizeof(std::size_t) != 8 || sizeof(Node) == 32,
+                "CopyOnPushSegmentTree::Node is documented as 32 bytes on 64-bit targets.");
+
   static constexpr std::size_t noNode = static_cast<std::size_t>(-1);
 
   std::vector<Node> nodes;
@@ -162,8 +166,8 @@ private:
    */
   std::size_t pushInto(std::size_t source, ValueType tag, ValueType length) {
     const Node child = nodes[source];
-    nodes.push_back(Node{child.leftChild, child.rightChild, child.sum + tag * length,
-                         child.lazy + tag});
+    nodes.push_back(
+        Node{child.leftChild, child.rightChild, child.sum + tag * length, child.lazy + tag});
     return nodes.size() - 1;
   }
 
