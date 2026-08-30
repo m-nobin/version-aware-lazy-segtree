@@ -53,12 +53,12 @@ enum class VariantAxis {
 /**
  * One frozen workload.
  *
- * The eleven instances live in workloads() and mirror the specification
+ * The twelve instances live in workloads() and mirror the specification
  * frozen on issue #10. Nothing here is tuned per structure: a workload
  * produces one operation stream that every structure replays verbatim.
  */
 struct Workload {
-  std::string id;      ///< "W1" ... "W11"
+  std::string id;      ///< "W1" ... "W12"
   std::string summary; ///< one line, printed by --list
   std::vector<std::size_t> sizes;
   std::size_t operations;   ///< updates plus queries; 0 when axis is UpdateBudget
@@ -88,9 +88,9 @@ struct Operation {
 };
 
 /**
- * @brief The eleven frozen workloads, in order.
+ * @brief The twelve frozen workloads, in order.
  *
- * @return W1 through W11.
+ * @return W1 through W12.
  */
 const std::vector<Workload>& workloads();
 

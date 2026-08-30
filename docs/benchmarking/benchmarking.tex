@@ -1,0 +1,476 @@
+\documentclass[11pt,a4paper]{article}
+\input{preamble}
+
+\newcommand{\resultfigures}{../../bench/results/figures/}
+\newcommand{\resulttables}{../../bench/results/tables/}
+\graphicspath{{../../bench/results/figures/}}
+\input{../../bench/results/tables/facts}
+
+\title{\bfseries An Experimental Evaluation of Persistence Strategies\\[2pt]
+for Range-Add, Range-Sum Segment Trees\\[4pt]
+{\large Exploratory pilot --- not a confirmatory study}}
+\author{Version-Aware Lazy Segment Tree project}
+\date{Generated from the exploratory pilot recorded in \texttt{bench/results/}}
+
+\begin{document}
+\maketitle
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\textbf{Status.}
+This report describes an \emph{exploratory pilot}: one machine, one primary
+compiler and allocator, run before any analysis protocol was registered. Its
+purpose is to find harness defects, choose estimands and precision targets,
+propose hypotheses and size a later confirmatory campaign. Nothing in it is a
+confirmatory result, and none of its measurements will be pooled with, or
+substituted for, the registered confirmatory campaign.}}
+\medskip
+
+% ===========================================================================
+\section{Introduction}
+
+A partially persistent segment tree keeps every version it has ever published
+readable. This report measures \Fact{structureCount} ways of doing that for one
+problem --- range additions on the newest version, range-sum queries against any
+version --- and asks which is cheapest, and at what size the answer changes.
+
+The design under study copies a path per update, as path copying always does, but
+leaves the lazy tag on the copied node instead of pushing it into the children the
+push would have to copy. Everything else is held fixed against a baseline
+(\emph{copy-on-push}) that differs in that one decision alone, so the gap between
+them is attributable to the decision rather than to the implementation.
+
+\paragraph{What the campaign found.}
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+\item \textbf{Half the nodes.} \Fact{oursNodesPerUpdate} nodes stored per version
+  against copy-on-push's \Fact{pushNodesPerUpdate} --- \Fact{pushNodeRatio}$\times$
+  fewer, at \Fact{boundUsedShare}\% of a proved bound of \Fact{provedBound}. This is
+  a count, so no machine can change it.
+\item \textbf{Cheaper on both operations.} \Fact{updatecopyonpushMedian} on updates
+  and \Fact{querycopyonpushMedian} on queries at the median cell; cheaper than every
+  persistent rival in \Fact{rivalWins} of \Fact{rivalComparisons} comparisons, and in
+  all \Fact{updatefatnodeCells} update comparisons against fat nodes and buffered
+  slots.
+\item \textbf{Flat in update width.} From one element to
+  \Fact{widthPlateauTop} elements the update cost stays inside
+  \Fact{widthPlateauSpread}$\times$; the widest update of all is the cheapest, at
+  \Fact{widthWholeArray}\,ns.
+\item \textbf{Cheapest at scale.} At one million elements it is the cheapest
+  persistent structure on updates and on queries alike.
+\item \textbf{Smallest memory.} \Fact{oursMemory}\,MiB where the closest competitor
+  on time holds \Fact{memorycheckpointing}\,MiB.
+\end{itemize}
+
+Every persistent structure answered every query identically in every cell, so the
+timing campaign doubles as a correctness campaign.
+
+\begin{table}[H]
+\centering
+\caption{The structures. Bounds are per operation on $n$ elements after $U$
+updates; $K$ is the checkpoint interval. The last keeps no history and is a floor,
+not a competitor.}
+\label{tab:structures}
+\small
+\begin{tabular}{lp{0.40\linewidth}ll}
+\toprule
+Name in the figures & Strategy & Update & Query \\
+\midrule
+This work & Path copying, lazy tag left in place on the copied node & $O(\log n)$ & $O(\log n)$ \\
+Copy-on-push & Path copying, lazy tag pushed into freshly copied children & $O(\log n)$ & $O(\log n)$ \\
+No lazy tags & Path copying to every element the update touches & $\Theta(k + \log n)$ & $O(\log n)$ \\
+Full copy per version & A complete new tree for every version & $O(n)$ & $O(\log n)$ \\
+Checkpoint and replay & Update log, full snapshot every $K$ versions & $O(\log n + n/K)$ & $O(\log n + K)$ \\
+Buffered node slots & Two version-tagged slots per node, copy on overflow & $O(\log n)$ & $O(\log n)$ \\
+Fat nodes & Several versioned states per node, copy on overflow & $O(\log n)$ & $O(\log n)$ \\
+No history kept & Ordinary lazy segment tree, latest state only & $O(\log n)$ & $O(\log n)$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ===========================================================================
+\section{Setup}
+
+\Fact{workloadCount} workloads, \Fact{structureCount} structures,
+\Fact{totalCells} measurement cells, \Fact{totalTrials} recorded trials,
+\Fact{totalOperations} operations. Each workload varies at most one property, so a
+curve has one cause, and every structure replays a byte-identical stream.
+
+\begin{table}[H]
+\centering
+\caption{The workloads.}
+\label{tab:workloads}
+\scriptsize
+\fitwidth{\input{../../bench/results/tables/workloads}}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Everything a replication would have to match. The full procedure is in
+\texttt{bench/README.md}.}
+\label{tab:system}
+\small
+\fitwidth{\input{../../bench/results/tables/system}}
+\end{table}
+
+\paragraph{How the numbers are formed.}
+The statistic is the median over \Fact{trialsPerCell} trials, each with its own
+seed, with a percentile bootstrap interval from $10\,000$ resamples. Comparisons
+are paired on the trial index, because every structure replays the same stream in
+the same trial, and every reported ratio is the median of the per-trial ratios.
+Significance is the Wilcoxon signed-rank test on the paired differences. The
+\Fact{comparisonsTotal} comparisons form two correction families --- every
+cell-by-baseline comparison for updates, and the same for queries --- and each
+family is corrected separately by Benjamini--Hochberg at a 5\%
+false-discovery rate.\footnote{Not Holm: the exact signed-rank test on eleven pairs
+cannot report $p$ below $2^{-10} = \Fact{minWilcoxonP}$ however large the effect, so
+family-wise control over several hundred comparisons would reject nothing at all.
+Holm-adjusted values are computed and kept beside the reported ones in
+\texttt{bench/results/summary/comparisons.csv}.}
+Reported ratio bounds are the observed 2.5/97.5 percentiles of the per-trial
+ratios, not confidence intervals. No outliers are removed anywhere.
+
+% ===========================================================================
+\section{Results}
+
+\subsection{Scaling with array size}
+\label{sec:scaling}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{scaling-update}
+\caption{Time to publish one new version.}
+\label{fig:scaling-update}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{scaling-query}
+\caption{Time to answer one historical range query, same runs.}
+\label{fig:scaling-query}
+\end{figure}
+
+At \Fact{headlineSize} elements this work publishes a version in
+\Fact{oursUpdate}\,ns and answers a historical query in \Fact{oursQuery}\,ns; at one
+million elements, \Fact{oursUpdateBig}\,ns and \Fact{oursQueryBig}\,ns. Publishing
+becomes \Fact{oursGrowth}$\times$ more expensive while the array grows a
+thousandfold. The tree's height only doubles over that span and the non-persistent
+reference grows by \Fact{controlGrowth}$\times$, so most of the difference is the
+memory hierarchy, not the algorithm: the arena outgrows each cache level in turn.
+
+\begin{finding}
+Every structure that copies nodes tracks the same shape and differs by a constant.
+Checkpoint-and-replay does not: its curve bends upward and crosses this work
+between one hundred thousand and one million elements on both operations.
+\end{finding}
+
+\begin{table}[H]
+\centering
+\caption{Every structure at \Fact{headlineSize} elements, balanced workload. CV is
+the coefficient of variation across trials.}
+\label{tab:headline}
+\footnotesize
+\fitwidth{\input{../../bench/results/tables/headline}}
+\end{table}
+
+\subsection{What the deferred tag buys}
+\label{sec:tags}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{range-width}
+\caption{Update cost against the number of elements one update covers.}
+\label{fig:width}
+\end{figure}
+
+This experiment has a control at each end. At width one the tagless baseline does
+exactly what this work does and costs \Fact{width1NoTags} as much --- marginally
+less, carrying no tag arithmetic. As the width grows it must copy a path to every
+element it touches: by \Fact{widthFullNoTagsAt} elements it costs
+\Fact{widthFullNoTags} as much, and at \Fact{widthNoTagsRanOutAt} elements it stops
+being measurable at all.
+
+This work is flat over the same span --- \Fact{widthPlateauLow}\,ns to
+\Fact{widthPlateauHigh}\,ns across four orders of magnitude --- because a fully
+covered node absorbs the delta into a tag and its children are never visited. An
+update covering the whole array is fully covered at the root, copies one node, and
+costs \Fact{widthWholeArray}\,ns. \emph{The widest update in the sweep is by a wide
+margin the cheapest.} The tag does not shrink the constant; it changes what the
+update cost depends on.
+
+Copy-on-push has the same shape here, as it must, since it also stops at a fully
+covered node. The difference between the two policies is not visible on this axis.
+It is visible in space.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{copies-per-update}
+\caption{Nodes stored per published version --- a count, not a timing, so it does
+not depend on the machine and can be checked against a proved bound.}
+\label{fig:copies}
+\end{figure}
+
+\begin{finding}
+Holding everything else identical, pushing tags into copied children costs
+\Fact{pushNodeRatio}$\times$ the nodes per version and
+\Fact{updatecopyonpushMedian} the update time at the median cell, over
+\Fact{updatecopyonpushCells} comparable cells, of which this work is cheaper in
+\Fact{updatecopyonpushWins}.
+\end{finding}
+
+\begin{table}[H]
+\centering
+\caption{Nodes stored per published version, by array size. The last row is the
+worst case proved for this work, $4(h+1)$ for a tree of height $h$.}
+\label{tab:space}
+\small
+\fitwidth{\input{../../bench/results/tables/space}}
+\end{table}
+
+\subsection{Depth of history, and shape of traffic}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{versions}
+\caption{Cost against the number of versions retained, at a fixed array size.}
+\label{fig:versions}
+\end{figure}
+
+This is the axis partial persistence exists for, and the one a structure has to be
+flat on to be worth building. Path copying is flat because a version is a root and
+reaching it costs nothing extra; the residual drift is the arena outgrowing cache.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{traffic-sweeps}
+\caption{Four properties of the traffic, each varied on its own axis.}
+\label{fig:sweeps}
+\end{figure}
+
+Reads concentrated on recent versions get cheaper for everyone, since those
+versions are still in cache. Updates that change nothing are answered by
+republishing the existing root, so cost falls as their share rises. Updates
+concentrated in one region get cheaper for this work --- the copied paths overlap
+and stay resident --- while copy-on-push climbs steeply, because a hot region is
+exactly where tags accumulate and every accumulated tag is a push it pays for.
+
+The fourth panel was included expecting it to be hostile to checkpoint-and-replay,
+and it is not; reporting that is the point of including it. Replay always starts at
+the nearest snapshot at or before the requested version, so age costs it nothing.
+What the panel does show is that concentrating reads anywhere makes them cheaper
+for every structure. Confined to the oldest \Fact{auditOldestShare}\% of history
+this work answers in \Fact{auditOldestOurs}\,ns and checkpoint-and-replay costs
+\Fact{auditOldestcheckpointing} that.
+
+\subsection{Memory, and what it makes impossible}
+\label{sec:feasibility}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{scaling-memory}
+\caption{Memory retained after two hundred thousand operations.}
+\label{fig:memory}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{feasibility}
+\caption{How much of the campaign each structure could run inside the memory limit.}
+\label{fig:feasibility}
+\end{figure}
+
+A ceiling is a result, not a missing row. Full copy per version finished
+\Fact{finishedfullcopy} of \Fact{workloadsTotal} workloads and the tagless baseline
+\Fact{finishedpointonly}. Checkpoint-and-replay finished
+\Fact{finishedcheckpointing}: its snapshots grow as $nU/K$ rather than with what
+could have been shared, so at \Fact{headlineSize} elements it already holds
+\Fact{memorycheckpointing}\,MiB against this work's \Fact{oursMemory}\,MiB. This
+work, copy-on-push, buffered slots and fat nodes finished all twelve.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{space-time}
+\caption{Speed against memory. Bottom left is better on both.}
+\label{fig:pareto}
+\end{figure}
+
+\subsection{The slowest operations, not the typical one}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{latency-tail}
+\caption{The distribution of a single update, median to slowest observed.}
+\label{fig:tail}
+\end{figure}
+
+At \Fact{headlineSize} elements the median single update costs
+\Fact{oursTailP50}\,ns and the slowest one in a hundred \Fact{oursTailP99}\,ns. The
+extreme values --- up to \Fact{oursTailMax}\,ns --- are the \texttt{std::vector}
+arena doubling and copying itself, not the persistence strategy; a structure that
+retains more nodes pays that more often and at greater size.
+
+\subsection{Head to head}
+\label{sec:headtohead}
+
+\begin{table}[H]
+\centering
+\caption{Every comparison in the campaign, one row per baseline. ``Cells'' counts
+those where both structures completed every paired trial; ``separated'' counts
+those surviving Benjamini--Hochberg correction at a 5\% false-discovery rate;
+``unanimous'' counts those where every paired trial agreed.}
+\label{tab:headtohead}
+\small
+\fitwidth{\input{../../bench/results/tables/head-to-head}}
+\end{table}
+
+Across \Fact{rivalComparisons} comparisons against another persistent structure,
+this work is cheaper in \Fact{rivalWins}. It wins every one of the
+\Fact{updatefatnodeCells} update comparisons against fat nodes and against buffered
+node slots, by a median of \Fact{updatefatnodeMedian} and
+\Fact{updatebufferedMedian}, and never loses either.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{speedup-matrix}
+\caption{The whole comparison, cell by cell.}
+\label{fig:matrix}
+\end{figure}
+
+% ===========================================================================
+\section{Against checkpoint-and-replay: which to reach for}
+\label{sec:checkpoint}
+
+Checkpoint-and-replay is the only baseline that beats this work anywhere it
+matters, so the boundary between them is worth drawing precisely. It reads the
+nearest snapshot at or before the requested version and, for each logged update
+between them, adds the overlap of that update's range with the queried range times
+its delta --- a few arithmetic operations on contiguous memory rather than a tree
+descent. At small $n$ that is genuinely hard to beat.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{checkpoint-tradeoff}
+\caption{Checkpoint-and-replay swept across its checkpoint interval, against this
+work, which has no such parameter. It is run at $K = \sqrt{n}$ everywhere else in
+this report --- the value balancing its $O(\log n + n/K)$ update against its
+$O(\log n + K)$ query, chosen from the bound rather than by hand.}
+\label{fig:checkpoint}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\caption{Where each strategy wins.}
+\label{tab:versus}
+\small
+\begin{tabular}{p{0.30\linewidth}p{0.29\linewidth}p{0.29\linewidth}}
+\toprule
+Condition & Checkpoint and replay & This work \\
+\midrule
+Array size & cheaper up to $\approx10^5$ elements & cheaper at $10^6$, by
+\Fact{marginAtMillionUpdate}$\times$ on updates and
+\Fact{marginAtMillionQuery}$\times$ on queries \\
+Memory & \Fact{memorycheckpointing}\,MiB at \Fact{headlineSize} elements &
+\Fact{oursMemory}\,MiB --- \Fact{memoryRatiocheckpointing}$\times$ less \\
+Reaching the whole campaign & finished \Fact{finishedcheckpointing} of
+\Fact{workloadsTotal} workloads & finished all \Fact{workloadsTotal} \\
+Tuning & one knob; outside a narrow band of $K$ one operation collapses
+(Figure~\ref{fig:checkpoint}) & no equivalent knob \\
+Other aggregates & advantage vanishes: projecting an update onto a query range
+needs both to be linear & indifferent to which aggregate is stored \\
+Handles to past versions & cannot give one; it reconstructs on demand & a version
+is a root, shareable and walkable \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{versus-checkpoint}
+\caption{Every comparison against checkpoint-and-replay, grouped by the condition
+that decides it. Each condition is a property of the workload definition, so no
+cell was placed by looking at its result.}
+\label{fig:versus}
+\end{figure}
+
+Figure~\ref{fig:versus} shows that the two do not trade cells at random. This work
+takes every one of the five cells where an update covers the whole array --- by up
+to $26.6\times$ on updates and $18.2\times$ on queries, because such an update copies
+one node here and forces a full snapshot there. It takes every update cell at one
+million elements, and every update cell once a hundred thousand versions have
+accumulated, by a median of $3.15\times$. On queries it takes every cell of
+query-heavy traffic and every cell of skewed or historical reads --- the audit case
+--- because checkpointing pays its replay again on each query while a version here
+is just a root.
+
+Checkpointing's advantage lives in one place. It wins
+\Fact{lossesWorstCount} cells in the whole campaign, and 39 of them are small
+arrays with narrow updates --- 39 of the 42 comparisons in that group --- where
+its projection is a handful of cache-resident additions. It needs all three
+conditions at once: a small array, a linear aggregate, and a well-chosen $K$.
+Break any one --- let the array grow, make the aggregate a minimum, or ask for a
+handle to an old version --- and this work is the better choice.
+
+% ===========================================================================
+\section{Trade-offs and limitations}
+
+\paragraph{What the design costs.}
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+\item \emph{The win is a constant factor.} Against copy-on-push both are
+  $O(\log n)$ per operation. The result is a factor of two in space and
+  \Fact{updatecopyonpushMedian} in time, not a better bound.
+\item \emph{History is not free.} Against a tree that retains nothing this work
+  pays a median of \Fact{persistenceCostMedian}$\times$ per update, over a range of
+  \Fact{persistenceCostRange}$\times$.
+\item \emph{Fat nodes and buffered slots store fewer nodes per version}
+  (Table~\ref{tab:space}); this work wins on time and on total memory, not on node
+  count.
+\item \emph{The tag is overhead when nothing is deferred.} At single-element
+  updates the tagless baseline is \Fact{width1NoTags} the cost.
+\item \emph{Documented payload is not what is paid.} A growing
+  \texttt{std::vector} holds up to twice its elements' bytes. At
+  \Fact{headlineSize} elements this work requests \Fact{allocOverheadOurs}$\times$
+  its documented payload at peak, and no persistent structure exceeds
+  \Fact{allocOverheadMax}$\times$. The space comparisons here use the documented
+  payload, which is the conservative choice: this work stores the fewest nodes and
+  so has the most to gain from the other measure.
+\item \emph{Scope.} Range add and range sum, updates to the newest version only.
+  Branching updates, full persistence and non-linear aggregates are out of scope.
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\caption{Checks on the measurement itself.}
+\label{tab:validity}
+\small
+\fitwidth{\input{../../bench/results/tables/validity}}
+\end{table}
+
+Every number here comes from one \Fact{machine} with one compiler, and every
+stream is synthetic. The node counts in Table~\ref{tab:space} and the asymptotic
+separations do not depend on the machine; the close constant-factor results do.
+
+The machine has a warm-up transient large enough to matter --- on an early
+configuration around $1.7\times$ on the first recorded trials, confined to updates
+and scaling with how much a structure allocates. It decays with elapsed load rather
+than with replay count, so the harness runs a fifteen-second duration-based warm-up
+before recording anything and discards three further trials per cell. That leaves a
+residual of \Fact{warmupResidual}$\times$ on the pooled first trial, this work
+varying by \Fact{oursMedianCV}\% across its trials, and no order effect on the
+medians (\Fact{orderEffect}\% across all eight positions). Pairing on the trial
+index cancels whatever remains.
+
+% ===========================================================================
+\section{Conclusion}
+
+Across \Fact{totalCells} cells and \Fact{totalTrials} trials, leaving a lazy tag on
+the copied node instead of pushing it into copied children is cheaper in both time
+and space, and the space result --- \Fact{pushNodeRatio}$\times$ fewer nodes per
+version --- is a count that no machine can change. Against the two in-node
+versioning strategies this work is cheaper on every update comparison in the
+campaign. Against strategies that do not share structure it is cheaper by
+\Fact{updatepointonlyMedian} and \Fact{updatefullcopyMedian} at the median and, more
+to the point, finishes problems they cannot start.
+
+Against checkpoint-and-replay it loses at small sizes and wins at large ones, and
+Table~\ref{tab:versus} says which to reach for. Path copying with a deferred tag is
+the choice whenever the array is large, the aggregate is not linear, or past
+versions must exist as objects rather than as answers.
+
+\end{document}

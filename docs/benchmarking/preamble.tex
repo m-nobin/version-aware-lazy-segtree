@@ -1,0 +1,42 @@
+% Shared preamble for the evaluation report.
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[english]{babel}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{array}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{longtable}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage[table]{xcolor}
+\usepackage{adjustbox}
+
+% Shrink a table only if it would otherwise run into the margin. A table that
+% fits keeps the document's type size; one that does not is scaled rather than
+% left overflowing.
+\newcommand{\fitwidth}[1]{\begin{adjustbox}{max width=\linewidth}#1\end{adjustbox}}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{ink}{HTML}{0B0B0B}
+\definecolor{inksoft}{HTML}{52514E}
+\definecolor{rule}{HTML}{DCDBD6}
+\definecolor{ours}{HTML}{2A78D6}
+
+\captionsetup{font=small,labelfont=bf,labelsep=period,skip=6pt}
+\captionsetup[table]{position=top,skip=4pt}
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.12}
+
+% A boxed statement of what a section establishes, set apart from the prose.
+\newenvironment{finding}
+  {\par\vspace{4pt}\noindent\begin{minipage}{\linewidth}%
+   \color{ink}\leftskip=10pt\rightskip=10pt\small\itshape
+   \vrule width 2pt height 0pt depth 0pt\hspace{-2pt}}
+  {\par\end{minipage}\vspace{6pt}\par}
+
+\newcommand{\ourwork}{\textcolor{ours}{\textbf{this work}}}

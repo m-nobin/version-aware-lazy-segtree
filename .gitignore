@@ -58,12 +58,12 @@ Desktop.ini
 *.tmp
 *.temp
 
-# Local benchmark data, analysis pipeline and generated report; kept out of
-# version control on purpose. Provenance lives beside the data in
-# bench/results/README.md.
-bench/analysis/
-bench/results/
-docs/benchmarking/
+# Local benchmark data and generated artifacts. Analysis and report sources,
+# the raw-data manifest and the pilot provenance record are versioned.
+bench/results/*
+!bench/results/README.md
+!bench/results/raw.sha256
+docs/benchmarking/*.pdf
 
 # LaTeX intermediates and rebuildable PDFs
 paper/main.pdf

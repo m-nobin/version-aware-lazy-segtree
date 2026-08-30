@@ -26,7 +26,7 @@ namespace valseg::bench {
  *
  * It lives under bench/ rather than include/valseg/ because it is a
  * measurement subject, not part of the library. Every campaign replays it
- * against the same cross-structure checksum as the six library structures,
+ * against the same cross-structure checksum as the seven library structures,
  * and the CTest smoke run does the same at n = 256.
  */
 class CopyOnPushSegmentTree {
