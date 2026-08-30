@@ -19,7 +19,7 @@
 namespace valseg::bench {
 
 /**
- * Adapters give the six persistent structures and the non-persistent control
+ * Adapters give the seven persistent structures and the non-persistent control
  * one shape the driver can replay an operation stream against. They are
  * templates, not virtual bases: the hot loop must not pay for dispatch it is
  * trying to measure.
@@ -34,7 +34,7 @@ namespace valseg::bench {
 /**
  * @brief Adapter for a structure with the (version, left, right) query shape.
  *
- * @tparam Tree One of the six persistent structures.
+ * @tparam Tree One of the seven persistent structures.
  */
 template <typename Tree> class PersistentAdapter {
 public:

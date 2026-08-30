@@ -7,7 +7,9 @@
 An Advanced Algorithms project exploring how range-add lazy propagation can be combined with partial persistence while preserving correct historical range-sum queries.
 
 > **Current status**
-> The repository is in active development.
+> Route B Phase 1 has passed every exit check, including the independent reader's sign-off
+> recorded in the claim-evidence matrix; the phase exits when its two pull requests merge. See
+> the [Phase 1 exit review](docs/research/phase-1-exit-review.md).
 
 ## Implemented components
 
@@ -100,11 +102,12 @@ include/valseg/             Public headers
 src/                        Library implementations
 tests/                      Deterministic and randomized differential GoogleTest suites
 bench/                      Benchmark harness and workloads
+bench/analysis/             Locked pilot analysis and figure/table generation
 .github/workflows/ci.yml    Cross-platform CI
 CMakeLists.txt              Build and tooling configuration
 CMakePresets.json           Developer, release, analysis, and CI presets
 docs/proof.md               Correctness proof and complexity analysis
-docs/research/              Claim-evidence matrix and research positioning
+docs/research/              Phase charter, exit review, claim matrix and capability model
 paper/                      Version-controlled manuscript source
 ```
 
@@ -112,9 +115,11 @@ paper/                      Version-controlled manuscript source
 
 `bench/` replays twelve workloads against every implemented persistence
 strategy; see [bench/README.md](bench/README.md). Measured campaign data, the
-analysis pipeline and the generated report are kept out of version control;
-the recorded campaign is an **exploratory pilot** (one machine, no registered
-protocol) whose provenance is recorded beside the local data.
+generated tables, figures and PDFs are kept out of version control; the
+analysis and report sources, raw checksum manifest and provenance record are
+versioned. The recorded campaign is an **exploratory pilot** (one machine, no
+registered protocol). With the preserved local data present,
+`bench/verify_pilot.sh` verifies checksums and rebuilds the complete report.
 
 ## Documentation
 

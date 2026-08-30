@@ -1,0 +1,4 @@
+# uv creates the environment here; it is reproducible from uv.lock and has no
+# business in the repository.
+.venv/
+__pycache__/

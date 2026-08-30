@@ -581,6 +581,15 @@ void writeEnvironment(const std::string& path, const Options& options,
   out << "\n";
 }
 
+void refuseExistingCampaignOutput(const std::vector<std::string>& paths) {
+  for (const std::string& path : paths) {
+    std::ifstream existing(path);
+    if (existing.good()) {
+      fail("refusing to overwrite " + path + "; choose a new --tag or --out-dir");
+    }
+  }
+}
+
 /**
  * Put the machine into steady state before anything is recorded.
  *
@@ -653,13 +662,19 @@ int run(int argc, char** argv) {
   const std::size_t capBytes = options.capMiB * 1024 * 1024;
   const std::string suffix = options.tag.empty() ? std::string() : "_" + options.tag;
 
-  std::ofstream runs(options.outDir + "/runs" + suffix + ".csv");
-  std::ofstream memory(options.outDir + "/memory" + suffix + ".csv");
+  const std::string runsPath = options.outDir + "/runs" + suffix + ".csv";
+  const std::string memoryPath = options.outDir + "/memory" + suffix + ".csv";
+  const std::string environmentPath = options.outDir + "/environment" + suffix + ".txt";
+  if (!options.smoke || options.outDirGiven) {
+    refuseExistingCampaignOutput({runsPath, memoryPath, environmentPath});
+  }
+
+  std::ofstream runs(runsPath);
+  std::ofstream memory(memoryPath);
   if (!runs || !memory) {
     fail("cannot write CSV into " + options.outDir + " (does it exist?)");
   }
-  writeEnvironment(options.outDir + "/environment" + suffix + ".txt", options, calibration,
-                   performanceCores, argc, argv);
+  writeEnvironment(environmentPath, options, calibration, performanceCores, argc, argv);
 
   runs << "workload,structure,n,axis,variant,k,seed,trial,exec_order,updates,queries,"
           "build_ns,build_nodes,update_ns,query_ns,batch_ns,"

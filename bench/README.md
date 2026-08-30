@@ -8,23 +8,36 @@ The campaign recorded under `bench/results/` is an **exploratory pilot**: one
 machine, one primary compiler and allocator, run before any analysis protocol
 was registered. It exists to find harness defects, choose estimands and size a
 later confirmatory campaign. It is not confirmatory evidence and is never
-pooled with confirmatory data. Campaign data, the analysis pipeline under
-`bench/analysis/` and the generated report are local and not version
-controlled; `bench/results/README.md`, kept beside the data, records the
-campaign's provenance.
+pooled with confirmatory data. Raw campaign data and generated artifacts under
+`bench/results/` are local and not version controlled. The analysis/report
+sources, raw checksum manifest and `bench/results/README.md` provenance record
+are version controlled.
 
-## Run it
+## Reproduce the preserved pilot
+
+With the locally preserved `bench/results/raw/` data present:
+
+```sh
+bench/verify_pilot.sh
+```
+
+This verifies all 96 raw-file checksums, rebuilds the locked analysis outputs,
+checks the 357-cell inventory and compiles the exploratory report. It does not
+rerun the measurements.
+
+## Run a new campaign
 
 ```sh
 cmake --preset release-verify
 cmake --build build/release-verify --target valseg_bench valseg_bench_alloc
-bench/run_campaign.sh timing 11
-bench/run_campaign.sh alloc 3
-uv run --project bench/analysis bench/analysis/report.py
-latexmk -pdf -cd docs/benchmarking/benchmarking.tex
+bench/run_campaign.sh timing 11 2026-08-30-machine-a
+bench/run_campaign.sh alloc 3 2026-08-30-machine-a
 ```
 
 Measure on the release build. A Debug build measures the debug allocator.
+The required campaign ID creates
+`bench/results/campaigns/<id>/raw/`. Existing output is never overwritten; use
+a new ID for a rerun. A confirmatory campaign must start from a clean commit.
 
 `run_campaign.sh` runs one process per workload rather than one for the whole
 matrix. The run stays restartable, partial results are usable, and
@@ -36,8 +49,8 @@ in the record instead of silently in the numbers.
 |---|---|---|
 | `--workload` | `all` | one of `W1` .. `W12` |
 | `--structure` | `all` | `lazy`, `persistent`, `copy-on-push`, `full-copy`, `point-only`, `checkpointing`, `buffered`, `fat-node` |
-| `--out-dir` | `bench/results/raw` | must already exist |
-| `--tag` | none | suffix for the output filenames, so runs do not overwrite each other |
+| `--out-dir` | `bench/results/raw` | must already exist; non-smoke output files must not already exist |
+| `--tag` | none | suffix for output filenames; the binary refuses a duplicate filename |
 | `--seed` | `20260818` | attempt *i* uses `seed + i` |
 | `--trials` | `5` | recorded trials per cell |
 | `--warmup` | `1` | trials run and discarded before recording |
@@ -113,7 +126,9 @@ prints them side by side.
 
   ```sh
   sudo cpupower frequency-set --governor performance
-  taskset -c 2 ./build/release-verify/bench/valseg_bench --out-dir bench/results/raw
+  mkdir -p bench/results/campaigns/2026-08-30-linux-a/raw
+  taskset -c 2 ./build/release-verify/bench/valseg_bench --workload W1 \
+    --out-dir bench/results/campaigns/2026-08-30-linux-a/raw --tag timing-W1
   ```
 - **The timer is priced, not assumed.** `--batch-trials` replays a cell with two
   clock reads in total, so the cost of timing every operation individually is
@@ -126,7 +141,7 @@ prints them side by side.
 
 ## Workloads
 
-W1-W7 are the set frozen on issue #10. W8-W11 add the axes the frozen set
+W1-W7 are the set frozen on issue #10. W8-W12 add the axes the frozen set
 holds fixed, and which no amount of re-reading W1-W7 can recover: how cost
 moves with the number of versions, and how it moves with skew.
 
@@ -199,10 +214,11 @@ what an implementer gets by taking a textbook lazy segment tree, whose update
 pushes before descending, and adding path copying without revisiting the tag
 invariant.
 
-With one variable free, the difference between the two is attributable. It has
-no separate unit test because it has something better: every campaign replays it
-against the same cross-structure checksum as the six library structures, and the
-CTest smoke run does the same at n = 256 across all twelve workloads.
+With one variable free, the difference between the two is attributable. A
+dedicated deterministic/randomized unit suite checks historical answers and
+the exact copy-on-push allocation event. Every campaign also replays it against
+the same cross-structure checksum as the six library structures, and the CTest
+smoke run does the same at n = 256 across all twelve workloads.
 
 Adding an implementation this repository did not write remains open, and is
 still one entry in `adapters.hpp` and one row in the `structures()` table.
@@ -252,7 +268,7 @@ marker it wears, `tables.py` emits LaTeX, and `report.py` produces every figure
 and table in one pass.
 
 ```sh
-uv run --project bench/analysis bench/analysis/report.py
+uv run --frozen --project bench/analysis bench/analysis/report.py
 ```
 
 It writes vector PDFs and PNGs to `results/figures/`, booktabs fragments to
@@ -263,7 +279,7 @@ drift from the data it describes — re-running the campaign updates the prose.
 
 ## What the numbers do and do not mean
 
-- `checksum` is the running hash of every query answer. All six persistent
+- `checksum` is the running hash of every query answer. All seven persistent
   structures must produce the same checksum for the same cell; the runner
   exits non-zero if they do not. The harness checks itself, which is why a
   timing run is also a correctness run.

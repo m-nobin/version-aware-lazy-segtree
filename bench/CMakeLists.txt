@@ -1,6 +1,6 @@
 # bench/CMakeLists.txt
 #
-# One executable, valseg_bench, that replays the frozen W1-W11 operation
+# One executable, valseg_bench, that replays the frozen W1-W12 operation
 # streams against every structure and writes raw CSV. It carries the same
 # warning, warnings-as-errors and clang-tidy settings as the library and the
 # tests, so a benchmark that would not survive review does not compile.
@@ -58,8 +58,8 @@ foreach(target valseg_bench valseg_bench_alloc)
   endif()
 endforeach()
 
-# The smoke run is the harness's own test: it replays all eleven workloads at
-# n = 256 against all seven structures and fails if the six persistent ones
+# The smoke run is the harness's own test: it replays all twelve workloads at
+# n = 256 against all eight structures and fails if the seven persistent ones
 # disagree on any answer. It runs in about a second, so it belongs in the same
 # CTest invocation as everything else rather than in a job of its own.
 if(BUILD_TESTING)

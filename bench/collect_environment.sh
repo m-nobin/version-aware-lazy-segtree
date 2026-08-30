@@ -6,6 +6,8 @@
 # usage: bench/collect_environment.sh > bench/results/raw/system.txt
 set -u
 
+root="$(cd "$(dirname "$0")/.." && pwd)"
+
 say() { printf '%s=%s\n' "$1" "$2"; }
 
 say collected_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -51,5 +53,5 @@ esac
 
 say compiler "$(${CXX:-c++} --version 2>/dev/null | head -1)"
 say cmake "$(cmake --version 2>/dev/null | head -1)"
-say git_commit "$(git rev-parse HEAD 2>/dev/null || echo untracked)"
-say git_dirty "$(test -n "$(git status --porcelain 2>/dev/null)" && echo yes || echo no)"
+say git_commit "$(git -C "$root" rev-parse HEAD 2>/dev/null || echo untracked)"
+say git_dirty "$(test -n "$(git -C "$root" status --porcelain 2>/dev/null)" && echo yes || echo no)"
