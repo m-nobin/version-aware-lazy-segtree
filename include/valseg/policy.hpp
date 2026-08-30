@@ -1,8 +1,10 @@
 #ifndef VALSEG_POLICY_HPP
 #define VALSEG_POLICY_HPP
 
+#include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <stdexcept>
 
 namespace valseg {
 
@@ -19,7 +21,8 @@ namespace valseg {
  *  - apply(action, aggregate, length): the action's effect on the aggregate
  *    of a segment of the given nonnegative length.
  *
- * A valid policy satisfies, for all valid aggregates and lengths:
+ * A valid policy satisfies, for all valid aggregates and lengths in its
+ * mathematical domain:
  *
  *  - combine is associative with identity aggregateIdentity();
  *  - compose is associative with identity actionIdentity();
@@ -31,9 +34,14 @@ namespace valseg {
  *
  * A valid aggregate for length len is one reachable as the aggregate of some
  * segment of len elements; in particular the only valid aggregate for length
- * zero is aggregateIdentity(). tests/policy_test.cpp checks every law
- * exhaustively over small domains for the three policies below. Those checks
- * validate these implementations, not the laws in general.
+ * zero is aggregateIdentity(). SumAddPolicy and MinAddPolicy model mathematical
+ * integers but use long long as their machine representation. They throw
+ * std::overflow_error before an exact mathematical result leaves that
+ * representation. Consequently, their law checks use admissible evaluations in
+ * which every intermediate result is representable. tests/policy_test.cpp checks
+ * every law exhaustively over small domains for the three policies below and
+ * separately checks the overflow boundary. Those checks validate these
+ * implementations, not the laws in general.
  *
  * Each policy carries two constexpr capability facts. They record what the
  * accompanying analysis in docs/research/capability-taxonomy.md claims for
@@ -41,9 +49,10 @@ namespace valseg {
  *
  *  - kInducedActionsCommute: for every length, the induced transformations
  *    x -> apply(f, x, len) commute pairwise over valid aggregates. This is
- *    the property the tag-retaining persistent tree needs, because it applies
- *    retained ancestor tags outermost-first, which reverses chronological
- *    order.
+ *    the property the tag-retaining persistent tree needs. A tag retained on
+ *    a node through a partial descent is older than any tag placed below it
+ *    by that descent, yet a query applies the ancestor's tag outside the
+ *    descendant's; the tree order does not record which tag is newer.
  *  - kCheckpointQueryProjectable: a logged update's contribution to a later
  *    range query can be computed from the action and the overlap length
  *    alone, without reconstructing intermediate state. This is the property
@@ -51,41 +60,90 @@ namespace valseg {
  */
 
 /**
- * @brief Two's-complement wraparound addition on 64-bit signed values.
- *
- * Signed overflow is undefined behaviour, so policy arithmetic goes through
- * unsigned arithmetic, which is defined for every input. The conversion back
- * is two's-complement on every supported compiler.
+ * @brief Exact signed addition with a defined representability failure.
  *
  * @param left  First addend.
  * @param right Second addend.
  *
- * @return left + right modulo 2^64, reinterpreted as signed.
+ * @return The exact sum when it is representable as long long.
+ *
+ * @throws std::overflow_error if the exact sum is not representable.
  */
-inline long long wrapAdd(long long left, long long right) {
-  return static_cast<long long>(static_cast<unsigned long long>(left) +
-                                static_cast<unsigned long long>(right));
+inline long long checkedAdd(long long left, long long right) {
+  const long long maximum = std::numeric_limits<long long>::max();
+  const long long minimum = std::numeric_limits<long long>::min();
+  if ((right > 0 && left > maximum - right) || (right < 0 && left < minimum - right)) {
+    throw std::overflow_error("policy addition is not representable");
+  }
+  return left + right;
 }
 
 /**
- * @brief Two's-complement wraparound multiplication on 64-bit signed values.
+ * @brief Exact signed multiplication with a defined representability failure.
  *
  * @param left  First factor.
  * @param right Second factor.
  *
- * @return left * right modulo 2^64, reinterpreted as signed.
+ * @return The exact product when it is representable as long long.
+ *
+ * @throws std::overflow_error if the exact product is not representable.
  */
-inline long long wrapMul(long long left, long long right) {
-  return static_cast<long long>(static_cast<unsigned long long>(left) *
-                                static_cast<unsigned long long>(right));
+inline long long checkedMultiply(long long left, long long right) {
+  const long long maximum = std::numeric_limits<long long>::max();
+  const long long minimum = std::numeric_limits<long long>::min();
+
+  if (left == 0 || right == 0) {
+    return 0;
+  }
+  if (left == -1) {
+    if (right == minimum) {
+      throw std::overflow_error("policy multiplication is not representable");
+    }
+    return -right;
+  }
+  if (right == -1) {
+    if (left == minimum) {
+      throw std::overflow_error("policy multiplication is not representable");
+    }
+    return -left;
+  }
+
+  const bool overflows = (left > 0 && right > 0 && left > maximum / right) ||
+                         (left > 0 && right < 0 && right < minimum / left) ||
+                         (left < 0 && right > 0 && left < minimum / right) ||
+                         (left < 0 && right < 0 && left < maximum / right);
+  if (overflows) {
+    throw std::overflow_error("policy multiplication is not representable");
+  }
+  return left * right;
+}
+
+/**
+ * @brief Convert a segment length to the signed representation used by the
+ *        integer policies.
+ *
+ * @param length Nonnegative segment length.
+ *
+ * @return The representable signed length.
+ *
+ * @throws std::overflow_error if length is larger than long long can represent.
+ */
+inline long long checkedLength(std::size_t length) {
+  const auto maximum = static_cast<unsigned long long>(std::numeric_limits<long long>::max());
+  if (length > maximum) {
+    throw std::overflow_error("policy segment length is not representable");
+  }
+  return static_cast<long long>(length);
 }
 
 /**
  * @brief Range-add actions over range-sum aggregates.
  *
- * The policy the existing structures instantiate. Arithmetic is defined as
- * two's-complement wraparound, so every law holds for every input, with
- * sums read modulo 2^64.
+ * The abstract policy uses mathematical integers. This C++ witness stores them
+ * as long long and throws std::overflow_error if an exact result is not
+ * representable. Existing production structures have the same representability
+ * precondition on their public operations; this policy makes failure explicit
+ * without changing their valid-input behavior.
  *
  * Induced action transformations x -> x + d * len commute, so the
  * tag-retaining persistent tree supports this policy. A logged range-add's
@@ -114,7 +172,7 @@ struct SumAddPolicy {
    * @return Aggregate of the concatenated segment.
    */
   static Aggregate combine(Aggregate left, Aggregate right) {
-    return wrapAdd(left, right);
+    return checkedAdd(left, right);
   }
 
   /**
@@ -135,7 +193,7 @@ struct SumAddPolicy {
    * @return The composed action.
    */
   static Action compose(Action newer, Action older) {
-    return wrapAdd(newer, older);
+    return checkedAdd(newer, older);
   }
 
   /**
@@ -156,8 +214,8 @@ struct SumAddPolicy {
    *
    * @return aggregate + action * length.
    */
-  static Aggregate apply(Action action, Aggregate aggregate, long long length) {
-    return wrapAdd(aggregate, wrapMul(action, length));
+  static Aggregate apply(Action action, Aggregate aggregate, std::size_t length) {
+    return checkedAdd(aggregate, checkedMultiply(action, checkedLength(length)));
   }
 };
 
@@ -168,12 +226,10 @@ struct SumAddPolicy {
  * the segment length, so code that accidentally depends on summation or on
  * length multiplication fails against it.
  *
- * Arithmetic is two's-complement wraparound, so every operation is defined
- * for every input; the policy laws hold on the domain where no addition
- * wraps, because minimum is not compatible with wraparound
- * (min(x, y) + d and min(x + d, y + d) differ when exactly one addition
- * wraps). Callers keep values inside that domain, as they already do for the
- * existing sum-based structures.
+ * The abstract policy uses mathematical integers. This C++ witness stores them
+ * as long long and rejects an unrepresentable result with std::overflow_error.
+ * It deliberately does not use modular wraparound: translation modulo 2^64 is
+ * not monotone in signed order and therefore does not distribute over minimum.
  *
  * Induced action transformations x -> x + d commute, so the tag-retaining
  * persistent tree supports this policy. A logged range-add's contribution to
@@ -223,7 +279,7 @@ struct MinAddPolicy {
    * @return The composed action.
    */
   static Action compose(Action newer, Action older) {
-    return wrapAdd(newer, older);
+    return checkedAdd(newer, older);
   }
 
   /**
@@ -248,13 +304,13 @@ struct MinAddPolicy {
    *
    * @return aggregate + action for a nonempty segment; aggregate otherwise.
    */
-  static Aggregate apply(Action action, Aggregate aggregate, long long length) {
-    return length == 0 ? aggregate : wrapAdd(aggregate, action);
+  static Aggregate apply(Action action, Aggregate aggregate, std::size_t length) {
+    return length == 0 ? aggregate : checkedAdd(aggregate, action);
   }
 };
 
 /**
- * @brief Affine actions over range-sum aggregates, modulo a prime.
+ * @brief Affine actions over range-sum aggregates, modulo an integer.
  *
  * The minimal noncommutative witness: x -> a * x + b composed with
  * x -> c * x + d depends on the order, so its induced transformations do not
@@ -263,8 +319,8 @@ struct MinAddPolicy {
  * order. All arithmetic is modulo the template parameter, so every operation
  * and law is exact for every input.
  *
- * @tparam Modulus The modulus; a prime smaller than 2^32 so products and
- *                 sums of reduced values cannot overflow 64 bits.
+ * @tparam Modulus The modulus; smaller than 2^32 so a product of two reduced
+ *                 values fits in 64 bits.
  */
 template <std::uint64_t Modulus> struct AffineSumModPolicy {
   static_assert(Modulus > 1, "AffineSumModPolicy needs a modulus of at least two.");
@@ -284,6 +340,15 @@ template <std::uint64_t Modulus> struct AffineSumModPolicy {
 
     /** @brief Additive coefficient, reduced modulo the modulus. */
     std::uint64_t shift;
+
+    /**
+     * @brief Construct a canonical affine action.
+     *
+     * @param actionScale Multiplicative coefficient.
+     * @param actionShift Additive coefficient.
+     */
+    Action(std::uint64_t actionScale, std::uint64_t actionShift)
+        : scale(actionScale % Modulus), shift(actionShift % Modulus) {}
 
     /**
      * @brief Coefficient-wise equality.
@@ -312,7 +377,7 @@ template <std::uint64_t Modulus> struct AffineSumModPolicy {
    * @return Aggregate of the concatenated segment.
    */
   static Aggregate combine(Aggregate left, Aggregate right) {
-    return (left + right) % Modulus;
+    return addReduced(left % Modulus, right % Modulus);
   }
 
   /**
@@ -333,8 +398,8 @@ template <std::uint64_t Modulus> struct AffineSumModPolicy {
    * @return The map x -> newer(older(x)).
    */
   static Action compose(Action newer, Action older) {
-    return Action{(newer.scale * older.scale) % Modulus,
-                  (newer.scale * older.shift + newer.shift) % Modulus};
+    return Action{multiplyReduced(newer.scale, older.scale),
+                  addReduced(multiplyReduced(newer.scale, older.shift), newer.shift)};
   }
 
   /**
@@ -358,9 +423,19 @@ template <std::uint64_t Modulus> struct AffineSumModPolicy {
    *
    * @return The segment sum after the action, reduced.
    */
-  static Aggregate apply(Action action, Aggregate aggregate, long long length) {
-    const std::uint64_t reducedLength = static_cast<std::uint64_t>(length) % Modulus;
-    return (action.scale * aggregate + action.shift * reducedLength) % Modulus;
+  static Aggregate apply(Action action, Aggregate aggregate, std::size_t length) {
+    const std::uint64_t reducedLength = length % Modulus;
+    return addReduced(multiplyReduced(action.scale, aggregate % Modulus),
+                      multiplyReduced(action.shift, reducedLength));
+  }
+
+private:
+  static Aggregate addReduced(Aggregate left, Aggregate right) {
+    return (left + right) % Modulus;
+  }
+
+  static Aggregate multiplyReduced(Aggregate left, Aggregate right) {
+    return (left * right) % Modulus;
   }
 };
 

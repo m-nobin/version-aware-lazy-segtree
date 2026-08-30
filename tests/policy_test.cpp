@@ -1,11 +1,13 @@
 // Deterministic checks for the aggregate/action policies.
 //
 // The law checks are exhaustive over small domains, so they validate these
-// three implementations, not the laws in general. The commutation checks are
-// what the capability facts in include/valseg/policy.hpp claim: induced
-// transformations commute for SumAdd and MinAdd, and a concrete AffineSum
-// pair witnesses that they do not commute in general. The oracle checks tie
-// the generic element-wise oracle to the production SumAdd tree.
+// three implementations, not the laws in general. The arithmetic checks pin
+// the machine-representation boundary instead of allowing signed overflow or
+// modular wraparound to invalidate the model. The commutation checks are what
+// the capability facts in include/valseg/policy.hpp claim: induced
+// transformations commute for SumAdd and MinAdd, and a concrete AffineSum pair
+// witnesses that they do not commute in general. The oracle checks tie the
+// generic element-wise oracle to the production SumAdd tree.
 
 #include <gtest/gtest.h>
 
@@ -13,6 +15,7 @@
 #include <cstdint>
 #include <limits>
 #include <random>
+#include <stdexcept>
 #include <vector>
 
 #include "policy_oracle.hpp"
@@ -28,6 +31,7 @@ using valseg::SumAddPolicy;
 using valseg::testing::ElementWiseOracle;
 
 using Affine = AffineSumModPolicy<13>;
+using WideAffine = AffineSumModPolicy<4294967291ULL>;
 
 // Every law from the policy contract, checked over the given domains. An
 // aggregate is presented together with the lengths it is valid for; length
@@ -35,7 +39,7 @@ using Affine = AffineSumModPolicy<13>;
 template <class Policy>
 void checkLaws(const std::vector<typename Policy::Action>& actions,
                const std::vector<typename Policy::Aggregate>& aggregates,
-               const std::vector<long long>& positiveLengths) {
+               const std::vector<std::size_t>& positiveLengths) {
   using Aggregate = typename Policy::Aggregate;
 
   for (const Aggregate x : aggregates) {
@@ -63,7 +67,7 @@ void checkLaws(const std::vector<typename Policy::Action>& actions,
   for (const auto& f : actions) {
     ASSERT_EQ(Policy::apply(f, Policy::aggregateIdentity(), 0), Policy::aggregateIdentity());
     for (const Aggregate x : aggregates) {
-      for (const long long length : positiveLengths) {
+      for (const std::size_t length : positiveLengths) {
         ASSERT_EQ(Policy::apply(Policy::actionIdentity(), x, length), x);
         for (const auto& g : actions) {
           ASSERT_EQ(Policy::apply(Policy::compose(g, f), x, length),
@@ -75,10 +79,10 @@ void checkLaws(const std::vector<typename Policy::Action>& actions,
 
   // Distribution over combine, including an empty side, whose only valid
   // aggregate is the identity.
-  std::vector<std::pair<Aggregate, long long>> sides;
+  std::vector<std::pair<Aggregate, std::size_t>> sides;
   sides.emplace_back(Policy::aggregateIdentity(), 0);
   for (const Aggregate x : aggregates) {
-    for (const long long length : positiveLengths) {
+    for (const std::size_t length : positiveLengths) {
       sides.emplace_back(x, length);
     }
   }
@@ -95,11 +99,11 @@ void checkLaws(const std::vector<typename Policy::Action>& actions,
 template <class Policy>
 bool inducedTransformationsCommute(const std::vector<typename Policy::Action>& actions,
                                    const std::vector<typename Policy::Aggregate>& aggregates,
-                                   const std::vector<long long>& positiveLengths) {
+                                   const std::vector<std::size_t>& positiveLengths) {
   for (const auto& f : actions) {
     for (const auto& g : actions) {
       for (const auto x : aggregates) {
-        for (const long long length : positiveLengths) {
+        for (const std::size_t length : positiveLengths) {
           if (Policy::apply(f, Policy::apply(g, x, length), length) !=
               Policy::apply(g, Policy::apply(f, x, length), length)) {
             return false;
@@ -112,7 +116,7 @@ bool inducedTransformationsCommute(const std::vector<typename Policy::Action>& a
 }
 
 const std::vector<long long> smallValues = {-3, -2, -1, 0, 1, 2, 3};
-const std::vector<long long> smallLengths = {1, 2, 3, 7};
+const std::vector<std::size_t> smallLengths = {1, 2, 3, 7};
 
 std::vector<Affine::Action> allAffineActions() {
   std::vector<Affine::Action> actions;
@@ -136,19 +140,44 @@ TEST(PolicyLaws, SumAddSmallDomain) {
   checkLaws<SumAddPolicy>(smallValues, smallValues, smallLengths);
 }
 
-TEST(PolicyLaws, SumAddWraparoundExtremes) {
-  const long long big = std::numeric_limits<long long>::max();
-  const long long small = std::numeric_limits<long long>::min();
-  // Lengths stay below 2^62 so the test's own lenX + lenY cannot overflow.
-  checkLaws<SumAddPolicy>({-1, 0, 1, big, small}, {-1, 0, 1, big, small}, {1, 2, 1000000007});
-}
-
 TEST(PolicyLaws, MinAddSmallDomain) {
   checkLaws<MinAddPolicy>(smallValues, smallValues, smallLengths);
 }
 
 TEST(PolicyLaws, AffineSumExhaustive) {
   checkLaws<Affine>(allAffineActions(), allResidues(), {1, 2, 3, 12, 13});
+}
+
+TEST(PolicyArithmetic, IntegerPoliciesRejectUnrepresentableResults) {
+  const long long maximum = std::numeric_limits<long long>::max();
+  const long long minimum = std::numeric_limits<long long>::min();
+
+  EXPECT_THROW(SumAddPolicy::combine(maximum, 1), std::overflow_error);
+  EXPECT_THROW(SumAddPolicy::combine(minimum, -1), std::overflow_error);
+  EXPECT_THROW(SumAddPolicy::compose(maximum, 1), std::overflow_error);
+  EXPECT_THROW(SumAddPolicy::apply(2, maximum - 1, 1), std::overflow_error);
+  EXPECT_THROW(SumAddPolicy::apply(maximum, 0, 2), std::overflow_error);
+
+  EXPECT_THROW(MinAddPolicy::compose(minimum, -1), std::overflow_error);
+  EXPECT_THROW(MinAddPolicy::apply(1, maximum, 1), std::overflow_error);
+  EXPECT_THROW(MinAddPolicy::apply(-1, minimum, 1), std::overflow_error);
+
+  // An action on the empty segment has no element to overflow.
+  EXPECT_EQ(MinAddPolicy::apply(1, maximum, 0), maximum);
+}
+
+TEST(PolicyArithmetic, AffineNormalizesInputsAndAvoidsIntermediateWraparound) {
+  const std::uint64_t modulus = 4294967291ULL;
+  const WideAffine::Action canonical{modulus + 2, modulus + 3};
+  EXPECT_EQ(canonical.scale, 2u);
+  EXPECT_EQ(canonical.shift, 3u);
+  EXPECT_TRUE(WideAffine::compose(WideAffine::actionIdentity(), canonical) == canonical);
+
+  const WideAffine::Action negateAndDecrement{modulus - 1, modulus - 1};
+  const WideAffine::Action composed = WideAffine::compose(negateAndDecrement, negateAndDecrement);
+  EXPECT_EQ(composed.scale, 1u);
+  EXPECT_EQ(composed.shift, 0u);
+  EXPECT_EQ(WideAffine::apply(negateAndDecrement, modulus - 1, modulus - 1), 2u);
 }
 
 TEST(PolicyCommutation, SumAddAndMinAddCommute) {
