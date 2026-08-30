@@ -1,6 +1,6 @@
 # bench/CMakeLists.txt
 #
-# One executable, valseg_bench, that replays the frozen W1-W11 operation
+# One executable, valseg_bench, that replays the frozen W1-W12 operation
 # streams against every structure and writes raw CSV. It carries the same
 # warning, warnings-as-errors and clang-tidy settings as the library and the
 # tests, so a benchmark that would not survive review does not compile.
@@ -11,6 +11,12 @@
 # std::vector doubling that a payload figure hides — and which adds a header to
 # every allocation, so its timings are not reported.
 set(VALSEG_BENCH_SOURCES bench_main.cpp workloads.cpp)
+
+# The optimizer settings the measurements were taken under, recorded verbatim
+# in every environment file. A benchmark that does not state its flags is not
+# reproducible, and "Release" alone does not name them.
+string(TOUPPER "${CMAKE_BUILD_TYPE}" VALSEG_BENCH_CONFIG)
+string(STRIP "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${VALSEG_BENCH_CONFIG}}" VALSEG_BENCH_FLAG_TEXT)
 
 add_executable(valseg_bench ${VALSEG_BENCH_SOURCES} allocation_counter_off.cpp)
 add_executable(valseg_bench_alloc ${VALSEG_BENCH_SOURCES} allocation_counter_on.cpp)
@@ -26,6 +32,7 @@ foreach(target valseg_bench valseg_bench_alloc)
   target_compile_definitions(${target} PRIVATE
     VALSEG_BENCH_BUILD_TYPE="$<IF:$<BOOL:${CMAKE_BUILD_TYPE}>,${CMAKE_BUILD_TYPE},multi-config>"
     VALSEG_BENCH_COMPILER="${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
+    VALSEG_BENCH_FLAGS="${VALSEG_BENCH_FLAG_TEXT}"
   )
 endforeach()
 
@@ -51,16 +58,21 @@ foreach(target valseg_bench valseg_bench_alloc)
   endif()
 endforeach()
 
-# The smoke run is the harness's own test: it replays all eleven workloads at
-# n = 256 against all seven structures and fails if the six persistent ones
+# The smoke run is the harness's own test: it replays all twelve workloads at
+# n = 256 against all eight structures and fails if the seven persistent ones
 # disagree on any answer. It runs in about a second, so it belongs in the same
 # CTest invocation as everything else rather than in a job of its own.
 if(BUILD_TESTING)
-  add_test(NAME bench_smoke COMMAND valseg_bench --smoke --trials 1 --warmup 0 --cap-mib 64)
+  # No warm-up: the smoke run checks that the structures agree, not how fast
+  # they are, and a duration-based warm-up would add fifteen seconds to CI for
+  # a property it does not measure.
+  add_test(NAME bench_smoke
+           COMMAND valseg_bench --smoke --trials 1 --warmup 0 --warmup-seconds 0
+                   --batch-trials 0 --cap-mib 64)
   set_tests_properties(bench_smoke PROPERTIES LABELS "bench")
 
   add_test(NAME bench_smoke_alloc
-           COMMAND valseg_bench_alloc --smoke --trials 1 --warmup 0 --cap-mib 64
-                   --tag alloc --workload W1)
+           COMMAND valseg_bench_alloc --smoke --trials 1 --warmup 0 --warmup-seconds 0
+                   --batch-trials 0 --cap-mib 64 --tag alloc --workload W1)
   set_tests_properties(bench_smoke_alloc PROPERTIES LABELS "bench")
 endif()

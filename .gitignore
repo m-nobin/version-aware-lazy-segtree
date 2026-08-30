@@ -57,3 +57,21 @@ Desktop.ini
 # Temporary files
 *.tmp
 *.temp
+
+# Local benchmark data and generated artifacts. Analysis and report sources,
+# the raw-data manifest and the pilot provenance record are versioned.
+bench/results/*
+!bench/results/README.md
+!bench/results/raw.sha256
+docs/benchmarking/*.pdf
+
+# LaTeX intermediates and rebuildable PDFs
+paper/main.pdf
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.toc
+*.synctex.gz

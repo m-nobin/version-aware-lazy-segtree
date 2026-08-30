@@ -13,12 +13,13 @@
 #include <type_traits>
 #include <vector>
 
+#include "copy_on_push_segment_tree.hpp"
 #include "workloads.hpp"
 
 namespace valseg::bench {
 
 /**
- * Adapters give the six persistent structures and the non-persistent control
+ * Adapters give the seven persistent structures and the non-persistent control
  * one shape the driver can replay an operation stream against. They are
  * templates, not virtual bases: the hot loop must not pay for dispatch it is
  * trying to measure.
@@ -33,7 +34,7 @@ namespace valseg::bench {
 /**
  * @brief Adapter for a structure with the (version, left, right) query shape.
  *
- * @tparam Tree One of the six persistent structures.
+ * @tparam Tree One of the seven persistent structures.
  */
 template <typename Tree> class PersistentAdapter {
 public:
@@ -110,7 +111,10 @@ public:
           tree.size() == 0 ? 0 : (tree.checkpointCount() + 1) * (2 * tree.size() - 1);
       const std::size_t entries = tree.nodeCount() - treeNodes;
       return treeNodes * 16 + entries * 24;
-    } else if constexpr (std::is_same_v<Tree, PersistentLazySegmentTree>) {
+    } else if constexpr (std::is_same_v<Tree, PersistentLazySegmentTree> ||
+                         std::is_same_v<Tree, CopyOnPushSegmentTree>) {
+      // Identical node layout, on purpose: the two differ in tag policy only,
+      // so retained bytes differ only by the node count each policy produces.
       return tree.nodeCount() * 32;
     } else if constexpr (std::is_same_v<Tree, BufferedPathCopyingSegmentTree>) {
       return tree.nodeCount() * 88;

@@ -31,7 +31,8 @@ enum class VersionPick {
   Latest,       ///< the newest version
   Uniform,      ///< uniform over every published version
   OldAndRecent, ///< alternating: uniform over all, then the newest 5%
-  Zipf          ///< Zipfian over recency rank; see Workload::skew
+  Zipf,         ///< Zipfian over recency rank; see Workload::skew
+  Ancient       ///< uniform over the oldest share of versions; see AgeShare
 };
 
 /**
@@ -45,18 +46,19 @@ enum class VariantAxis {
   RangeWidth,         ///< update range width in elements
   Zipf,               ///< Zipf exponent theta for VersionPick::Zipf
   HotShare,           ///< width of the hot window as a fraction of n
-  ZeroDeltaShare      ///< share of updates whose delta is 0
+  ZeroDeltaShare,     ///< share of updates whose delta is 0
+  AgeShare            ///< share of the version history a query may read from
 };
 
 /**
  * One frozen workload.
  *
- * The eleven instances live in workloads() and mirror the specification
+ * The twelve instances live in workloads() and mirror the specification
  * frozen on issue #10. Nothing here is tuned per structure: a workload
  * produces one operation stream that every structure replays verbatim.
  */
 struct Workload {
-  std::string id;      ///< "W1" ... "W11"
+  std::string id;      ///< "W1" ... "W12"
   std::string summary; ///< one line, printed by --list
   std::vector<std::size_t> sizes;
   std::size_t operations;   ///< updates plus queries; 0 when axis is UpdateBudget
@@ -86,9 +88,9 @@ struct Operation {
 };
 
 /**
- * @brief The eleven frozen workloads, in order.
+ * @brief The twelve frozen workloads, in order.
  *
- * @return W1 through W11.
+ * @return W1 through W12.
  */
 const std::vector<Workload>& workloads();
 
@@ -104,8 +106,8 @@ const Workload* findWorkload(const std::string& id);
  * @brief Name of a variant axis as it appears in the CSV.
  *
  * @param axis Axis to name.
- * @return "none", "k", "updates", "width", "theta", "hot_share" or
- *         "zero_delta_share".
+ * @return "none", "k", "updates", "width", "theta", "hot_share",
+ *         "zero_delta_share" or "age_share".
  */
 const char* axisName(VariantAxis axis);
 

@@ -42,8 +42,8 @@ double unitDouble(std::mt19937_64& rng) {
  * The version a query reads, given how many versions exist.
  */
 std::size_t pickVersion(std::mt19937_64& rng, const Workload& workload,
-                        const std::vector<double>& harmonic, std::size_t published,
-                        std::size_t queryIndex) {
+                        const std::vector<double>& harmonic, double ageShare,
+                        std::size_t published, std::size_t queryIndex) {
   const std::size_t latest = published - 1;
   switch (workload.versions) {
   case VersionPick::Latest:
@@ -67,6 +67,16 @@ std::size_t pickVersion(std::mt19937_64& rng, const Workload& workload,
                          harmonic.begin() + static_cast<std::ptrdiff_t>(published) + 1, target) -
         harmonic.begin());
     return latest - std::min(latest, rank - 1);
+  }
+  case VersionPick::Ancient: {
+    // Reads confined to the oldest share of the history. This is the
+    // time-travel audit shape: the question is what the state was long ago,
+    // not what it is now, and it is the case a structure that replays a log
+    // forward from its last checkpoint has to work hardest for. share = 1
+    // is plain uniform, so the sweep contains its own neutral endpoint.
+    const std::size_t window = std::max<std::size_t>(
+        1, static_cast<std::size_t>(static_cast<double>(published) * ageShare));
+    return below(rng, std::min(window, published));
   }
   }
   return latest;
@@ -245,6 +255,18 @@ const std::vector<Workload>& workloads() {
        VariantAxis::RangeWidth,
        {1.0, 8.0, 64.0, 512.0, 4096.0, 10000.0},
        0},
+      {"W12",
+       "time-travel audit: reads confined to the oldest 1%, 10%, 50% and 100%",
+       {kMedium},
+       kOperations,
+       0.1,
+       0.0,
+       RangeShape::Uniform,
+       VersionPick::Ancient,
+       0.0,
+       VariantAxis::AgeShare,
+       {0.01, 0.1, 0.5, 1.0},
+       0},
   };
   return table;
 }
@@ -274,6 +296,8 @@ const char* axisName(VariantAxis axis) {
     return "hot_share";
   case VariantAxis::ZeroDeltaShare:
     return "zero_delta_share";
+  case VariantAxis::AgeShare:
+    return "age_share";
   }
   return "none";
 }
@@ -301,6 +325,7 @@ std::vector<Operation> generate(const Workload& workload, std::size_t size, doub
   const std::size_t width =
       workload.axis == VariantAxis::RangeWidth ? static_cast<std::size_t>(variant) : size;
 
+  const double ageShare = workload.axis == VariantAxis::AgeShare ? variant : 1.0;
   const double hotShare = workload.axis == VariantAxis::HotShare ? variant : 0.2;
   const std::size_t hotWidth = std::min(
       size,
@@ -343,7 +368,8 @@ std::vector<Operation> generate(const Workload& workload, std::size_t size, doub
       stream.push_back({true, range.first, range.second, 0, delta});
       ++published;
     } else {
-      const std::size_t version = pickVersion(rng, workload, harmonic, published, queryIndex++);
+      const std::size_t version =
+          pickVersion(rng, workload, harmonic, ageShare, published, queryIndex++);
       stream.push_back({false, range.first, range.second, version, 0});
     }
   }
