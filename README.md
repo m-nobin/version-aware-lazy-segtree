@@ -11,8 +11,10 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 > independent reader's sign-off is recorded in the claim-evidence matrix. Phase 2 (theorems and
 > the predictive model) is under way: the observational commutativity boundary
 > ([docs/proof.md](docs/proof.md) section 9) and the frontier identities (section 10) are
-> drafted; the lower-bound attempt of section 10 found a counterexample, so no optimality claim
-> is made. The
+> independently reviewed; the lower-bound attempt of section 10 found a counterexample, so no
+> optimality claim is made and the plan's fallback title is selected at Gate G2. The physical
+> and predictive cost model is specified in
+> [docs/research/cost-model.md](docs/research/cost-model.md). The
 > Gate G1 record is section 9 of the
 > [claim-evidence matrix](docs/research/claim-evidence-matrix.md); phase charters and exit
 > reviews are working documents kept outside the repository.
@@ -123,7 +125,7 @@ bench/analysis/             Locked pilot analysis and figure/table generation
 CMakeLists.txt              Build and tooling configuration
 CMakePresets.json           Developer, release, analysis, and CI presets
 docs/proof.md               Correctness proof, complexity analysis and the action-order boundary theorem
-docs/research/              Claim-evidence matrix and capability model
+docs/research/              Claim-evidence matrix, capability model and cost model
 paper/                      Version-controlled manuscript source
 ```
 

@@ -278,6 +278,14 @@ private:
     Action tag;
   };
 
+public:
+  /** @brief Bytes of one record: two indices, an aggregate and an action. */
+  static constexpr std::size_t kRecordBytes = sizeof(Node);
+
+  /** @brief Alignment of one record. */
+  static constexpr std::size_t kRecordAlignment = alignof(Node);
+
+private:
   static constexpr std::size_t noNode = static_cast<std::size_t>(-1);
 
   std::vector<Node> nodes;
@@ -527,6 +535,14 @@ private:
     Aggregate aggregate;
   };
 
+public:
+  /** @brief Bytes of one record: two indices and an aggregate. */
+  static constexpr std::size_t kRecordBytes = sizeof(Node);
+
+  /** @brief Alignment of one record. */
+  static constexpr std::size_t kRecordAlignment = alignof(Node);
+
+private:
   static constexpr std::size_t noNode = static_cast<std::size_t>(-1);
 
   std::vector<Node> nodes;

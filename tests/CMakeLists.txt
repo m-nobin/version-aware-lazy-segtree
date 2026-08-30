@@ -83,6 +83,7 @@ add_valseg_test(copy_on_push_segment_tree_test copy_on_push_segment_tree_test.cp
 add_valseg_test(policy_test policy_test.cpp)
 add_valseg_test(policy_trees_test policy_trees_test.cpp)
 add_valseg_test(frontier_test frontier_test.cpp)
+add_valseg_test(record_layout_test record_layout_test.cpp)
 
 # ---------------------------------------------------------------------------
 # Compile-fail test: the tag-retaining subject must reject a policy whose

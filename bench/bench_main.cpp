@@ -18,8 +18,12 @@
 #include <sys/qos.h>
 #endif
 
+#include <valseg/frontier.hpp>
+#include <valseg/policy.hpp>
+
 #include "adapters.hpp"
 #include "allocation_counter.hpp"
+#include "process_memory.hpp"
 #include "workloads.hpp"
 
 namespace valseg::bench {
@@ -154,6 +158,7 @@ struct TrialResult {
   std::size_t allocPeak = 0;
   std::size_t allocLive = 0;
   std::size_t allocCount = 0;
+  std::size_t peakRss = 0;
   std::uint64_t checksum = 0;
   const char* status = "ok";
   std::vector<Sample> samples;
@@ -233,6 +238,7 @@ TrialResult runTrial(const std::vector<ValueType>& initial, const std::vector<Op
   result.allocPeak = allocation.peakBytes;
   result.allocLive = allocation.liveBytes;
   result.allocCount = allocation.allocations;
+  result.peakRss = peakResidentBytes();
   return result;
 }
 
@@ -247,9 +253,8 @@ TrialResult runTrial(const std::vector<ValueType>& initial, const std::vector<Op
  * It stops at the same cap, so a capped cell compares like with like.
  */
 template <typename Adapter>
-std::int64_t runBatched(const std::vector<ValueType>& initial,
-                        const std::vector<Operation>& stream, std::size_t checkpointInterval,
-                        std::size_t capBytes) {
+std::int64_t runBatched(const std::vector<ValueType>& initial, const std::vector<Operation>& stream,
+                        std::size_t checkpointInterval, std::size_t capBytes) {
   Adapter adapter(checkpointInterval);
   adapter.build(initial);
 
@@ -272,8 +277,8 @@ std::int64_t runBatched(const std::vector<ValueType>& initial,
 
 using RunFunction = TrialResult (*)(const std::vector<ValueType>&, const std::vector<Operation>&,
                                     std::size_t, std::size_t);
-using BatchFunction = std::int64_t (*)(const std::vector<ValueType>&,
-                                       const std::vector<Operation>&, std::size_t, std::size_t);
+using BatchFunction = std::int64_t (*)(const std::vector<ValueType>&, const std::vector<Operation>&,
+                                       std::size_t, std::size_t);
 
 /**
  * One structure under measurement.
@@ -323,6 +328,7 @@ struct Options {
   std::size_t warmupSeconds = 20;
   std::string trace;
   bool smoke = false;
+  bool structural = false;
   bool list = false;
   bool outDirGiven = false;
   bool shuffle = true;
@@ -343,6 +349,8 @@ Options parse(int argc, char** argv) {
       options.list = true;
     } else if (flag == "--smoke") {
       options.smoke = true;
+    } else if (flag == "--structural") {
+      options.structural = true;
     } else if (flag == "--warmup-seconds" && hasValue) {
       options.warmupSeconds = static_cast<std::size_t>(std::strtoull(value.c_str(), nullptr, 10));
       ++i;
@@ -388,7 +396,7 @@ Options parse(int argc, char** argv) {
                    "                    [--trials N] [--warmup N] [--warmup-seconds N]\n"
                    "                    [--capped-trials N]\n"
                    "                    [--cap-mib N] [--trace FILE] [--batch-trials N]\n"
-                   "                    [--no-shuffle] [--smoke] [--list]\n";
+                   "                    [--no-shuffle] [--smoke] [--structural] [--list]\n";
       std::exit(0);
     } else {
       fail("unknown or incomplete option: " + flag);
@@ -544,8 +552,8 @@ Workload shrink(const Workload& workload) {
  * actually falls.
  */
 std::size_t balancedInterval(std::size_t size) {
-  return std::max<std::size_t>(1, static_cast<std::size_t>(std::llround(std::sqrt(
-                                      static_cast<double>(size)))));
+  return std::max<std::size_t>(
+      1, static_cast<std::size_t>(std::llround(std::sqrt(static_cast<double>(size)))));
 }
 
 void writeEnvironment(const std::string& path, const Options& options,
@@ -648,12 +656,121 @@ struct Job {
   std::size_t interval;
 };
 
+/**
+ * Machine-independent structural counts of one operation stream, from the
+ * executable frontier definitions rather than from any structure.
+ *
+ * Every count is a sum over the stream: F over non-zero updates (the records
+ * the tag-retaining subject appends), P over the same updates in the
+ * copy-on-push tag model (the subject and the ablation differ by 2P), N over
+ * non-zero updates (tagless path copying), F over queries (the records a
+ * query reads), and the log entries a checkpoint-plus-log query at the given
+ * interval replays. These are the candidate predictors of
+ * the cost model in docs/research/cost-model.md.
+ */
+struct StructuralCounts {
+  std::size_t updates = 0;
+  std::size_t nonZeroUpdates = 0;
+  std::size_t queries = 0;
+  std::size_t updateVisits = 0;
+  std::size_t pushes = 0;
+  std::size_t intersecting = 0;
+  std::size_t queryVisits = 0;
+  std::size_t replayEntries = 0;
+};
+
+StructuralCounts structuralCounts(const std::vector<Operation>& stream, std::size_t size,
+                                  std::size_t interval) {
+  StructuralCounts counts;
+  PushCountingModel<SumAddPolicy> pushes(size);
+  for (const Operation& op : stream) {
+    if (op.isUpdate) {
+      ++counts.updates;
+      if (op.delta == 0) {
+        continue;
+      }
+      ++counts.nonZeroUpdates;
+      const FrontierCounts frontier = frontierCounts(size, op.left, op.right);
+      counts.updateVisits += frontier.visited();
+      counts.pushes += pushes.apply(op.left, op.right, op.delta);
+      // N by Proposition 10.8, in O(log n); intersectingNodes enumerates the
+      // range and is the definition, not the way to count a million-element
+      // stream.
+      counts.intersecting +=
+          frontier.partial + 2 * (op.right - op.left + 1) - frontier.decomposition;
+    } else {
+      ++counts.queries;
+      // Records a query reads: the visited set F. The recursion is also
+      // entered at the disjoint children of partial nodes, but reads nothing
+      // there, so those invocations are not counted.
+      counts.queryVisits += frontierCounts(size, op.left, op.right).visited();
+      // The log holds every update; a checkpoint sits at every multiple of
+      // the interval, so a query at version v replays v mod interval entries.
+      // A query at the latest version reads the live tree and replays
+      // nothing; no frozen workload reads the latest version.
+      counts.replayEntries += interval == 0 ? op.version : op.version % interval;
+    }
+  }
+  return counts;
+}
+
+/**
+ * Write structural_<tag>-W*.csv: one row per (workload, n, variant, seed)
+ * for the seeds the timing campaign records under the same options, so the
+ * rows join the runs CSV on those columns. No structure is built and nothing
+ * is timed; --structure and --trace are ignored in this mode.
+ */
+int runStructural(const Options& options) {
+  const std::string suffix = options.tag.empty() ? std::string() : "_" + options.tag;
+  std::vector<Workload> plan = workloads();
+  for (const Workload& original : plan) {
+    if (options.workloadFilter != "all" && options.workloadFilter != original.id) {
+      continue;
+    }
+    const Workload workload = options.smoke ? shrink(original) : original;
+    const std::string path = options.outDir + "/structural" + suffix + "-" + workload.id + ".csv";
+    if (!options.smoke || options.outDirGiven) {
+      refuseExistingCampaignOutput({path});
+    }
+    std::ofstream out(path);
+    if (!out) {
+      fail("cannot write CSV into " + options.outDir + " (does it exist?)");
+    }
+    out << "workload,n,axis,variant,seed,k,updates,nonzero_updates,queries,"
+           "sum_update_visits,sum_pushes,sum_intersecting,sum_query_visits,sum_replay_entries\n";
+    for (const std::size_t size : workload.sizes) {
+      for (std::size_t attempt = options.warmup; attempt < options.warmup + options.trials;
+           ++attempt) {
+        const std::uint64_t seed = options.seed + attempt;
+        for (const double variant : workload.variants) {
+          const std::vector<Operation> stream = generate(workload, size, variant, seed);
+          std::size_t interval = balancedInterval(size);
+          if (workload.axis == VariantAxis::CheckpointInterval) {
+            interval = variant == 0.0 ? 0 : static_cast<std::size_t>(variant);
+          }
+          const StructuralCounts counts = structuralCounts(stream, size, interval);
+          out << workload.id << ',' << size << ',' << axisName(workload.axis) << ','
+              << std::to_string(variant) << ',' << seed << ',' << interval << ',' << counts.updates
+              << ',' << counts.nonZeroUpdates << ',' << counts.queries << ',' << counts.updateVisits
+              << ',' << counts.pushes << ',' << counts.intersecting << ',' << counts.queryVisits
+              << ',' << counts.replayEntries << '\n';
+        }
+      }
+    }
+    std::cout << "structural " << workload.id << std::endl;
+  }
+  return 0;
+}
+
 int run(int argc, char** argv) {
   const Options options = parse(argc, argv);
 
   if (options.list) {
     printList();
     return 0;
+  }
+  if (options.structural) {
+    return runStructural(options);
   }
 
   const bool performanceCores = requestPerformanceCores();
@@ -680,7 +797,7 @@ int run(int argc, char** argv) {
           "build_ns,build_nodes,update_ns,query_ns,batch_ns,"
           "update_p50,update_p90,update_p99,update_p999,update_max,"
           "query_p50,query_p90,query_p99,query_p999,query_max,"
-          "nodes,bytes,alloc_peak_bytes,alloc_live_bytes,alloc_count,"
+          "nodes,bytes,alloc_peak_bytes,alloc_live_bytes,alloc_count,peak_rss_bytes,"
           "clock_overhead_ns,clock_resolution_ns,checksum,status\n";
   memory << "workload,structure,n,axis,variant,seed,trial,op_index,versions,nodes,bytes\n";
 
@@ -822,9 +939,9 @@ int run(int argc, char** argv) {
                  << result.queryLatency.p90 << ',' << result.queryLatency.p99 << ','
                  << result.queryLatency.p999 << ',' << result.queryLatency.max << ','
                  << result.nodes << ',' << result.bytes << ',' << result.allocPeak << ','
-                 << result.allocLive << ',' << result.allocCount << ',' << calibration.overheadNs
-                 << ',' << calibration.resolutionNs << ',' << result.checksum << ','
-                 << result.status << '\n';
+                 << result.allocLive << ',' << result.allocCount << ',' << result.peakRss << ','
+                 << calibration.overheadNs << ',' << calibration.resolutionNs << ','
+                 << result.checksum << ',' << result.status << '\n';
 
             for (const Sample& sample : result.samples) {
               memory << memoryKey << ',' << sample.opIndex << ',' << sample.versions << ','

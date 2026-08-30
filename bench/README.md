@@ -232,9 +232,35 @@ workload,structure,n,axis,variant,k,seed,trial,exec_order,updates,queries,
 build_ns,build_nodes,update_ns,query_ns,batch_ns,
 update_p50,update_p90,update_p99,update_p999,update_max,
 query_p50,query_p90,query_p99,query_p999,query_max,
-nodes,bytes,alloc_peak_bytes,alloc_live_bytes,alloc_count,
+nodes,bytes,alloc_peak_bytes,alloc_live_bytes,alloc_count,peak_rss_bytes,
 clock_overhead_ns,clock_resolution_ns,checksum,status
 ```
+
+The memory columns are four different units, kept apart on purpose
+(`docs/research/cost-model.md`, section 1):
+
+| Column | Unit | Meaning |
+|---|---|---|
+| `nodes`, `build_nodes` | logical records | what the structure retains, counted by its own `nodeCount()` |
+| `bytes` | payload bytes | records times each header's documented record size |
+| `alloc_live_bytes`, `alloc_peak_bytes`, `alloc_count` | allocator bytes | requested from `operator new` in the counting binary: includes `std::vector` capacity and the old block during a doubling |
+| `peak_rss_bytes` | resident bytes | the operating system's high-water mark for the whole process; it only rises, so it is per trial only when one process runs one cell (the registered protocol) and otherwise reports the largest cell run so far. Zero where the platform does not report it. |
+
+`structural_<tag>-W*.csv` — written by `--structural`, one row per
+(workload, n, variant, seed) for the seeds a campaign records under the same
+`--seed`, `--warmup` and `--trials`, so it joins the runs CSV on those columns:
+
+```
+workload,n,axis,variant,seed,k,updates,nonzero_updates,queries,
+sum_update_visits,sum_pushes,sum_intersecting,sum_query_visits,sum_replay_entries
+```
+
+These are machine-independent counts from the executable frontier definitions
+in `include/valseg/frontier.hpp` (the records the tag-retaining subject appends,
+the pushes copy-on-push pays, the nodes tagless path copying copies, the records
+a query reads, and the log entries a checkpoint-plus-log query at interval `k`
+replays). No structure is built and nothing is timed, and `--structure` and
+`--trace` are ignored; they are the candidate predictors of the cost model.
 
 Per-operation latency is kept for every operation and reduced to quantiles after
 the replay, so a cell reports a distribution rather than an average. `batch_ns`
@@ -277,6 +303,22 @@ for every number the report quotes. `docs/benchmarking/benchmarking.tex` reads
 those macros rather than containing literals, so no number in the document can
 drift from the data it describes — re-running the campaign updates the prose.
 
+Two further scripts belong to the cost model (`docs/research/cost-model.md`):
+`split.py` assigns every measurement cell to the training or hold-out
+partition by a salted hash, so every seed and trial of a cell lands on one
+side (`split.py --self-test` checks it), and `cost_model.py` fits the
+candidate time model on the pilot's training cells and reports hold-out
+error per structure and operation type. It needs the `structural_*.csv`
+files that `valseg_bench --structural` writes for the campaign's seeds:
+
+```sh
+build/release-verify/bench/valseg_bench --structural --seed 20260818 --trials 11 --warmup 3 \
+  --out-dir bench/results/raw --tag timing
+uv run --frozen --project bench/analysis bench/analysis/cost_model.py
+```
+
+Its output is pilot-only model development, not the registered evaluation.
+
 ## What the numbers do and do not mean
 
 - `checksum` is the running hash of every query answer. All seven persistent
@@ -294,7 +336,8 @@ drift from the data it describes — re-running the campaign updates the prose.
   throughput comparison, where a ratio against them would be a category error.
 - `bytes` is the payload each header documents: nodes times the documented node
   size, and for `checkpointing` the tree copies at 16 bytes plus the log at 24.
-  `alloc_peak_bytes` is what was actually requested. Neither is RSS.
+  `alloc_peak_bytes` is what was actually requested. Neither is RSS;
+  `peak_rss_bytes` is, with the process-level caveat above.
 - `status = memory_cap` is a result. The analysis collects those points into
   `summary/feasibility.csv` and a figure: the largest (n, versions) each structure completed and
   where it stopped. A baseline that cannot reach the sizes the others reach has
