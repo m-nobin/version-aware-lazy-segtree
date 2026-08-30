@@ -55,33 +55,36 @@ update and fewer bytes only when `|D| / |Partial| > A / (2I + S + A)`.
 
 ## 3. Candidate time-model variables
 
-The plan's mechanistic form is
+The frozen pilot-informed mechanistic form is
 
 ```text
-predicted_ns_per_op = alpha_machine
-                    + beta_machine  * visited_records
-                    + gamma_machine * allocated_records
-                    + eta_machine   * bytes_touched
-                    + theta_machine * working_set_transition
+log(predicted_ns_per_op) = alpha_machine
+                         + beta_machine   * visited_records
+                         + gamma_machine  * allocated_records
+                         + theta_machine  * working_set_transition
+                         + lambda_machine * version_distance_transition
+                         + phi_machine    * full_coverage_share
 ```
 
 fitted per structure and per operation type (update, query), with the
-coefficients machine-specific. Two of its terms are not separately estimable
-within one structure: `bytes_touched` is a fixed multiple of the record
-counts (one record size per structure), and for the tag-retaining subject
-`allocated_records` equals `visited_records` exactly (Proposition 10.5). The
-form the pilot fits, and the one PR6 registers unless it justifies a change,
-is therefore the reduced form without `bytes_touched`, with
-`visited_records` dropped where it coincides with `allocated_records` and
-`allocated_records` dropped for queries, where it is zero. The exact
-response transform, interactions and regularization are frozen in PR6; this
-section freezes the candidate variables and how each is obtained.
+coefficients machine-specific and predictions returned through `exp`. The
+log response guarantees positive predictions and was selected from the
+exploratory pilot before registration. `bytes_touched` is not separately
+estimable within one structure because it is a fixed multiple of the record
+counts. For the tag-retaining subject, `allocated_records` equals
+`visited_records` exactly (Proposition 10.5). Constant or exactly collinear
+columns are therefore removed deterministically before fitting; no
+interaction or regularization term is selected. This response transform,
+candidate set and column-removal rule are frozen for PR6. A later change
+requires a written protocol amendment made before confirmatory measurement.
 
 | Variable | Updates | Queries | Source | Available for |
 | --- | --- | --- | --- | --- |
-| `visited_records` | records the update recursion reads, per update: `Σ F / updates` for the tree strategies; `Σ N / updates` for point-only; `(2n − 1) · nonzero / updates` for full copy | records a query reads, `Σ F / queries` (the recursion is also entered at disjoint children but reads nothing there); checkpointing adds the replayed log entries, `Σ (v mod K) / queries`, zero for a read of the latest version | `structural_*.csv`, machine-independent | every structure; the checkpoint replay term is strategy-specific |
+| `visited_records` | records update recursion reads, per update: `Σ F / updates` for tree strategies; checkpointing adds a second `F` on each nonzero checkpoint-boundary update because it updates both the live and newly copied tree; `Σ N / updates` for point-only; `(2n − 1) · nonzero / updates` for full copy | records a query reads, `Σ F / queries`; checkpointing adds replayed log entries, zero for the latest version and otherwise `v mod K` (or `v` for unbounded `K`) | `structural_*.csv`, machine-independent | every structure; checkpoint work is strategy-specific |
 | `allocated_records` | records stored per update, `(nodes − build_nodes) / updates` | 0 | `runs_*.csv`, machine-independent | every structure; for the subject, copy-on-push and point-only it is the identity of section 10 summed over the stream, so it is also predictable a priori |
 | `working_set_transition` | `log2(max(1, retained payload bytes / cache bytes))` | same | `bytes` in `runs_*.csv`; the cache size is `l2_bytes` from the campaign's `system_*.txt` | every structure |
+| `version_distance_transition` | 0 | `log2(1 + mean(latest version at query − requested version))` | `sum_query_version_distance` in `structural_*.csv` | every structure; the non-persistent control keeps the variable so its expected irrelevance is testable rather than assumed |
+| `full_coverage_share` | nonzero updates with `[l,r] = [0,n−1]`, divided by all updates | queries with `[l,r] = [0,n−1]`, divided by all queries | `full_coverage_updates`, `full_coverage_queries` in `structural_*.csv` | every structure |
 
 Every per-update predictor is divided by the number of updates including
 zero-delta ones, the denominator of the response, so a zero-delta share
@@ -99,79 +102,76 @@ timing. That is what makes the hold-out evaluation possible.
 
 ## 4. Training and hold-out split
 
-`bench/analysis/split.py` assigns every cell `(workload, n, axis, variant)`
-to `training` or `holdout` by the SHA-256 of the cell key under a fixed
-salt; every seed and every trial of a cell follow the cell. The pilot salt
-and 30% hold-out share are pilot-development values. PR6 registers its own
-salt and share before the confirmatory campaign, and the confirmatory
-hold-out labels are not read until the model and analysis hashes are fixed.
+`valseg_bench --structural` writes a stable fingerprint of the complete
+generated input for every seed. `bench/analysis/split.py` hashes the sorted
+seed/fingerprint inventory of each `(workload, n, axis, variant)` cell, then
+assigns the resulting stream-equivalence group to `training` or `holdout`.
+Every seed and trial of a cell stays together, and cells with byte-identical
+generated inputs stay together. The known duplicate — W4 at `n = 10000` and
+W11 at width 1 — is exercised by a synthetic fixture and was also verified
+against the real generator. The earlier cell-key leak is closed.
 
-One leak the cell key does not close: two cells can generate byte-identical
-streams (W4 at `n = 10000` and W11 at width 1 do, for every seed). In the
-pilot both landed in training, so nothing leaked, but the registered split
-must key identical streams together or exclude the duplicated endpoints of
-a sweep; PR6 records which.
+The pilot salt and 30% share remain development values. PR6 registers a new
+salt and share before the confirmatory campaign. Model fitting and evaluation
+are separate commands: `--stage fit` receives only training rows in the
+model-selection function and writes a canonical JSON artifact; `--stage
+evaluate` loads that fixed artifact without refitting it. Its SHA-256 is
+registered before holdout evaluation. Operational access control to the
+confirmatory holdout files is a PR6 orchestration requirement; Phase 2 fixes
+the code boundary and artifact format.
 
 ## 5. Pilot-only model development
 
-`bench/analysis/cost_model.py` fits the section 3 form on the pilot's
-training cells and reports median and 90th-percentile absolute percentage
-error and the median absolute log ratio on the pilot's hold-out cells, per
-structure and operation type, with residuals broken down by workload. It
-reads `structural_timing-W*.csv`, which `valseg_bench --structural` writes
-for the pilot's seeds (`--seed 20260818 --warmup 3 --trials 11`).
+`bench/rebuild_pilot_cost_model.sh` regenerates the section 3 structural
+counts into a temporary directory without modifying the checksummed raw
+pilot, runs the synthetic analysis fixtures, fits the training partition,
+fixes the JSON model artifact and evaluates that artifact on the pilot
+holdout. It reports median and 90th-percentile absolute percentage error and
+the median absolute log ratio, with residuals by workload.
 
-Its output is exploratory: one machine, one compiler, the per-operation
-clock pair of the pilot harness rather than batch timing, and a model form
-that PR6 may still change with written justification. The pilot numbers are
-recorded here only to show the model form is stable enough to register and
-to motivate the registered thresholds; they are not evidence for H3.
+Its output is exploratory: one machine, one compiler and the per-operation
+clock pair of the pilot harness rather than batch timing. The pilot numbers
+are recorded only to show that the form is executable and stable enough to
+register and to motivate PR6's thresholds; they are not evidence for H3.
 
-Pilot fit of 30 August 2026 (Apple M4, AppleClang, `-O3`; 11 trials per
-cell; 30% of cells held out by the pilot salt; every row counted, a
-non-positive prediction scored at its full error). Median and 90th-percentile
-absolute percentage error on the pilot's hold-out cells:
+Corrected pilot fit of 31 August 2026 (Apple M4, AppleClang, `-O3`; 11
+trials per cell; 30% stream-group holdout; every row counted). Median and
+90th-percentile absolute percentage error on the pilot holdout:
 
 | Structure | Hold-out cells | Update: median, p90 | Query: median, p90 |
 | --- | ---: | ---: | ---: |
-| lazy (control) | 10 | 6.8%, 22.9% | 5.4%, 40.5% |
-| persistent (subject) | 10 | 58.7%, 154.4% | 31.8%, 416.8% |
-| copy-on-push | 10 | 45.8%, 170.2% | 34.1%, 563.0% |
-| point-only | 6 | 28.3%, 76.0% | 19.0%, 168.4% |
-| checkpointing | 11 | 36.3%, 82.4% | 20.8%, 77.3% |
-| buffered | 10 | 34.5%, 166.5% | 21.7%, 485.0% |
-| fat node | 10 | 20.3%, 120.7% | 26.2%, 463.7% |
-| full copy | 1 | 944.0%, 949.1% | 293.4%, 300.4% |
+| lazy (control) | 21 | 3.9%, 11.1% | 5.2%, 23.0% |
+| persistent (subject) | 21 | 18.0%, 45.6% | 14.5%, 67.7% |
+| copy-on-push | 21 | 13.3%, 50.2% | 19.5%, 68.8% |
+| point-only | 10 | 25.9%, 94.1% | 21.2%, 47.8% |
+| checkpointing | 20 | 39.9%, 78.9% | 35.2%, 90.9% |
+| buffered | 21 | 18.4%, 56.3% | 11.8%, 75.7% |
+| fat node | 21 | 14.1%, 69.1% | 17.0%, 110.7% |
+| full copy | 1 | 90.9%, 93.3% | 159.5%, 165.8% |
 
-The full-copy row is one training cell (W8, `n = 10000`) scored on one
-hold-out cell (W3, `n = 1000`); it is a rank-one fit and says nothing. The
-subject's update fit keeps `allocated_records` only, because its
-`visited_records` is the same number (Proposition 10.5).
+The full-copy row remains one training cell scored on one holdout cell and
+says nothing; PR6 must either add enough feasible cells or exclude full copy
+from H3 while retaining it as a structural/feasibility baseline. The
+subject's update fit drops `visited_records` because it equals
+`allocated_records` (Proposition 10.5).
 
 What the pilot says, and what it does not:
 
-- The reduced form can be fitted and evaluated for every structure without
-  reading a hold-out label, from counts that exist before a cell is timed.
-  That is the property PR6 needs from this PR.
-- The form as written does not predict. Ten percent of the hold-out rows of
-  every persistent structure receive a negative prediction (the W5 cells,
-  where every update copies one root and costs a few nanoseconds; a linear
-  intercept fitted across cells sits far above that), and the 90th
-  percentile of the error is above 100% for every persistent structure on
-  at least one operation. The plan's initial H3 target (median at most 15%,
-  90th percentile at most 30%) is missed everywhere except the control.
-- The residuals are systematic, not noise: W5 (full-range updates) and W12
-  (reads confined to the oldest versions, a locality effect the working-set
-  term does not see) dominate the hold-out residuals for every tree
-  structure. A logarithmic response would remove the negative predictions;
-  a locality term (version distance of the read) and a full-coverage
-  indicator are the candidates the residuals point at.
-- PR6 therefore has a written, pilot-based reason to revise the form before
-  registration, and the revision, its thresholds and the fact that they are
-  pilot-informed go into the registered protocol before any confirmatory
-  run. If the registered form still misses its target on the confirmatory
-  hold-out cells, *predictive* leaves the title (plan, section 4.7). The
-  pilot numbers above are never that decision.
+- Every predictor exists before timing, the fit artifact is explicit and all
+  predictions are positive. The two-stage fit/evaluate path and synthetic
+  fixtures are the properties PR6 needs from Phase 2.
+- The revision improves the subject substantially, but the initial H3 target
+  (median at most 15%, p90 at most 30%) is still not met: subject update is
+  18.0%/45.6% and query is 14.5%/67.7%. The pilot therefore justifies a
+  stringent confirmatory test; it does not establish predictive success.
+- W5 remains the largest query residual for several persistent strategies,
+  and small/rank-poor full-copy and point-only regimes remain unstable. No
+  further variable is added after this inspection: doing so would tune the
+  model repeatedly to one pilot. PR6 registers this fixed form, prespecifies
+  its success/fallback thresholds and reports failure if the confirmatory
+  holdout misses them.
+- The frozen paper title does not use *predictive*. A failed H3 therefore
+  narrows RQ3's result without forcing another title change.
 
 ## 6. Retirement is not reclamation
 
@@ -201,3 +201,15 @@ them is outside the programme's scope.
 | Method | Rebuilt the layout test and the structural mode; re-ran the split self-test and the pilot fit into a scratch directory and reproduced the summary CSV; re-derived the byte equations against the header `static_assert`s and `bench/adapters.hpp`; checked the structural counts against `docs/proof.md` section 10 and the checkpoint source |
 | Decision | Approve with changes, 30 August 2026 |
 | Required changes and disposition | Count rows with non-positive predictions instead of dropping them and restate the table and prose (done; the corrected table above); state the collinearity of the plan's form and register the reduced form (section 3); mark the full-copy row as a one-cell fit (section 5); normalise every per-update predictor by `updates` (section 3, `cost_model.py`); note the identical-stream leak for the registered split (section 4); correct the `static_assert` and struct claims and add the missing assert to the bench copy-on-push header (section 2); take the cache figure from the capture (section 3, `cost_model.py`); count query records read rather than recursion invocations and note latest-version reads (section 3, `valseg_bench --structural`); print the variant with `std::to_string`; guard `NOMINMAX`; document that `--structural` ignores `--structure` and `--trace`; wrap long lines; add the record constants to the Wiki API page. All applied. |
+
+### Post-merge corrective audit, 31 August 2026
+
+The Phase 2 exit audit found that the merged structural predictor charged
+`v mod K` even when `v` was the latest version, although the implementation
+queries the live tree with zero replay. It also omitted the second update
+traversal taken on checkpoint boundaries. Both counts are corrected in
+`bench/structural_counts.hpp` and covered by deterministic tests. The pilot
+structural files were regenerated outside the immutable raw directory, the
+table above was reproduced, and the stream-group split, collinearity rule,
+non-positive-error treatment, missing-input failure and artifact round trip
+are covered by synthetic fixtures in CI.

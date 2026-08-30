@@ -46,8 +46,11 @@ apply(f, aggregateIdentity(), 0) = aggregateIdentity()
 ```
 
 `combine` need not commute; children are combined in index order.
-Constant-time operations, fixed-size states, recognizable identities and
-defined arithmetic are implementation assumptions, not algebraic laws. For an
+Constant-time operations, fixed-size states and defined arithmetic are
+implementation assumptions, not algebraic laws. A concrete policy must also
+provide equality on `Action`: `actionIdentity()` is a canonical value and
+`action == actionIdentity()` is the exact zero-action test used to publish a
+shared-root version without allocation. For an
 integer policy, the algebra lives over mathematical integers while a concrete
 machine type is a refinement: an execution is admissible only while every
 aggregate, action and intermediate result is representable. The C++ policy
@@ -108,10 +111,10 @@ explicit reachability and order-separation assumptions; the faithful-action
 corollary) are discharged in `docs/proof.md` section 9: Theorem 9.4, Theorem
 9.5 with its three named assumptions, and Corollary 9.7, with the minimal
 `n = 2` counterexample in section 9.5. Their independent review (section
-9.10 of that document) is still pending. Until it passes, this project
-claims only what the tests witness: commutation on the tested domains, the
-concrete counterexample, and agreement of every generic instantiation with
-the element-wise oracle.
+9.10 of that document) passed on 30 August 2026 with every required change
+applied. The executable evidence remains the commutation checks, the concrete
+counterexample and agreement of every generic instantiation with the
+element-wise oracle.
 
 ## 3. Capability facts in code
 
@@ -147,8 +150,8 @@ obligation; no strategy is claimed beyond what its mechanism preserves.
 
 | Strategy | Source | Mechanism (audited) | Action class | Why / obligation |
 | --- | --- | --- | --- | --- |
-| Subject: tag-retaining persistent lazy tree | `include/valseg/persistent_lazy_segment_tree.hpp`, `src/persistent_lazy_segment_tree.cpp`; generic form `RetainedTagPersistentTree` in `include/valseg/policy_trees.hpp` | Path copying; the copied node keeps its lazy tag (`Node::lazy`, included in own `sum`, not in children); queries accumulate ancestor tags outermost-first (`query`'s `inheritedLazy`) | Policies with commuting induced actions | A tag retained through a partial descent is applied outside newer tags below it; see section 2.2. Theorems 9.4 and 9.5 of `docs/proof.md` (review pending). |
-| Copy-on-push ablation | `bench/copy_on_push_segment_tree.hpp`; generic form `CopyOnPushPersistentTree` in `include/valseg/policy_trees.hpp` | Same node layout and invariant, but an update descending past a tagged node pushes the tag into copied children first | Arbitrary valid action monoids | Push-down preserves chronological order at every node. Theorem 9.8 of `docs/proof.md` (review pending). |
+| Subject: tag-retaining persistent lazy tree | `include/valseg/persistent_lazy_segment_tree.hpp`, `src/persistent_lazy_segment_tree.cpp`; generic form `RetainedTagPersistentTree` in `include/valseg/policy_trees.hpp` | Path copying; the copied node keeps its lazy tag (`Node::lazy`, included in own `sum`, not in children); queries accumulate ancestor tags outermost-first (`query`'s `inheritedLazy`) | Policies with commuting induced actions | A tag retained through a partial descent is applied outside newer tags below it; see section 2.2. Theorems 9.4 and 9.5 of `docs/proof.md`, independently reviewed in section 9.10. |
+| Copy-on-push ablation | `bench/copy_on_push_segment_tree.hpp`; generic form `CopyOnPushPersistentTree` in `include/valseg/policy_trees.hpp` | Same layout; a partial descent pushes the tag into copied children first | Arbitrary valid action monoids | Push-down preserves chronological order at every node. Theorem 9.8 of `docs/proof.md`, independently reviewed in section 9.10. |
 | Ordinary lazy tree (control) | `include/valseg/lazy_segment_tree.hpp`; generic form `PushedLazyTree` in `include/valseg/policy_trees.hpp` | In-place push-down; latest state only | Arbitrary valid action monoids; no history | Textbook lazy propagation; chronological order preserved. Theorem 9.8. |
 | Point-only persistence | `include/valseg/point_only_persistent_segment_tree.hpp`; generic form `PointMaterializedPersistentTree` in `include/valseg/policy_trees.hpp` | Path-copies to every affected leaf; no tags | Arbitrary valid action monoids | Actions are fully materialized at leaves in order; update cost grows with range width. Theorem 9.8. |
 | Full copy | `include/valseg/full_copy_persistent_segment_tree.hpp` | Complete tagless tree copy per update | Arbitrary valid action monoids | Every version is a materialized tree; no deferred state at all. Audited from source in `docs/proof.md` section 9.7. |
