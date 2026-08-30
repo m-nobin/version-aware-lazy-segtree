@@ -94,7 +94,7 @@ Gate G1.
 | Contribution | Closest precedent | Status after audit |
 | --- | --- | --- |
 | C1 taxonomy | Salzberg-Tsotras framework; DSST method taxonomy | Open. No prior taxonomy spans retained tags, copy-on-push, materialization, snapshots, checkpoints, modification boxes and fat nodes under one algebraic interface. |
-| C2 boundary | MVSB-tree (additive dominance sums, no action-order theorem); Library Checker (copy-on-push preserves order) | Open. The direct implementation audit found no retained-tag counterexample: Library Checker materializes accumulated tags into copied children on partial descent. |
+| C2 boundary | MVSB-tree (additive dominance sums, no action-order theorem); Library Checker (copy-on-push preserves order) | Drafted, review pending. The direct implementation audit found no retained-tag counterexample: Library Checker materializes accumulated tags into copied children on partial descent. Sufficiency, conditional necessity, the faithful-action corollary and the minimal AffineSum witness are stated and proved in `docs/proof.md` section 9 with executable evidence in `tests/policy_trees_test.cpp`; the claim stays "drafted" until the section 9.10 review record is signed. |
 | C3 frontier laws and lower bound | DSST/MVBT optimality for point updates; Fiat-Kaplan confluent lower bounds | Open. No space bound for partially persistent range actions found. Statement of model R is in [capability-taxonomy.md](capability-taxonomy.md) section 6. |
 | C4 predictive cost model | None found for persistence-strategy selection | Open. |
 | C5 registered regime study | Pluquet et al. (in-memory, point updates, no registration) | Open. |

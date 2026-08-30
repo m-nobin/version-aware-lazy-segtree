@@ -86,7 +86,7 @@ root-to-leaf path outermost-first, and the tree order does not record which
 tag is newer. Both chronological orders occur, on `n = 4`:
 
 - `rangeAdd(0, 3, g)` then `rangeAdd(1, 2, f)`: the second update copies the
-  root and retains `g` on it, then places `f` on leaf 1. The query applies
+  root and retains `g` on it, then places `f` on leaves 1 and 2. The query applies
   `g` outside `f`, so it computes `rho(g)(rho(f)(x))` where the semantics
   require `rho(f)(rho(g)(x))`: reversed.
 - `rangeAdd(1, 2, f)` then `rangeAdd(0, 3, g)`: leaf 1 carries `f`, the
@@ -103,11 +103,15 @@ semantics exactly when the induced transformations commute pairwise on
 reachable aggregates; the first trace is the seed for the theory PR's
 minimal AffineSum counterexample on the tree itself.
 
-Proof obligations (theory PR, Gate G2): sufficiency of induced
-commutativity; necessity under explicit reachability and order-separation
-assumptions; the faithful-action corollary. Until that review passes, this
-project claims only what the tests witness: commutation on the tested
-domains and the concrete counterexample.
+The proof obligations (sufficiency of induced commutativity; necessity under
+explicit reachability and order-separation assumptions; the faithful-action
+corollary) are discharged in `docs/proof.md` section 9: Theorem 9.4, Theorem
+9.5 with its three named assumptions, and Corollary 9.7, with the minimal
+`n = 2` counterexample in section 9.5. Their independent review (section
+9.10 of that document) is still pending. Until it passes, this project
+claims only what the tests witness: commutation on the tested domains, the
+concrete counterexample, and agreement of every generic instantiation with
+the element-wise oracle.
 
 ## 3. Capability facts in code
 
@@ -121,8 +125,19 @@ domains and the concrete counterexample.
 
 They exist so a policy-generic structure can reject an unsupported policy at
 compile time. The compiler propagates these facts; it does not prove them.
-The evidence behind each value is section 2.1's tests and, eventually, the
-reviewed theorems.
+The evidence behind each value is section 2.1's tests and, once reviewed,
+the theorems of `docs/proof.md` section 9.
+
+`include/valseg/policy_trees.hpp` provides the policy-generic instruments
+the theorem is stated for: `RetainedTagPersistentTree<Policy>` (the subject;
+a `static_assert` on `kInducedActionsCommute` rejects an unsupported policy,
+checked by the CTest case `retained_tag_rejects_affine_compile_fail`),
+`CopyOnPushPersistentTree<Policy>` (the ablation),
+`PointMaterializedPersistentTree<Policy>` and `PushedLazyTree<Policy>`. The
+SumAdd instantiations of the first two match `PersistentLazySegmentTree`
+and `bench/copy_on_push_segment_tree.hpp` in arena size after every update
+and in every probed answer on the tested histories (`tests/policy_trees_test.cpp`).
+The public SumAdd classes are unchanged.
 
 ## 4. Strategy capability matrix
 
@@ -132,13 +147,13 @@ obligation; no strategy is claimed beyond what its mechanism preserves.
 
 | Strategy | Source | Mechanism (audited) | Action class | Why / obligation |
 | --- | --- | --- | --- | --- |
-| Subject: tag-retaining persistent lazy tree | `include/valseg/persistent_lazy_segment_tree.hpp`, `src/persistent_lazy_segment_tree.cpp` | Path copying; the copied node keeps its lazy tag (`Node::lazy`, included in own `sum`, not in children); queries accumulate ancestor tags outermost-first (`query`'s `inheritedLazy`) | Policies with commuting induced actions | A tag retained through a partial descent is applied outside newer tags below it; see section 2.2. Obligation: sufficiency/necessity theorem. |
-| Copy-on-push ablation | `bench/copy_on_push_segment_tree.hpp` | Same node layout and invariant, but an update descending past a tagged node pushes the tag into copied children first | Arbitrary valid action monoids | Push-down preserves chronological order at every node. Obligation: strategy-specific proof in the theory PR. |
-| Ordinary lazy tree (control) | `include/valseg/lazy_segment_tree.hpp` | In-place push-down; latest state only | Arbitrary valid action monoids; no history | Textbook lazy propagation; chronological order preserved. |
-| Point-only persistence | `include/valseg/point_only_persistent_segment_tree.hpp` | Path-copies to every affected leaf; no tags | Arbitrary valid action monoids | Actions are fully materialized at leaves in order; update cost grows with range width. |
-| Full copy | `include/valseg/full_copy_persistent_segment_tree.hpp` | Complete tagless tree copy per update | Arbitrary valid action monoids | Every version is a materialized tree; no deferred state at all. |
-| Buffered path copying | `include/valseg/buffered_path_copying_segment_tree.hpp` | Retains sum and lazy deltas in a per-node version-stamped buffer; path-copies on overflow | Audited claim only: same retained-tag accumulation as the subject, so at most the subject's class | Obligation: strategy-specific audit/proof before any broader claim. |
-| Fat nodes | `include/valseg/fat_node_persistent_segment_tree.hpp` | Versioned `{version, children, sum, lazy}` states in-node (capacity 3); copies on overflow | Audited claim only: retains tags across versions, so at most the subject's class | Same obligation as buffered. |
+| Subject: tag-retaining persistent lazy tree | `include/valseg/persistent_lazy_segment_tree.hpp`, `src/persistent_lazy_segment_tree.cpp`; generic form `RetainedTagPersistentTree` in `include/valseg/policy_trees.hpp` | Path copying; the copied node keeps its lazy tag (`Node::lazy`, included in own `sum`, not in children); queries accumulate ancestor tags outermost-first (`query`'s `inheritedLazy`) | Policies with commuting induced actions | A tag retained through a partial descent is applied outside newer tags below it; see section 2.2. Theorems 9.4 and 9.5 of `docs/proof.md` (review pending). |
+| Copy-on-push ablation | `bench/copy_on_push_segment_tree.hpp`; generic form `CopyOnPushPersistentTree` in `include/valseg/policy_trees.hpp` | Same node layout and invariant, but an update descending past a tagged node pushes the tag into copied children first | Arbitrary valid action monoids | Push-down preserves chronological order at every node. Theorem 9.8 of `docs/proof.md` (review pending). |
+| Ordinary lazy tree (control) | `include/valseg/lazy_segment_tree.hpp`; generic form `PushedLazyTree` in `include/valseg/policy_trees.hpp` | In-place push-down; latest state only | Arbitrary valid action monoids; no history | Textbook lazy propagation; chronological order preserved. Theorem 9.8. |
+| Point-only persistence | `include/valseg/point_only_persistent_segment_tree.hpp`; generic form `PointMaterializedPersistentTree` in `include/valseg/policy_trees.hpp` | Path-copies to every affected leaf; no tags | Arbitrary valid action monoids | Actions are fully materialized at leaves in order; update cost grows with range width. Theorem 9.8. |
+| Full copy | `include/valseg/full_copy_persistent_segment_tree.hpp` | Complete tagless tree copy per update | Arbitrary valid action monoids | Every version is a materialized tree; no deferred state at all. Audited from source in `docs/proof.md` section 9.7. |
+| Buffered path copying | `include/valseg/buffered_path_copying_segment_tree.hpp` | Retains sum and lazy deltas in a per-node version-stamped buffer; path-copies on overflow | Same class as the subject for the state-storing form of the buffer: policies with commuting induced actions. The implemented additive-delta entries are a SumAdd refinement. | Source audit in `docs/proof.md` section 9.7: full coverage composes the delta into the node's version-stamped `lazy`, partial coverage retains it, queries accumulate outermost-first; Lemma 9.1 applies with the tag read at the queried version. Not generalized in code. |
+| Fat nodes | `include/valseg/fat_node_persistent_segment_tree.hpp` | Versioned `{version, children, sum, lazy}` states in-node (capacity 3); copies on overflow | Same class as the subject: policies with commuting induced actions | Source audit in `docs/proof.md` section 9.7: `next.lazy += value` on full coverage, retained on partial coverage, accumulated outermost-first on query. Not generalized in code. |
 | Checkpoint plus log | `include/valseg/checkpointing_segment_tree.hpp` | Full checkpoint tree every `K` versions plus an update log; a historical query reads the nearest checkpoint at or before the version and adds each later logged update's projected contribution | SumAdd and separately proved query-projectable policies only | See section 5. |
 
 ## 5. The checkpoint restriction
@@ -211,6 +226,9 @@ justified reason, never after the fact to preserve optimality.
 - No generic checkpoint replay.
 - No `O(log n)` bound for any version-stamped structure beyond what its own
   header documents.
-- No correctness boundary theorem yet; sufficiency and necessity are
-  obligations with named assumptions, not results.
+- No reviewed correctness boundary theorem yet: sufficiency, necessity and
+  the faithful-action corollary are drafted with named assumptions in
+  `docs/proof.md` section 9 and await the independent review recorded there.
 - No claim that two policy instantiations prove generic correctness.
+- No generic buffered, fat-node or checkpoint structure; their action class
+  is an audit of the SumAdd source, not a generalized implementation.

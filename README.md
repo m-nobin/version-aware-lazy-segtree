@@ -9,8 +9,11 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 > **Current status**
 > Route B Phase 1 (evidence and model lock) is complete: both pull requests are merged and the
 > independent reader's sign-off is recorded in the claim-evidence matrix. Phase 2 (theorems and
-> the predictive model) is next. See the
-> [Phase 1 exit review](docs/research/phase-1-exit-review.md).
+> the predictive model) has started with the observational commutativity boundary,
+> [docs/proof.md](docs/proof.md) section 9, drafted and awaiting independent proof review. The
+> Gate G1 record is section 9 of the
+> [claim-evidence matrix](docs/research/claim-evidence-matrix.md); phase charters and exit
+> reviews are working documents kept outside the repository.
 
 ## Implemented components
 
@@ -29,9 +32,15 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 [include/valseg/policy.hpp](include/valseg/policy.hpp) defines the aggregate/action policy model
 these strategies are analysed under: `SumAddPolicy`, `MinAddPolicy` and `AffineSumModPolicy` with
 their algebraic laws and compile-time capability facts; the strategy-by-strategy audit is in
-[docs/research/capability-taxonomy.md](docs/research/capability-taxonomy.md). The existing
-structures remain SumAdd-only; the policies feed the research programme, not a new public API for
-the trees.
+[docs/research/capability-taxonomy.md](docs/research/capability-taxonomy.md).
+[include/valseg/policy_trees.hpp](include/valseg/policy_trees.hpp) holds the policy-generic
+research instruments the boundary theorem is stated for: `RetainedTagPersistentTree<Policy>` (the
+subject; refuses at compile time a policy that does not declare `kInducedActionsCommute`),
+`CopyOnPushPersistentTree<Policy>` (the ablation), `PointMaterializedPersistentTree<Policy>` and
+`PushedLazyTree<Policy>`. Their SumAdd instantiations match `PersistentLazySegmentTree` and
+`CopyOnPushSegmentTree` in arena size after every update and in every probed answer on the
+tested histories. The existing structures remain SumAdd-only; the
+policies and templates feed the research programme, not a new public API for the trees.
 
 All components support zero-based, inclusive range-add and range-sum operations using `long long` values. Persistent updates apply to the latest version only, while queries read any published version. Persistent update time is amortized over arena growth; the bounds are proved in [docs/proof.md](docs/proof.md).
 
@@ -102,13 +111,14 @@ CI also enforces ClangFormat 18 and runs Linux Clang with AddressSanitizer and U
 include/valseg/             Public headers
 src/                        Library implementations
 tests/                      Deterministic and randomized differential GoogleTest suites
+tests/compile_fail/         Sources that must fail to compile, run as CTest cases
 bench/                      Benchmark harness and workloads
 bench/analysis/             Locked pilot analysis and figure/table generation
 .github/workflows/ci.yml    Cross-platform CI
 CMakeLists.txt              Build and tooling configuration
 CMakePresets.json           Developer, release, analysis, and CI presets
-docs/proof.md               Correctness proof and complexity analysis
-docs/research/              Phase charter, exit review, claim matrix and capability model
+docs/proof.md               Correctness proof, complexity analysis and the action-order boundary theorem
+docs/research/              Claim-evidence matrix and capability model
 paper/                      Version-controlled manuscript source
 ```
 
