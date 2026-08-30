@@ -93,6 +93,22 @@ jobs:
           find include src tests -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0 \
             | xargs -0 clang-format-18 --dry-run --Werror
 
+  analysis-tests:
+    name: Analysis / synthetic fixtures
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install locked analysis environment
+        run: python -m pip install uv==0.12.2
+
+      - name: Run synthetic analysis fixtures
+        run: >-
+          uv run --frozen --project bench/analysis
+          python -m unittest discover -s bench/analysis/tests -v
+
   sanitizers:
     name: Linux / Clang / ASan + UBSan
     runs-on: ubuntu-24.04

@@ -115,11 +115,17 @@ bool inducedTransformationsCommute(const std::vector<typename Policy::Action>& a
   return true;
 }
 
-const std::vector<long long> smallValues = {-3, -2, -1, 0, 1, 2, 3};
-const std::vector<std::size_t> smallLengths = {1, 2, 3, 7};
+std::vector<long long> smallValues() {
+  return {-3, -2, -1, 0, 1, 2, 3};
+}
+
+std::vector<std::size_t> smallLengths() {
+  return {1, 2, 3, 7};
+}
 
 std::vector<Affine::Action> allAffineActions() {
   std::vector<Affine::Action> actions;
+  actions.reserve(169U);
   for (std::uint64_t scale = 0; scale < 13; ++scale) {
     for (std::uint64_t shift = 0; shift < 13; ++shift) {
       actions.push_back(Affine::Action{scale, shift});
@@ -130,6 +136,7 @@ std::vector<Affine::Action> allAffineActions() {
 
 std::vector<Affine::Aggregate> allResidues() {
   std::vector<Affine::Aggregate> residues;
+  residues.reserve(13);
   for (std::uint64_t value = 0; value < 13; ++value) {
     residues.push_back(value);
   }
@@ -137,11 +144,11 @@ std::vector<Affine::Aggregate> allResidues() {
 }
 
 TEST(PolicyLaws, SumAddSmallDomain) {
-  checkLaws<SumAddPolicy>(smallValues, smallValues, smallLengths);
+  checkLaws<SumAddPolicy>(smallValues(), smallValues(), smallLengths());
 }
 
 TEST(PolicyLaws, MinAddSmallDomain) {
-  checkLaws<MinAddPolicy>(smallValues, smallValues, smallLengths);
+  checkLaws<MinAddPolicy>(smallValues(), smallValues(), smallLengths());
 }
 
 TEST(PolicyLaws, AffineSumExhaustive) {
@@ -181,8 +188,10 @@ TEST(PolicyArithmetic, AffineNormalizesInputsAndAvoidsIntermediateWraparound) {
 }
 
 TEST(PolicyCommutation, SumAddAndMinAddCommute) {
-  EXPECT_TRUE(inducedTransformationsCommute<SumAddPolicy>(smallValues, smallValues, smallLengths));
-  EXPECT_TRUE(inducedTransformationsCommute<MinAddPolicy>(smallValues, smallValues, smallLengths));
+  EXPECT_TRUE(
+      inducedTransformationsCommute<SumAddPolicy>(smallValues(), smallValues(), smallLengths()));
+  EXPECT_TRUE(
+      inducedTransformationsCommute<MinAddPolicy>(smallValues(), smallValues(), smallLengths()));
 }
 
 TEST(PolicyCommutation, AffineSumDoesNotCommute) {

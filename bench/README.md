@@ -251,16 +251,20 @@ The memory columns are four different units, kept apart on purpose
 `--seed`, `--warmup` and `--trials`, so it joins the runs CSV on those columns:
 
 ```
-workload,n,axis,variant,seed,k,updates,nonzero_updates,queries,
-sum_update_visits,sum_pushes,sum_intersecting,sum_query_visits,sum_replay_entries
+workload,n,axis,variant,seed,k,stream_fingerprint,updates,nonzero_updates,queries,
+sum_update_visits,sum_checkpoint_update_visits,sum_pushes,sum_intersecting,
+sum_query_visits,sum_replay_entries,sum_query_version_distance,
+full_coverage_updates,full_coverage_queries,latest_version_queries
 ```
 
 These are machine-independent counts from the executable frontier definitions
 in `include/valseg/frontier.hpp` (the records the tag-retaining subject appends,
 the pushes copy-on-push pays, the nodes tagless path copying copies, the records
-a query reads, and the log entries a checkpoint-plus-log query at interval `k`
-replays). No structure is built and nothing is timed, and `--structure` and
-`--trace` are ignored; they are the candidate predictors of the cost model.
+a query reads, checkpoint-boundary traversals, replay entries, version distance
+and full-coverage events). Latest-version checkpoint queries replay zero log
+entries. `stream_fingerprint` identifies the complete generated input for one
+seed so equivalent cells cannot cross the model split. No structure is built
+and nothing is timed, and `--structure` and `--trace` are ignored.
 
 Per-operation latency is kept for every operation and reduced to quantiles after
 the replay, so a cell reports a distribution rather than an average. `batch_ns`
@@ -303,18 +307,19 @@ for every number the report quotes. `docs/benchmarking/benchmarking.tex` reads
 those macros rather than containing literals, so no number in the document can
 drift from the data it describes — re-running the campaign updates the prose.
 
-Two further scripts belong to the cost model (`docs/research/cost-model.md`):
-`split.py` assigns every measurement cell to the training or hold-out
-partition by a salted hash, so every seed and trial of a cell lands on one
-side (`split.py --self-test` checks it), and `cost_model.py` fits the
-candidate time model on the pilot's training cells and reports hold-out
-error per structure and operation type. It needs the `structural_*.csv`
-files that `valseg_bench --structural` writes for the campaign's seeds:
+The cost-model tools are specified in `docs/research/cost-model.md`.
+`split.py` groups cells with identical generated streams before the salted
+training/holdout assignment. `cost_model.py --stage fit` writes a canonical,
+hashable model artifact from training rows; `--stage evaluate` scores that
+fixed artifact without refitting. Synthetic fixtures exercise grouping,
+rank-deficient fitting, non-positive-error treatment, missing inputs and
+artifact stability.
+
+One command regenerates the pilot structural counts into temporary storage,
+without modifying the checksummed raw pilot, then runs both stages:
 
 ```sh
-build/release-verify/bench/valseg_bench --structural --seed 20260818 --trials 11 --warmup 3 \
-  --out-dir bench/results/raw --tag timing
-uv run --frozen --project bench/analysis bench/analysis/cost_model.py
+bench/rebuild_pilot_cost_model.sh
 ```
 
 Its output is pilot-only model development, not the registered evaluation.
