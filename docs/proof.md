@@ -250,7 +250,8 @@ _Argument outline._
   argument: after the topmost level where the update range splits, at most two partially covered
   nodes remain per level, each of which may visit two children, one of them fully covered and
   terminating), giving at most `4(h + 1)` invocations across levels `0 … h`; by Proposition 1 that
-  is also the number of appended nodes.
+  is also the number of appended nodes. Section 10 replaces this bound by the exact frontier
+  and the tight `4h − 3`.
 - **Zero-delta fast path** performs validation and a single `roots.push_back`.
 - **Query** visits the same `O(log n)` frontier read-only and allocates nothing (Lemma 4).
 - **Space** is the build cost plus the per-update copies, giving `O(n + U₊ log n)` arena nodes.
@@ -721,3 +722,308 @@ does not satisfy the independence requirement below.
 | Decision | Pending |
 | Required changes and disposition | Pending |
 | Date | Pending |
+
+## 10. Frontier identities, push cost and the lower-bound attempt
+
+This section answers RQ2 of the research plan: how much structure each strategy retains after a
+range update. Everything called exact here is executable in `include/valseg/frontier.hpp` and
+checked in `tests/frontier_test.cpp` against the arena growth of the implemented structures,
+exhaustively over every range for small `n` and on seeded histories for larger `n`. Section 10.6
+reports the outcome of the lower-bound attempt in representation model `R`: it fails, and the
+failure is documented with an executable counterexample rather than argued around.
+
+**Status.** Drafted for PR4. Not cited as a result until the review record in section 10.8 is
+complete.
+
+### 10.1 Definitions
+
+The canonical partition and decomposition are those of section 9.1. For a range `[l, r]` in an
+array of `n ≥ 1` elements:
+
+- the **visited set** `V(l, r)` is the set of canonical nodes the update recursion enters: nodes
+  whose interval meets `[l, r]` and whose proper ancestors all meet `[l, r]` without lying inside
+  it;
+- `Partial(l, r) ⊆ V` are the visited nodes whose interval meets `[l, r]` without lying inside it
+  (the recursion continues through them);
+- `D(l, r) = V \ Partial` is the canonical decomposition (the recursion stops there);
+- `F(n, l, r) = |V| = |Partial| + |D|` is the **visited frontier**;
+- `N(n, l, r)` is the number of canonical nodes whose interval meets `[l, r]`;
+- for a history and an update `u`, `P(u)` is the **push frontier**: the number of nodes of
+  `Partial(u)` whose tag in the copy-on-push tree is not the identity when the recursion of `u`
+  reaches the node, that is, after `u`'s own pushes at the node's ancestors (a child tag that an
+  ancestor's push composes to the identity is not pushed).
+
+`frontierCounts` executes the recursion and returns `|Partial|` and `|D|`; `intersectingNodes`
+computes `N`; `PushCountingModel` keeps the copy-on-push tag positions and returns `P`.
+
+Two conventions are kept apart throughout. `U` counts published updates, `U₊ ≤ U` those whose
+action is not the identity: an identity action shares the latest root and allocates nothing (the
+SumAdd `value == 0` fast path), so every per-update identity below is stated for `U₊`. Roots,
+tree records, log entries, checkpoints and modification records are separate units and are never
+added together.
+
+### 10.2 The visited frontier
+
+**Lemma 10.1 (boundary structure).** Let `P_L` be the set of canonical nodes containing both
+`l − 1` and `l` (empty when `l = 0`) and `P_R` the set containing both `r` and `r + 1` (empty when
+`r = n − 1`). Then `Partial(l, r) = P_L ∪ P_R`, and `P_L ∩ P_R` is the set of nodes containing
+both `l − 1` and `r + 1`.
+
+_Proof._ A node `[s, e]` meets `[l, r]` without lying inside it iff `s < l ≤ e` or
+`s ≤ r < e`, that is, iff it contains `l − 1` and `l`, or `r` and `r + 1`. Every such node is
+visited, because each of its proper ancestors also contains the same pair and is therefore
+partial. A node containing `l − 1` and `r + 1` contains everything between. ∎
+
+Each of `P_L`, `P_R`, `P_L ∩ P_R` is a root-to-node path (the ancestors-or-self of the deepest
+node containing the pair), so its size is one plus the depth of that node; `nodesContainingBoth`
+computes it.
+
+**Proposition 10.2 (exact frontier).** For the full range, `F = 1`. Otherwise
+
+```text
+F(n, l, r) = |P_L ∪ P_R| + D_L + D_R
+```
+
+where `D_L` (present when `l > 0`) counts the fully covered children hanging off the path
+`P_L \ P_R`: one for the node whose split is the boundary `l − 1 | l`, unless that node also
+contains `r + 1`, plus one for every node of `P_L \ P_R` above it whose split keeps `l` in the
+left child; `D_R` is symmetric with `r` in the right child. `closedFormFrontier` computes this.
+
+_Proof._ Every node of `D` is a child of a partial node when `Partial ≠ ∅` (its parent meets the
+range and is not inside it). Count the fully covered children of each partial node `c` with
+split `m`. If `c ∈ P_L ∩ P_R`, neither child is inside `[l, r]`: the left child starts at
+`s ≤ l − 1` and the right child ends at `e ≥ r + 1`. If `c ∈ P_L \ P_R`, then `e ≤ r`, and: when `l ≤ m` the
+right child `[m + 1, e]` lies inside `[l, r]` and the left child is partial; when `m ≤ l − 2` the
+left child is disjoint and the right child is partial; when `m = l − 1` the left child is disjoint
+and the right child `[l, e]` is inside `[l, r]`. The last case is the deepest node of `P_L`. The
+`P_R \ P_L` case is symmetric. Summing gives `|D| = D_L + D_R`, and `F = |Partial| + |D|`. ∎
+
+`ClosedFormMatchesTheRecursionOnEveryRange` checks the proposition against the executed
+recursion for every range of every `n ≤ 64`.
+
+**Proposition 10.3 (extrema).** `F ≥ 1` with equality exactly for the full range. With
+`h = ⌈log₂ n⌉` and `h ≥ 2`, `F ≤ 4h − 3`, and the bound is attained for some range if and only if
+`n` is a power of two. For `h = 1` the maximum is 2 and for `h = 0` it is 1.
+
+_Proof._ A node of length `m` splits into children of lengths `⌈m/2⌉` and `⌊m/2⌋`, so by
+induction on `m` every leaf has depth `⌈log₂ n⌉ = h` or `h − 1`, and the rightmost path halves
+with the floor at every step and reaches length one after exactly `⌊log₂ n⌋` steps. Hence
+`|P_L| ≤ h`, `|P_R| ≤ h`, and both contain the root, so `|P_L ∪ P_R| ≤ 2h − 1`. By the case analysis in Proposition 10.2 each node of
+`P_L \ P_R` or `P_R \ P_L` contributes at most one decomposition node and each node of
+`P_L ∩ P_R` none, so `|D| ≤ |P_L \ P_R| + |P_R \ P_L| ≤ 2h − 2`. Hence `F ≤ 4h − 3`. Equality
+needs `|P_R| = h` with `P_L ∩ P_R = {root}` and every node of `P_R \ P_L` above
+`LCA(r, r + 1)` keeping `r` in its right child: then the path to `r + 1` is the rightmost path
+of the tree and must reach depth `h`. The rightmost leaf has depth `⌊log₂ n⌋`, which equals `h`
+only when `n` is a power of two. Conversely, for `n = 2ʰ` the range `[1, n − 2]`
+attains it: `P_L` is the leftmost path, `P_R` the rightmost path, they meet only at the root,
+and every split along them keeps the inner index on the required side. ∎
+
+`MaximumIsFourHeightMinusThreeAndTheMinimumIsOne` checks the maximum exhaustively for
+`n ≤ 128` when `n` is a power of two and confirms that no other `n ≤ 64` attains it. For those
+`n` the exact maximum was tabulated and lies in `{4k − 1, 4k}` with `k = ⌊log₂ n⌋`; that pattern
+is an observation recorded by the test, not a proved statement. The bound `4(h + 1)` of
+Proposition 2 in section 6 remains true and is superseded by this one.
+
+**Proposition 10.4 (expected frontier over a range family).** For a family of ranges given by
+counting functions `meet(c)` and `contain(c)` (how many ranges of the family meet, respectively
+contain, canonical node `c`), the sum of `F` over the family is
+
+```text
+Σ_ranges F = Σ_c [meet(c) − contain(c)] + Σ_c [contain(c) − contain(parent(c))]
+```
+
+with `contain(parent(root)) = 0`, and the expected frontier under the uniform distribution on
+the family is that sum divided by the family size.
+
+_Proof._ `c` is partial for a range iff the range meets `c` without containing it; `c ∈ D` iff the
+range contains `c` but not its parent. Sum the two indicators over nodes and ranges in either
+order. ∎
+
+`frontierSum` evaluates the sum in `O(n)` calls of the counting function; `allRangesCounter` and
+`fixedWidthCounter` give the counts for all `n(n + 1)/2` ranges and for the `n − w + 1` windows
+of width `w`. `SumOverAllRangesAndFixedWidthWindowsMatchesEnumeration` checks both against
+enumeration for every `n ≤ 40` and every width. The confirmatory range distributions are fixed
+in the registered protocol (PR6); once they are, their expected frontier is this computation, not
+a new derivation.
+
+### 10.3 Record identities per strategy
+
+**Proposition 10.5 (subject).** A non-identity update on `[l, r]` appends exactly `F(n, l, r)`
+records to `RetainedTagPersistentTree` and to `PersistentLazySegmentTree`; after `U₊` such
+updates the arena holds exactly `2n − 1 + Σ F_i` records, plus `U + 1` root handles.
+
+_Proof._ Proposition 1 in section 6: each update invocation appends one record and the
+invocations are exactly `V(l, r)`. ∎
+
+Checked on every range of every `n ≤ 32` for both classes
+(`SubjectAppendsExactlyTheVisitedFrontierOnEveryRange`) and on a 2000-update seeded history at
+`n = 1000` (`SubjectArenaIsBuildPlusFrontierSumOnSeededHistory`).
+
+**Proposition 10.6 (copy-on-push).** A non-identity update `u` appends exactly `F(u) + 2P(u)`
+records to `CopyOnPushPersistentTree` and to `bench/copy_on_push_segment_tree.hpp`.
+
+_Proof._ The recursion visits `V(u)` and appends one record per invocation, as for the subject.
+In addition, at each node of `Partial(u)` whose tag is not the identity it appends two records
+(`pushInto` on both children) before descending; a pushed child that the recursion then enters
+is copied again by that invocation, which is already counted in `F`. No other append exists. ∎
+
+`P` depends on the history, so the identity is checked in three ways: exhaustively over every
+ordered pair of ranges for `n ≤ 8`
+(`CopyOnPushAppendsFrontierPlusTwicePushesOnEveryPairOfRanges`), on seeded 1500-update
+histories for SumAdd, MinAdd and AffineSum, with small integer deltas for the additive policies
+so that composed tags often return to the identity and full-width random affine pairs
+(`CopyOnPushIdentityHoldsOnSeededHistoriesForEveryPolicy`), and on the
+worst-case construction below.
+
+**Proposition 10.7 (push frontier extrema).** `0 ≤ P(u) ≤ |Partial(u)| ≤ 2h − 1`, hence a
+copy-on-push update appends at most `(4h − 3) + 2(2h − 1) = 8h − 5` records for `h ≥ 2`. For
+`n = 2ʰ`, `h ≥ 2`, there is a history whose last update has `P = 2h − 1` and appends exactly
+`8h − 5` records, against `4h − 3` for the subject on the same update, so both bounds are tight
+for powers of two.
+
+_Proof._ The upper bounds are the definition and Proposition 10.3. For the construction, tag the
+left boundary path of `[1, n − 2]` bottom-up (`[0, 1]`, `[0, 3]`, …, `[0, n/2 − 1]`), then the
+right boundary path bottom-up (`[n − 2, n − 1]`, …, `[n/2, n − 1]`), then the root
+(`[0, n − 1]`). Each of these updates is fully covered at the node it tags and copies only that
+node's ancestors, which are still untagged in this order, so no push occurs and every node of
+the two paths and the root carries a non-identity tag. The update `[1, n − 2]` then has
+`Partial` equal to those `2h − 1` nodes, all tagged. ∎
+
+`PushFrontierWorstCaseIsAttained` runs the construction for `h = 2 … 7`.
+
+**Proposition 10.8 (point materialization).** A non-identity update on `[l, r]` of width `k`
+appends exactly `N(n, l, r) = |Partial| + 2k − |D|` records to `PointOnlyPersistentSegmentTree`.
+
+_Proof._ Every canonical node meeting the range is entered and copied; each node of `D` of
+length `m` roots a subtree of `2m − 1` nodes all of which meet the range, and the lengths of `D`
+sum to `k`. ∎
+
+Checked on every range of every `n ≤ 32` (`PointOnlyAppendsExactlyTheIntersectingNodesOnEveryRange`).
+
+**Record accounting for the remaining strategies.** The units differ and are not conflated:
+
+| Strategy | Per non-identity update | Unit | Where proved or documented |
+| --- | --- | --- | --- |
+| Full copy | `2n − 1` | tree records | `full_copy_persistent_segment_tree.hpp` |
+| Checkpoint plus log | one log entry, plus `2n − 1` checkpoint records every `K` versions | log entries and checkpoint records | `checkpointing_segment_tree.hpp` |
+| Buffered path copying | between `0` and `F` records; every visited node with a free slot absorbs the update in place | tree records (88 bytes) and in-place slot entries | `buffered_path_copying_segment_tree.hpp` |
+| Fat node | one state per visited node; a fresh record every `K = 3` states of a node, `2n − 1 + Σ_v ⌊m_v / K⌋` in total | node states and tree records | `fat_node_persistent_segment_tree.hpp` |
+
+Their bounds are not re-derived here; each header owns its argument and its deterministic suite
+asserts the count.
+
+### 10.4 What the identities say about the ablation
+
+Sections 9.5 and 10.3 together give the price of order preservation in records: on the same
+update the ablation appends `2P(u)` records more than the subject: at each partially covered
+tagged node both strategies copy the node, and the ablation also copies its two children, which
+the subject leaves shared (or, for the child the recursion enters, copies once where the
+ablation copies twice). The per-update ratio is
+`1 + 2P(u) / F(u) ≤ 1 + 2|Partial(u)| / F(u) < 3`, and it approaches 3 on point updates through
+fully tagged paths (`|Partial| = h`, `|D| = 1`). Over a history the ratio of retained records is
+`(2n − 1 + Σ(F_i + 2P_i)) / (2n − 1 + Σ F_i)`, so it depends on how often pushes recur on the
+same nodes, which the workload decides. The pilot's measured ratio of nodes per version, 2.02 at 100,000 elements (44.1 against
+88.9; exploratory pilot, one machine, Wiki page Benchmark Results, headline table), is
+consistent with these bounds and is explained by them only once `Σ P_i` is computed for its
+streams, which `valseg_bench --structural` now does for the cost model. This is a
+deterministic structural observation, not a timing claim.
+
+### 10.5 Representation model R and the lower-bound target
+
+Model `R` is fixed in `docs/research/capability-taxonomy.md` section 6. The target was: every
+structure in `R` needs at least `F(u)` new records for update `u` in the worst case, which
+would make the subject allocation-optimal.
+
+### 10.6 The lower bound fails: an executable counterexample
+
+**Proposition 10.9 (edge tags beat F inside R).** There is a representation in `R` that answers
+every history correctly for `SumAdd` and appends exactly `|Partial(u)|` records for a
+non-identity update with `Partial(u) ≠ ∅`, and one record for the full range. That is
+`F(u) − |D(u)| < F(u)` for every update that is not the whole array.
+
+_Construction._ Each record holds two child references, the aggregate of its interval and one
+tag per child edge: `(left, right, aggregate, leftTag, rightTag)`. `leftTag` applies to the
+whole left subtree, outside everything stored there. An update at a partial node copies the
+node; for a child that lies inside the range it composes the action into that child's edge tag
+and does not copy the child; for a child that is partial it recurses; it then recomputes the
+aggregate as `combine(apply(leftTag, left.aggregate), apply(rightTag, right.aggregate))`. The
+full range copies the root and composes the action into both edges. Queries descend from the
+root composing edge tags outermost first, exactly as the subject composes node tags.
+
+_Membership in R._ One record per canonical interval, `O(1)` state (one aggregate, two actions),
+two references, immutable published records, latest-version updates in `O(log n)`, historical
+queries allocation-free in `O(log n)` from the root alone, no side index, no replay.
+
+_Count._ Records are appended exactly at the nodes the recursion copies, which are the partial
+nodes; a decomposition node is never copied because its parent is partial and absorbs the action
+on the edge. For the full range the root is the only record.
+
+_Correctness for SumAdd._ Every element of `[l, r]` lies under exactly one decomposition node,
+whose parent is partial and receives the delta on that one edge (both edges at the root for the
+full range); no edge into a node outside the range is touched; and every copied partial node
+recomputes its aggregate from the invariant
+`aggregate = combine(apply(leftTag, left.aggregate), apply(rightTag, right.aggregate))`, so each
+element's value is its initial value plus the deltas of the updates covering it, and a query
+folding edge tags outermost first returns the range sum. The counterexample is stated for
+`SumAdd`, the policy of the lower-bound target; for other policies the edge-tag tree retains
+older tags outside newer ones as the subject does and would need its own version of section 9,
+which is not claimed. ∎
+
+`EdgeTagModelAgreesWithTheOracleAndAllocatesThePartialCount` implements the representation as a
+test-local model, checks it against the element-wise oracle on seeded histories up to `n = 300`,
+and checks the record count on every range of every `n ≤ 16`, including strict inequality
+against `F` for every range other than the whole array. The model is test evidence for the
+proposition and is not a library structure; the plan forbids a new persistence strategy in this
+programme, and none is proposed.
+
+**Consequences.**
+
+1. The subject is not allocation-optimal in `R`. The claim "tag retention is frontier-optimal in
+   model `R`" is withdrawn, and the plan's fallback applies: section 10 reports exact
+   characterizations, not optimality, and the word *optimality* is removed from every claim.
+2. `|Partial(u)|` is a natural next candidate for a lower bound, but `R` as fixed permits `O(1)`
+   record state that carries an action together with an interval, and with such state a single
+   update can be absorbed into one new root record; a bound then needs an amortized argument
+   over histories and a constraint on what `O(1)` state may encode. Adding that constraint now
+   would be narrowing `R` after seeing the counterexample, which the plan forbids without
+   independent justification. The lower-bound question is therefore left open, stated as such,
+   and not replaced by intuition.
+3. Records and bytes separate. The edge-tag record is `2I + S + 2A` bytes against the subject's
+   `2I + S + A` (40 against 32 on the SumAdd layout), so the edge-tag representation stores fewer
+   bytes per update only when `|Partial| · (2I + S + 2A) < F · (2I + S + A)`, that is when
+   `|D| / |Partial| > A / (2I + S + A)`, which is `1/4` on the SumAdd layout. A point update at
+   depth `h` has `|D| / |Partial| = 1/h`, so at `h = 4` the two representations store the same
+   bytes (`4 · 40 = 5 · 32`) and at `h ≥ 5` the subject stores fewer bytes despite allocating
+   more records. Byte accounting is the subject of the physical model (PR5).
+
+### 10.7 Relation to the earlier bound
+
+Section 6 proved `F ≤ 4(h + 1)` and the differential suite asserts it on every generated
+update. Proposition 10.3 tightens it to `4h − 3` and the frontier suite asserts the exact value
+on every generated update; both statements stand, and the older one is kept because the
+differential suite predates this section.
+
+### 10.8 Theorem-to-test map and review record
+
+| Statement | Executable evidence (`tests/frontier_test.cpp` unless noted) |
+| --- | --- |
+| Proposition 10.2, exact `F` | `ClosedFormMatchesTheRecursionOnEveryRange` |
+| Proposition 10.3, extrema and attainment | `MaximumIsFourHeightMinusThreeAndTheMinimumIsOne` |
+| Proposition 10.4, expected frontier | `SumOverAllRangesAndFixedWidthWindowsMatchesEnumeration` |
+| Proposition 10.5, subject identity | `SubjectAppendsExactlyTheVisitedFrontierOnEveryRange`, `SubjectArenaIsBuildPlusFrontierSumOnSeededHistory`; `tests/differential_validation_test.cpp` for the older bound |
+| Proposition 10.6, copy-on-push identity | `CopyOnPushAppendsFrontierPlusTwicePushesOnEveryPairOfRanges`, `CopyOnPushIdentityHoldsOnSeededHistoriesForEveryPolicy` |
+| Proposition 10.7, push worst case | `PushFrontierWorstCaseIsAttained` |
+| Proposition 10.8, point materialization | `PointOnlyAppendsExactlyTheIntersectingNodesOnEveryRange` |
+| Proposition 10.9, counterexample | `EdgeTagModelAgreesWithTheOracleAndAllocatesThePartialCount` |
+
+To be completed by a reader who did not implement `frontier.hpp` or this section.
+
+| Field | Review record |
+| --- | --- |
+| Reviewer name | Independent automated reviewer acting for Sunjare Zulfiker, at the repository owner's request |
+| Independence basis | Did not write the code or this section; worked from the sources in a separate context; re-derived every proof by hand, traced the closed form on hand examples including a split node containing the other boundary, and built and ran `frontier_test` under the strict-warning preset (10 of 10 pass) |
+| Material reviewed | Section 10, `include/valseg/frontier.hpp`, `tests/frontier_test.cpp`, both copy-on-push implementations, the subject and point-only trees, model `R` and the outcome paragraph in the capability taxonomy, the C3 row of the claim matrix, the README |
+| Checked line by line | The case analysis of Proposition 10.2 and its implementation; the extremal and attainment argument of Proposition 10.3; the double count and counting functions of Proposition 10.4; the extra-copy accounting of Proposition 10.6; the construction of Proposition 10.7; Proposition 10.8; the byte arithmetic of section 10.6; membership of the edge-tag representation in `R`, its record count and the decision not to narrow `R` |
+| Decision | Approve with changes. No error in any result: the identities `F`, `F + 2P`, `N`, the bounds `4h − 3` and `8h − 5` and the counterexample stand; the optimality withdrawal is correctly and honestly stated. |
+| Required changes and disposition | Eight required: a false justification in the `P_L ∩ P_R` case of 10.2; the timing of the `P` definition; the unproved leaf-depth and rightmost-path facts in 10.3; an off-by-one at `h = 4` in 10.6; the unstated `8h − 5` upper bound in 10.7 and the leaf updates in its construction; "tight" qualified to powers of two in the taxonomy and claim matrix; a source for the pilot ratio in 10.4; a direct SumAdd correctness argument for the edge-tag model in place of a Theorem 9.4 analogy. Five precision items (proposition number and path description in `frontier.hpp`, an unused `left − 1` at `left == 0`, the spliced sentence in section 6, the AffineSum delta description, the children wording in 10.4). All applied in this revision. |
+| Date | 30 August 2026 |

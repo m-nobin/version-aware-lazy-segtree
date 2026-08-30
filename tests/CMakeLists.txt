@@ -82,6 +82,7 @@ add_valseg_test(fat_node_persistent_segment_tree_test fat_node_persistent_segmen
 add_valseg_test(copy_on_push_segment_tree_test copy_on_push_segment_tree_test.cpp)
 add_valseg_test(policy_test policy_test.cpp)
 add_valseg_test(policy_trees_test policy_trees_test.cpp)
+add_valseg_test(frontier_test frontier_test.cpp)
 
 # ---------------------------------------------------------------------------
 # Compile-fail test: the tag-retaining subject must reject a policy whose

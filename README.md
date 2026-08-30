@@ -9,8 +9,10 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 > **Current status**
 > Route B Phase 1 (evidence and model lock) is complete: both pull requests are merged and the
 > independent reader's sign-off is recorded in the claim-evidence matrix. Phase 2 (theorems and
-> the predictive model) has started with the observational commutativity boundary,
-> [docs/proof.md](docs/proof.md) section 9, drafted and awaiting independent proof review. The
+> the predictive model) is under way: the observational commutativity boundary
+> ([docs/proof.md](docs/proof.md) section 9) and the frontier identities (section 10) are
+> drafted; the lower-bound attempt of section 10 found a counterexample, so no optimality claim
+> is made. The
 > Gate G1 record is section 9 of the
 > [claim-evidence matrix](docs/research/claim-evidence-matrix.md); phase charters and exit
 > reviews are working documents kept outside the repository.
@@ -39,7 +41,10 @@ subject; refuses a policy whose induced actions do not commute at compile time),
 `CopyOnPushPersistentTree<Policy>` (the ablation), `PointMaterializedPersistentTree<Policy>` and
 `PushedLazyTree<Policy>`. Their SumAdd instantiations match `PersistentLazySegmentTree` and
 `CopyOnPushSegmentTree` in arena size after every update and in every answer on the tested
-histories. The existing structures remain SumAdd-only; the
+histories. [include/valseg/frontier.hpp](include/valseg/frontier.hpp) holds the executable
+frontier definitions (`F`, the closed form, the intersecting-node count, the push frontier `P`
+and exact range-family sums) that [docs/proof.md](docs/proof.md) section 10 states record
+identities with. The existing structures remain SumAdd-only; the
 policies and templates feed the research programme, not a new public API for the trees.
 
 All components support zero-based, inclusive range-add and range-sum operations using `long long` values. Persistent updates apply to the latest version only, while queries read any published version. Persistent update time is amortized over arena growth; the bounds are proved in [docs/proof.md](docs/proof.md).
