@@ -221,6 +221,14 @@ If a counterexample beats the subject's frontier inside R, the claim is
 downgraded to a characterization; R is refined only with an independently
 justified reason, never after the fact to preserve optimality.
 
+**Outcome (PR4, `docs/proof.md` section 10.6).** A counterexample exists: a
+representation with one tag per child edge is inside R and appends
+`|Partial(u)|` records per update, fewer than the subject's `F(u)` on every
+range that is not the whole array. The optimality claim is withdrawn; section
+10 reports exact characterizations (`F`, `F + 2P`, `N`, and the `4h - 3`
+and `8h - 5` worst cases, tight for `n` a power of two) and leaves the
+lower-bound question open. R is not narrowed.
+
 ## 7. What this document does not claim
 
 - No generic checkpoint replay.
@@ -232,3 +240,5 @@ justified reason, never after the fact to preserve optimality.
 - No claim that two policy instantiations prove generic correctness.
 - No generic buffered, fat-node or checkpoint structure; their action class
   is an audit of the SumAdd source, not a generalized implementation.
+- No allocation-optimality claim for the subject in model R: the lower-bound
+  attempt found a counterexample (`docs/proof.md` section 10.6).
