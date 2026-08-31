@@ -8,12 +8,12 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 
 > **Current status**
 > Route B Phase 1's implementation and evidence package is complete and was re-audited on
-> 31 August 2026. Its formal Gate G1 governance condition remains pending because the repository
-> and pull-request history do not preserve durable approval from an independent human reviewer.
+> 1 September 2026. Gate G1 is reconfirmed for the scoped Route B continuation; the durable
+> approval is preserved in the [Phase 1 human review record](docs/research/phase-1-human-review.md).
 > The authoritative [Phase 1 charter](docs/research/phase-1-charter.md), corrected
 > [exit review](docs/research/phase-1-exit-review.md) and
-> [claim-evidence matrix](docs/research/claim-evidence-matrix.md) distinguish technical closure
-> from that outstanding signoff. Phase 2 (theorems, frontier identities and the cost model)
+> [claim-evidence matrix](docs/research/claim-evidence-matrix.md) record the technical closure
+> and the reconfirmed Gate G1 decision. Phase 2 (theorems, frontier identities and the cost model)
 > passed Gate G2: the
 > observational commutativity boundary ([docs/proof.md](docs/proof.md) section 9) and the
 > frontier identities (section 10) are merged and independently reviewed; the lower-bound

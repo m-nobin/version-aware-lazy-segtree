@@ -1,6 +1,6 @@
 # Phase 1 closure addendum and corrected exit review
 
-Re-audited 31 August 2026 against the restored
+Re-audited 1 September 2026 against the restored
 [Phase 1 charter](phase-1-charter.md).
 
 ## Verdict
@@ -9,11 +9,10 @@ Re-audited 31 August 2026 against the restored
 claim matrix, capability model and preserved exploratory pilot satisfy the
 technical Phase 1 criteria.
 
-**External governance: pending.** The repository and GitHub records do not
-contain durable approval authored by an independent human reviewer. The former
-owner-recorded assertion is not a signature or review link and has been
-withdrawn. Consequently, formal Gate G1 is **not reconfirmed** by this
-addendum.
+**External governance: pass.** The durable [Phase 1 human review
+record](phase-1-human-review.md) identifies the reviewer, date, independence
+basis, reviewed materials, approval decision and required-change disposition.
+Formal Gate G1 is **reconfirmed** for the scoped Route B continuation.
 
 PR #34 (`317dac7`) and PR #35 (`f8a184f`) remain valid delivery history.
 Their merges do not substitute for the charter's independent-review
@@ -28,9 +27,9 @@ condition.
 | Closest precedent and scoped difference | Pass | Matrix §8 names both for C1-C5; universal novelty, empty-intersection and project optimality language was removed |
 | Timeline Index characterization | Pass | Corrected to Event List plus Version Map, optional checkpoints and SUM/AVG/COUNT plus MIN/MAX/MEDIAN |
 | Versioned governance authority | Pass | This charter and exit record were restored under `docs/research/`; the contradictory outside-repository statement was removed |
-| Repository and Wiki status | Pending publication | README and both Wiki working copies are corrected; the canonical public Wiki still requires commit, push and remote verification |
-| Owner-recorded signoff | Corrected, not satisfied | Matrix §10 now records the absence of reviewer-authored evidence instead of claiming approval |
-| Final AI technical review | Pass with external condition open | [AI review record](phase-1-ai-review.md) recommends the package for human review, records all findings/dispositions and explicitly does not claim human approval |
+| Repository and Wiki status | Pending publication | The canonical Wiki baseline is synchronized at `a4154d6`; the updated G1 approval status is corrected in the Wiki working copy and awaits commit, push and remote verification |
+| Independent human review | Pass | [Phase 1 human review record](phase-1-human-review.md) records Sunjaree's approval, independence basis and no required changes |
+| Final AI technical review | Supplementary pass | [AI review record](phase-1-review.md) records the technical findings and dispositions; it is supplementary to the human approval |
 
 ## Pilot preservation and reproduction
 
@@ -80,22 +79,18 @@ The legacy pilot stays at `bench/results/raw/`; later campaigns use one
 explicit `bench/results/campaigns/<campaign-id>/raw/` directory. Confirmatory
 analysis receives an explicit campaign path and never pools the legacy pilot.
 
-## Remaining Gate G1 action
+## Gate G1 reconfirmation
 
-The reported reviewer is Sunjare Zulfiker, but the prior independence and
-approval statements are not yet corroborated by a reviewer-authored record.
-To close Gate G1, preserve one PR review, signed document or archived
-reviewer message containing:
+The independent-review condition is satisfied by the [Phase 1 human review
+record](phase-1-human-review.md), dated 31 August 2026:
 
-1. reviewer identity and date;
-2. confirmation that the reviewer did not author the reviewed Phase 1
-   changes;
-3. identification of the matrix, charter, capability taxonomy and Route B
-   recommendation reviewed;
-4. approve/request-changes/reject decision; and
-5. every required change and its disposition, or an explicit statement that
-   none were required.
+- Reviewer: Sunjaree
+- Independence: reviewer did not author the Phase 1 changes
+- Materials: claim matrix, Phase 1 charter, capability taxonomy and Route B
+  recommendation
+- Decision: Approved
+- Required changes: None
 
-After that evidence is linked, update matrix §10, this section and the Wiki,
-then formally reconfirm Gate G1. No repository owner or automated agent can
-complete that external-human step.
+Gate G1 is therefore reconfirmed for the scoped Route B continuation. The
+remaining Phase 3 registration, two-machine dry-run and confirmatory-campaign
+requirements are separate from this Phase 1 gate.

@@ -147,27 +147,31 @@ charter, and that governance condition is still pending.
 
 ## 10. Independent review evidence audit
 
-The repository and GitHub records were checked on 31 August 2026. Pull requests
-#34 and #35 contain no submitted reviews or review comments. Their merge and
-closeout commits prove delivery, not independent approval. The earlier phrase
-"recorded by the repository owner" is therefore withdrawn as insufficient
-evidence and is not replaced by another self-attestation.
+The repository and GitHub records were checked on 1 September 2026. Pull
+requests #34 and #35 contain no submitted reviews or review comments; their
+merge and closeout commits prove delivery, not independent approval. The
+earlier phrase "recorded by the repository owner" is therefore withdrawn as
+insufficient evidence. The approval is preserved separately in the
+[Phase 1 human review record](phase-1-human-review.md).
 
 | Field | Current verifiable record |
 | --- | --- |
-| Reported reviewer | Sunjare Zulfiker |
-| Reported independence basis | Described in the prior record as a second contributor who did not author the Phase 1 changes; not yet corroborated by a durable reviewer-authored record |
-| Durable approval reference | **Pending** — no PR review, signed document or archived reviewer message is currently linked |
-| Decision | Technical recommendation is Route B; formal reviewer decision remains unverified |
-| Required changes and dispositions | **Pending reviewer record.** It must state either no changes, or list each requested change and its disposition |
+| Reviewer | Sunjaree |
+| Independence basis | Reviewer states that they did not author the Phase 1 changes |
+| Durable approval reference | [Phase 1 human review record](phase-1-human-review.md) |
+| Decision | Approved; Route B remains defensible within the scoped claims |
+| Required changes and dispositions | None |
 | Acceptable closure evidence | A submitted PR review, reviewer-signed document, or archived reviewer email/message that identifies the reviewed material, decision, date, independence basis and required-change dispositions |
 
-The separate [AI technical review](phase-1-ai-review.md) verified the source
+The separate [AI technical review](phase-1-review.md) verified the source
 audit and pilot reproduction and identified three corrective actions. Its
-confirmatory metadata guard and stale-record findings have been resolved in
-the working copies; public Wiki publication remains pending. That AI review is
-additional technical evidence, not a human signature.
+confirmatory metadata guard and stale-record findings have been resolved, and
+the corrected public Wiki baseline was published and verified at commit
+`a4154d6`; the updated G1 approval status is prepared in the Wiki working copy
+and awaits publication. That AI review is additional technical evidence, not a
+human signature. It is supplementary to the human approval record and does not
+replace it.
 
-Until that evidence is added, Phase 1 is technically closed but its external
-governance condition is open, and Gate G1 must not be represented as formally
-reconfirmed.
+The human approval record closes the independent-review condition. Gate G1 is
+reconfirmed for the scoped Route B continuation, subject to the remaining
+Phase 3 registration and confirmatory-campaign controls.

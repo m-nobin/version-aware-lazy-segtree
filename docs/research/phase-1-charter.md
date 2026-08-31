@@ -101,5 +101,5 @@ The corrected evidence assessment and current gate status are in
   completed the primary-source locator audit; corrected the Timeline Index
   characterization; and withdrew owner-recorded signoff as insufficient
   evidence.
-- 31 August 2026: technical Phase 1 closure remains supportable, but formal
-  Gate G1 reconfirmation is pending durable independent-human approval.
+- 1 September 2026: preserved the durable Phase 1 human approval record and
+  reconfirmed Gate G1 for the scoped Route B continuation.

@@ -15,10 +15,10 @@ the active plan and archived Phase 1 records.
 
 | Priority | Finding | Disposition |
 | --- | --- | --- |
-| P0 | No durable independent-human Gate G1 approval is preserved | Open. Obtain a reviewer-authored PR review, signed document or archived message. An AI review cannot close this condition. |
+| P0 | No durable independent-human Gate G1 approval was preserved at the time of this AI review | Resolved subsequently by the [Phase 1 human review record](phase-1-human-review.md), dated 31 August 2026. This AI review remains supplementary. |
 | P1 | `run_confirmatory.sh` could overwrite `system_<tag>.txt` when the corresponding runs file was absent | Fixed. Both schedule and trace paths now refuse existing system metadata; `confirmatory_output_overwrite_guard` exercises the exact partial-output state. |
-| P1 | Corrected Wiki text was local while the public tracking branch remained stale; Home also called historical Phase 7 work “in progress” | Working copies corrected. Publication remains open until the canonical Wiki repository is committed, pushed and verified. |
-| P2 | The active plan and archived records retained the former positive signoff language | Fixed locally. The active G1 checkbox is open, and archived records are prominently marked superseded. |
+| P1 | Corrected Wiki text was local while the public tracking branch remained stale; Home also called historical Phase 7 work “in progress” | Fixed. The canonical Wiki was subsequently committed, pushed and verified at `a4154d6` on 1 September 2026. |
+| P2 | The active plan and archived records retained the former positive signoff language | Fixed. The active G1 checkbox is complete, the human approval is linked, and archived records are prominently marked superseded. |
 
 ## Evidence checks
 
@@ -36,7 +36,7 @@ the active plan and archived Phase 1 records.
 
 ## Recommendation and limitation
 
-The narrow Route B technical package is ready to submit for human Gate G1
-review after the listed technical/documentation dispositions. This review is
-AI-generated, is not Sunjare Zulfiker's approval and does not satisfy the
-charter's independent-human governance condition.
+The narrow Route B technical package's human Gate G1 review is now preserved in
+the linked approval record. The corrected G1 status is prepared in the Wiki
+working copy and awaits publication. This review is AI-generated, is not
+Sunjare Zulfiker's approval, and is supplementary to the human approval record.
