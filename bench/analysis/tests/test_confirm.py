@@ -222,7 +222,14 @@ class PrecisionTests(unittest.TestCase):
 
 class HierarchicalTests(unittest.TestCase):
     def test_mixed_model_recovers_cell_effect(self) -> None:
-        runs = synthetic_runs(ratio=1.5, noise=0.02, trials=16, cells=3)
+        # noise is shared per trial and cancels exactly in the log ratio, so
+        # pair_noise supplies the per-structure residual variance MixedLM
+        # actually estimates. Without it every trial's log ratio is the
+        # identical constant log(ratio), a degenerate fit whose solution
+        # depends on the platform's BLAS/LAPACK numerics rather than the
+        # data (observed: passed on macOS, converged to a singular near-zero
+        # effect on Linux CI for the same seed).
+        runs = synthetic_runs(ratio=1.5, noise=0.02, pair_noise=0.03, trials=16, cells=3)
         table = confirm.hierarchical(runs)
         self.assertEqual(len(table), 3)
         for effect in table["effect"]:
