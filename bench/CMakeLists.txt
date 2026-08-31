@@ -96,4 +96,12 @@ if(BUILD_TESTING)
                    --structure persistent --trials 2 --trial-index 1 --warmup 0
                    --warmup-seconds 0 --batch-trials 0 --cap-mib 64 --tag cell)
   set_tests_properties(bench_smoke_single_cell PROPERTIES LABELS "bench")
+
+  if(UNIX)
+    add_test(NAME confirmatory_output_overwrite_guard
+             COMMAND bash
+                     ${CMAKE_CURRENT_SOURCE_DIR}/confirmatory_output_overwrite_guard_test.sh
+                     ${CMAKE_CURRENT_SOURCE_DIR}/run_confirmatory.sh)
+    set_tests_properties(confirmatory_output_overwrite_guard PROPERTIES LABELS "bench")
+  endif()
 endif()

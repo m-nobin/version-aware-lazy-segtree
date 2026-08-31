@@ -17,6 +17,25 @@
 # VALSEG_BUILD_DIR overrides the default release-verify build directory.
 set -euo pipefail
 
+refuse_existing_output() {
+  local path
+  for path in "$@"; do
+    if [[ -e "$path" ]]; then
+      echo "refusing to overwrite $path; choose a new campaign id" >&2
+      return 2
+    fi
+  done
+}
+
+# Internal test hook for the shell-level metadata guard. It runs before any
+# campaign setup or binary lookup, so CTest can exercise the refusal path
+# without creating campaign output.
+if [[ "${1:-}" == "--check-output-paths" ]]; then
+  shift
+  refuse_existing_output "$@"
+  exit 0
+fi
+
 campaign="${1:-}"
 phase="${2:-}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -104,6 +123,7 @@ run_schedule() {
     if [[ -e "$raw/runs_$tag.csv" ]]; then
       continue
     fi
+    refuse_existing_output "$raw/system_$tag.txt"
     printf '=== %s [%d/%d] ===\n' "$tag" "$done_count" "$total"
     bash "$root/bench/collect_environment.sh" > "$raw/system_$tag.txt"
     "${pin[@]}" "$binary" --mode "${extra_flags[@]}" \
@@ -151,6 +171,7 @@ trace)
       if [[ -e "$raw/runs_$tag.csv" ]]; then
         continue
       fi
+      refuse_existing_output "$raw/system_$tag.txt"
       bash "$root/bench/collect_environment.sh" > "$raw/system_$tag.txt"
       "${pin[@]}" "$timing_binary" --mode batch --trace "$trace_file" --workload WT \
         --structure "$structure" --trials "$trials" --trial-index "$trial" \

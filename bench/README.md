@@ -359,9 +359,12 @@ seed,
 trial and warm-up counts, cap, whether allocation counting was linked in, and
 the exact command line.
 
-Raw CSV stays under `results/raw/`. Everything `bench/analysis` generates goes
-under `results/figures/`, `results/tables/` and `results/summary/`. Nothing
-generated is edited by hand.
+For the preserved exploratory pilot, raw CSV stays under the legacy
+`results/raw/` path. New campaigns write to
+`results/campaigns/<campaign-id>/raw/`. Everything the pilot-era
+`bench/analysis` report generates goes under `results/figures/`,
+`results/tables/` and `results/summary/`. Nothing generated is edited by
+hand.
 
 ## Analysis
 
