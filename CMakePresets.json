@@ -50,6 +50,28 @@
       }
     },
     {
+      "name": "release-verify-gcc",
+      "displayName": "Release Verification (GCC)",
+      "description": "Second-compiler sensitivity build for the registered campaign on Linux.",
+      "inherits": "release-verify",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/release-verify-gcc",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "release-verify-clang",
+      "displayName": "Release Verification (Clang)",
+      "description": "Second-compiler sensitivity build: LLVM Clang on Linux or macOS (brew LLVM).",
+      "inherits": "release-verify",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/release-verify-clang",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
       "name": "analyze",
       "displayName": "Static Analysis (Clang-Tidy)",
       "description": "Opt-in Clang-Tidy build for Linux, macOS, and CI using Unix Makefiles.",
@@ -139,6 +161,18 @@
       "configuration": "Release"
     },
     {
+      "name": "release-verify-gcc",
+      "displayName": "Build (release verification, GCC)",
+      "configurePreset": "release-verify-gcc",
+      "configuration": "Release"
+    },
+    {
+      "name": "release-verify-clang",
+      "displayName": "Build (release verification, Clang)",
+      "configurePreset": "release-verify-clang",
+      "configuration": "Release"
+    },
+    {
       "name": "analyze",
       "displayName": "Build (Clang-Tidy)",
       "configurePreset": "analyze",
@@ -206,6 +240,26 @@
       },
       "execution": {
         "stopOnFailure": false
+      }
+    },
+    {
+      "name": "release-verify-gcc",
+      "displayName": "Verify (Release, GCC)",
+      "configurePreset": "release-verify-gcc",
+      "configuration": "Release",
+      "output": {
+        "verbosity": "verbose",
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "release-verify-clang",
+      "displayName": "Verify (Release, Clang)",
+      "configurePreset": "release-verify-clang",
+      "configuration": "Release",
+      "output": {
+        "verbosity": "verbose",
+        "outputOnFailure": true
       }
     },
     {

@@ -7,6 +7,7 @@ generated macros, so the document cannot drift from the data it describes.
 
 from __future__ import annotations
 
+import math
 import pathlib
 
 import numpy as np
@@ -47,6 +48,27 @@ def compact(value) -> str:
             digits = 0 if abs(scaled) >= 100 else (1 if abs(scaled) >= 10 else 2)
             return f"{scaled:.{digits}f}{suffix}"
     return f"{value:.3g}"
+
+
+def micros(value) -> str:
+    """A nanosecond measurement written in microseconds, three significant figures.
+
+    Times are recorded in nanoseconds and reported in microseconds throughout,
+    so one column never has to be read in a different unit from the figure
+    beside it.
+    """
+    if value is None or not np.isfinite(value):
+        return "--"
+    scaled = float(value) / 1000.0
+    if scaled == 0:
+        return "0"
+    if abs(scaled) >= 100:
+        return f"{scaled:,.0f}".replace(",", r"\,")
+    # Sub-microsecond values are the norm for a single tree operation, so the
+    # decimals follow the magnitude rather than being fixed: two decimals would
+    # round a twenty-nanosecond update down to one significant figure.
+    digits = 2 - math.floor(math.log10(abs(scaled)))
+    return f"{scaled:.{digits}f}"
 
 
 def ratio(value) -> str:

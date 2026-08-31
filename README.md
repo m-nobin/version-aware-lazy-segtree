@@ -7,9 +7,14 @@
 An Advanced Algorithms project exploring how range-add lazy propagation can be combined with partial persistence while preserving correct historical range-sum queries.
 
 > **Current status**
-> Route B Phase 1 (evidence and model lock) is complete: both pull requests are merged and the
-> independent reader's sign-off is recorded in the claim-evidence matrix. Phase 2 (theorems,
-> frontier identities and the cost model) passed Gate G2: the
+> Route B Phase 1's implementation and evidence package is complete and was re-audited on
+> 31 August 2026. Its formal Gate G1 governance condition remains pending because the repository
+> and pull-request history do not preserve durable approval from an independent human reviewer.
+> The authoritative [Phase 1 charter](docs/research/phase-1-charter.md), corrected
+> [exit review](docs/research/phase-1-exit-review.md) and
+> [claim-evidence matrix](docs/research/claim-evidence-matrix.md) distinguish technical closure
+> from that outstanding signoff. Phase 2 (theorems, frontier identities and the cost model)
+> passed Gate G2: the
 > observational commutativity boundary ([docs/proof.md](docs/proof.md) section 9) and the
 > frontier identities (section 10) are merged and independently reviewed; the lower-bound
 > attempt of section 10 found a counterexample, so no optimality claim is made and the adopted
@@ -21,9 +26,14 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 > The physical and predictive cost model is specified in
 > [docs/research/cost-model.md](docs/research/cost-model.md), including stream-group holdout
 > separation and a hashable two-stage fit/evaluate artifact. The
-> Gate G1 record is section 9 of the
-> [claim-evidence matrix](docs/research/claim-evidence-matrix.md); the Gate G2 exit record,
-> phase charters and exit reviews are working documents kept outside the repository.
+> Gate G1 evidence assessment is section 9 of the claim-evidence matrix. Phase charters and exit
+> reviews are version-controlled records in `docs/research/`.
+>
+> Phase 3 (registered confirmatory evaluation) is prepared: the analysis protocol is written in
+> [docs/research/registered-protocol.md](docs/research/registered-protocol.md) with its
+> statistics, blinding, fresh-process orchestration, sensitivity paths and an external
+> implementation in place, and awaits its immutable registration deposit. No confirmatory
+> measurement runs before that deposit.
 
 ## Implemented components
 
@@ -138,12 +148,19 @@ paper/                      Version-controlled manuscript source
 ## Benchmarks
 
 `bench/` replays twelve workloads against every implemented persistence
-strategy; see [bench/README.md](bench/README.md). Measured campaign data, the
+strategy and one vendored external implementation
+([bench/external/PROVENANCE.md](bench/external/PROVENANCE.md)); see
+[bench/README.md](bench/README.md). Measured campaign data, the
 generated tables, figures and PDFs are kept out of version control; the
 analysis and report sources, raw checksum manifest and provenance record are
 versioned. The recorded campaign is an **exploratory pilot** (one machine, no
 registered protocol). With the preserved local data present,
 `bench/verify_pilot.sh` verifies checksums and rebuilds the complete report.
+The confirmatory campaign runs under the registered protocol instead:
+batch-mode primary timing, fresh-process orchestration
+(`bench/run_confirmatory.sh`), blinded confirmatory statistics
+(`bench/analysis/confirm.py`) and second-compiler/second-allocator
+sensitivity paths.
 
 ## Documentation
 

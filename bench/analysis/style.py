@@ -41,11 +41,13 @@ STRUCTURES = {
 #: Drawing order, so the legend reads in a stable, meaningful sequence.
 ORDER = list(STRUCTURES)
 
-#: The five structures that complete every cell of the campaign. The two
-#: no-sharing baselines run out of memory long before the others and are shown
-#: in the feasibility and space figures instead, where their ceiling is the
-#: result; putting a truncated run's per-operation time beside a complete one
-#: would compare a sprint with a marathon.
+#: The five structures compared on time. The two no-sharing baselines run out
+#: of memory long before the others and are shown in the feasibility and space
+#: figures instead, where their ceiling is the result; putting a truncated
+#: run's per-operation time beside a complete one would compare a sprint with a
+#: marathon. These five complete every cell up to a million elements; at ten
+#: million checkpoint-and-replay reaches the cap too, and ``draw`` marks that
+#: point hollow and stops its line rather than dropping the series.
 COMPARABLE = ["persistent", "copy-on-push", "checkpointing", "buffered", "fat-node"]
 
 #: Everything that keeps history, including the two that cannot reach the
@@ -53,6 +55,13 @@ COMPARABLE = ["persistent", "copy-on-push", "checkpointing", "buffered", "fat-no
 PERSISTENT = COMPARABLE + ["point-only", "full-copy"]
 
 CONTROL = "lazy"
+
+#: The array-size grid of the size-sweep workloads (W1-W5), which must match
+#: the sizes compiled into bench/workloads.cpp. Five decades of array size is
+#: what separates a per-operation cost that grows with log n from one that
+#: grows with n; the largest size is where the no-sharing baselines meet the
+#: memory cap and the sharing ones do not.
+SIZES = [1_000, 10_000, 100_000, 1_000_000, 10_000_000]
 
 WORKLOADS = {
     "W1": "Balanced: half updates, half queries",
@@ -201,7 +210,7 @@ def thin(values, ratio: float = 1.6):
     return kept
 
 
-def nice_log(ax, axis: str = "y") -> None:
+def nice_log(ax, axis: str = "y", scale: float = 1.0) -> None:
     """Label a log axis at 1, 2 and 5 per decade in plain numbers.
 
     A log axis spanning barely more than one decade gets one or two decade
@@ -209,6 +218,9 @@ def nice_log(ax, axis: str = "y") -> None:
     leaves it with almost no labels at all. Stepping it at 1/2/5 keeps a
     readable number of gridlines whatever the span, and writing them as plain
     numbers rather than powers keeps the reader out of exponent arithmetic.
+
+    ``scale`` multiplies each tick before it is written, which is how a series
+    recorded in one unit is labelled in another without touching the data.
     """
     target = ax.yaxis if axis == "y" else ax.xaxis
     low, high = ax.get_ylim() if axis == "y" else ax.get_xlim()
@@ -224,7 +236,9 @@ def nice_log(ax, axis: str = "y") -> None:
         else mpl.ticker.LogLocator(base=10, numticks=8)
     )
     target.set_minor_locator(mpl.ticker.NullLocator())
-    target.set_major_formatter(mpl.ticker.FuncFormatter(_plain))
+    target.set_major_formatter(
+        mpl.ticker.FuncFormatter(lambda value, position=None: _plain(value * scale))
+    )
 
 
 def _plain(value, _position=None) -> str:
@@ -263,18 +277,40 @@ def legend(fig, handles, labels, columns: int = 4, y: float = -0.02) -> None:
     )
 
 
-def nanoseconds(ax) -> None:
-    """Label a time axis in the unit the numbers are actually in."""
-    ax.set_ylabel("Time per operation (nanoseconds)")
+#: Times are recorded in nanoseconds and reported in microseconds. Every
+#: reported duration in this study spans several orders of magnitude, from a
+#: point update on a small array to a full copy on a large one, so every time
+#: axis is logarithmic and every one carries the same unit. A log axis is the
+#: same axis in either unit: only the tick labels move, so the recorded
+#: columns stay in the unit the clock produced them in.
+NS_PER_US = 1000.0
+
+
+def microseconds(ax, axis: str = "y", text: str = "Time per operation") -> None:
+    """Put a nanosecond-valued time axis on a log scale labelled in microseconds."""
+    caption = f"{text} (\u00b5s, log scale)"
+    if axis == "y":
+        ax.set_yscale("log")
+        ax.set_ylabel(caption)
+    else:
+        ax.set_xscale("log")
+        ax.set_xlabel(caption)
+    nice_log(ax, axis, scale=1.0 / NS_PER_US)
 
 
 def log_size_axis(ax) -> None:
     """Array-size axis, log scaled, labelled without exponent notation."""
     ax.set_xscale("log")
     ax.set_xlabel("Array size (elements)")
-    ax.set_xticks([1_000, 10_000, 100_000, 1_000_000])
-    ax.set_xticklabels(["1 thousand", "10 thousand", "100 thousand", "1 million"])
+    # Only the sizes the figure actually holds. Ticking the whole grid would
+    # stretch the axis past the last measurement and invite the reader to read
+    # a trend into empty space.
+    low, high = ax.get_xlim()
+    shown = [size for size in SIZES if low <= size <= high]
+    ax.set_xticks(shown)
+    ax.set_xticklabels([_plain(size) for size in shown])
     ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+    ax.set_xlim(low, high)
 
 
 def save(fig, path) -> None:

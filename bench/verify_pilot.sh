@@ -7,6 +7,12 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 results="$root/bench/results"
 manifest="$results/raw.sha256"
 
+# Matplotlib and pdfTeX otherwise embed the wall-clock build time and a
+# time-derived document ID. Pin them to the pilot date so repeated
+# reproductions are byte-for-byte comparable as well as visually identical.
+export SOURCE_DATE_EPOCH=1787270400
+export FORCE_SOURCE_DATE=1
+
 for command in shasum uv latexmk rg; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "missing required command: $command" >&2
@@ -57,10 +63,13 @@ if ! rg -q "Exploratory pilot" "$root/docs/benchmarking/benchmarking.tex"; then
   exit 2
 fi
 
-latexmk -pdf -cd "$root/docs/benchmarking/benchmarking.tex"
+# Force the PDF target to rebuild even when a previous output is newer than
+# every input. Verification must exercise the renderer, not merely accept a
+# cached report.
+latexmk -g -pdf -cd "$root/docs/benchmarking/benchmarking.tex"
 if [[ ! -s "$root/docs/benchmarking/benchmarking.pdf" ]]; then
   echo "pilot report PDF was not produced" >&2
   exit 2
 fi
 
-printf 'pilot verified: 96 raw files, 357 summary cells, report rebuilt\n'
+printf 'pilot verified: 96 manifested measured files, 357 summary cells, report rebuilt\n'

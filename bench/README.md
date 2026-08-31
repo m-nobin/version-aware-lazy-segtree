@@ -48,7 +48,13 @@ in the record instead of silently in the numbers.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--workload` | `all` | one of `W1` .. `W12` |
-| `--structure` | `all` | `lazy`, `persistent`, `copy-on-push`, `full-copy`, `point-only`, `checkpointing`, `buffered`, `fat-node` |
+| `--structure` | `all` | `lazy`, `persistent`, `copy-on-push`, `full-copy`, `point-only`, `checkpointing`, `buffered`, `fat-node`, `external` |
+| `--mode` | `interleaved` | `interleaved` (a clock pair around every operation), `batch` (the registered primary: one clock pair per operation batch), `latency` (sampled clock pairs) |
+| `--sample-every` | `64` | latency mode: time every Nth operation |
+| `--n` | all | run only this array size |
+| `--variant` | all | run only this variant-axis value |
+| `--trial-index` | all | run only this recorded trial; warm-up still runs, seeds stay aligned with a monolithic run |
+| `--list-cells` | off | print the (workload, n, axis, variant) inventory and exit |
 | `--out-dir` | `bench/results/raw` | must already exist; non-smoke output files must not already exist |
 | `--tag` | none | suffix for output filenames; the binary refuses a duplicate filename |
 | `--seed` | `20260818` | attempt *i* uses `seed + i` |
@@ -63,11 +69,76 @@ in the record instead of silently in the numbers.
 | `--smoke` | off | n = 256, 400 operations, for CI |
 | `--list` | off | print the workload table and exit |
 
-A full campaign at the committed sizes takes roughly half an hour. Most of what
-used to make it take hours was the no-sharing baselines replaying eleven times
-into the same memory ceiling; `--capped-trials` stops that, since the ceiling is
-the result and re-measuring a truncated replay adds nothing. Run one workload at
-a time with `--workload` while iterating.
+W1-W5 sweep five decades of array size, 1e3 to 1e7. The 1e7 cells dominate the
+wall clock and the memory: the initial tree alone is 2n-1 nodes, so a structure
+that stores a whole tree per version reaches the 4096 MiB cap within a few
+versions there. That is the feasibility result, not a failure, but it costs a
+full allocation of a 1e7 tree per trial to reobserve. Run the excluded dry-run
+seeds (`VALSEG_DRY_RUN=1`) once per machine before a confirmatory campaign and
+add the 1e7 cells that cap to `bench/capped_cells.csv`, so they run two trials
+rather than twenty.
+
+Most of what used to make a campaign take hours was the no-sharing baselines
+replaying eleven times into the same memory ceiling; `--capped-trials` stops
+that, since the ceiling is the result and re-measuring a truncated replay adds
+nothing. Run one workload at a time with `--workload` while iterating, and
+`--n` to skip the largest size while the harness itself is what you are
+testing.
+
+## The registered confirmatory pipeline
+
+Everything above describes the pilot-era workflow. The confirmatory campaign
+runs under the frozen protocol in
+[docs/research/registered-protocol.md](../docs/research/registered-protocol.md)
+instead, and no confirmatory seed runs before that protocol's immutable
+deposit.
+
+The differences that matter:
+
+- **Batch timing is primary.** `--mode batch` replays every update with one
+  clock pair around the whole batch, then every query with another. Queries
+  mutate no version's answers, so the published versions and the answer
+  checksum are identical to the interleaved replay's — each smoke run checks
+  exactly that. `--mode latency` supplies the separate sampled-latency
+  distribution; the interleaved mode survives for allocation runs and
+  diagnostics.
+- **One process per (cell, structure, trial).** `bench/confirm_schedule.py`
+  turns the binary's own `--list-cells` inventory into a balanced,
+  seed-shuffled schedule; `bench/run_confirmatory.sh <campaign-id> <phase>`
+  executes it resumably, capturing the environment before every process.
+  Phases: `structural`, `timing`, `alloc`, `latency`, `trace`. Fresh
+  processes are what make `peak_rss_bytes` a per-cell number. Trial counts
+  per cell class live in `bench/primary_cells.csv` (registered H2 cells, 40
+  trials) and `bench/capped_cells.csv` (pilot-known cap cells, 2 trials);
+  everything else runs 20. `VALSEG_DRY_RUN=1` switches to the excluded
+  dry-run seeds.
+- **Sensitivity paths.** The `release-verify-gcc` and `release-verify-clang`
+  presets build the second-compiler binaries; `bench/run_sensitivity.sh`
+  reruns the registered subset under a preloaded second allocator.
+  `bench/env/pin_linux.sh` and `bench/env/pin_macos.sh` put each machine
+  into, and record, the registered measurement state.
+- **Confirmatory statistics live in `bench/analysis/confirm.py`** — paired
+  log-ratio intervals, the four-state classification against `delta = 1.05`,
+  the Holm-controlled primary family, the BH-flagged exploratory regime map,
+  the mixed-effects pooled view, exact H1 identity checks, cross-process
+  checksum verification and censored feasibility. `bench/analysis/blind.py`
+  seals the structure labels per campaign before measurement and the primary
+  analysis runs blinded.
+- **Registration is a file list with hashes.** `bench/make_registration.sh`
+  writes `docs/research/registration-manifest.txt` over every frozen file;
+  the deposit of that manifest with the protocol is the registration
+  timestamp.
+
+## The external structure
+
+`external` is the one implementation this repository's authors did not
+write: TheAlgorithms' persistent lazy segment tree, vendored under
+`bench/external/` with its MIT license, upstream commit, semantic audit and
+the exact (instrumentation-only) modifications recorded in
+[bench/external/PROVENANCE.md](external/PROVENANCE.md). It is copy-on-push
+over per-node `shared_ptr` allocation, its queries materialize tags into
+copied children (so its queries allocate — reported, not corrected), and it
+passes the same cross-structure checksum as every in-house structure.
 
 ## Two binaries, on purpose
 
@@ -191,10 +262,12 @@ q,120,0,15
 `n` declares the array size; `u` is `left,right,delta` and `q` is
 `left,right,version`. Everything else, including trials, warm-up, the memory
 cap and the cross-structure checksum, works exactly as it does for a generated
-workload. It is reported under the id `WT`. No trace is committed yet. The seam exists so a workload derived from
-a published temporal-data study can be added without touching the runner,
-which is the difference between a comparison built only on data we invented
-and one that also replays traffic somebody else published.
+workload. It is reported under the id `WT`. No public trace of this operation
+model exists (the search outcome is recorded in
+[bench/traces/README.md](traces/README.md)), so the registered external
+workload is a distribution derived from published criteria:
+`bench/traces/make_external_distribution.py` generates it deterministically
+and `run_confirmatory.sh <id> trace` replays it.
 
 ## The copy-on-push baseline
 
@@ -220,8 +293,8 @@ the exact copy-on-push allocation event. Every campaign also replays it against
 the same cross-structure checksum as the six library structures, and the CTest
 smoke run does the same at n = 256 across all twelve workloads.
 
-Adding an implementation this repository did not write remains open, and is
-still one entry in `adapters.hpp` and one row in the `structures()` table.
+The implementation this repository did not write is the `external` row of
+the `structures()` table; see "The external structure" below.
 
 ## Output
 
@@ -286,9 +359,12 @@ seed,
 trial and warm-up counts, cap, whether allocation counting was linked in, and
 the exact command line.
 
-Raw CSV stays under `results/raw/`. Everything `bench/analysis` generates goes
-under `results/figures/`, `results/tables/` and `results/summary/`. Nothing
-generated is edited by hand.
+For the preserved exploratory pilot, raw CSV stays under the legacy
+`results/raw/` path. New campaigns write to
+`results/campaigns/<campaign-id>/raw/`. Everything the pilot-era
+`bench/analysis` report generates goes under `results/figures/`,
+`results/tables/` and `results/summary/`. Nothing generated is edited by
+hand.
 
 ## Analysis
 

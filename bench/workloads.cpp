@@ -13,6 +13,12 @@ constexpr std::size_t kSmall = 1000;
 constexpr std::size_t kMedium = 10000;
 constexpr std::size_t kLarge = 100000;
 constexpr std::size_t kHuge = 1000000;
+// A fifth decade. One million elements is inside the working set the sharing
+// structures were designed for; ten million is where the per-version copy
+// cost of the no-sharing baselines meets the memory cap and the tree no
+// longer fits any cache level, so the size sweep separates a per-operation
+// cost that grows with log n from one that grows with n.
+constexpr std::size_t kGiant = 10000000;
 
 // Campaign length. Short campaigns measure the build and the cache, not the
 // structures: at 2e5 operations even the cheapest structure spends most of the
@@ -125,7 +131,7 @@ const std::vector<Workload>& workloads() {
   static const std::vector<Workload> table = {
       {"W1",
        "balanced 50/50, uniform ranges, uniform version reads",
-       {kSmall, kMedium, kLarge, kHuge},
+       {kSmall, kMedium, kLarge, kHuge, kGiant},
        kOperations,
        0.5,
        0.0,
@@ -137,7 +143,7 @@ const std::vector<Workload>& workloads() {
        0},
       {"W2",
        "update-heavy 90/10: copy cost per published version",
-       {kSmall, kMedium, kLarge, kHuge},
+       {kSmall, kMedium, kLarge, kHuge, kGiant},
        kOperations,
        0.9,
        0.0,
@@ -149,7 +155,7 @@ const std::vector<Workload>& workloads() {
        0},
       {"W3",
        "query-heavy 10/90, half old versions and half the newest 5%",
-       {kSmall, kMedium, kLarge, kHuge},
+       {kSmall, kMedium, kLarge, kHuge, kGiant},
        kOperations,
        0.1,
        0.0,
@@ -161,7 +167,7 @@ const std::vector<Workload>& workloads() {
        0},
       {"W4",
        "point updates: the exact per-update bound each header documents",
-       {kSmall, kMedium, kLarge, kHuge},
+       {kSmall, kMedium, kLarge, kHuge, kGiant},
        kOperations,
        0.5,
        0.0,
@@ -173,7 +179,7 @@ const std::vector<Workload>& workloads() {
        0},
       {"W5",
        "full-range updates: full copy's home turf, path copying's worst case",
-       {kSmall, kMedium, kLarge, kHuge},
+       {kSmall, kMedium, kLarge, kHuge, kGiant},
        kOperations,
        0.5,
        0.0,

@@ -75,4 +75,33 @@ if(BUILD_TESTING)
            COMMAND valseg_bench_alloc --smoke --trials 1 --warmup 0 --warmup-seconds 0
                    --batch-trials 0 --cap-mib 64 --tag alloc --workload W1)
   set_tests_properties(bench_smoke_alloc PROPERTIES LABELS "bench")
+
+  # The registered primary and secondary timing modes replay the same streams
+  # as the interleaved smoke run and must produce the same per-version
+  # answers, so each mode's smoke run is also a cross-mode semantics check
+  # through the shared per-cell checksum table.
+  add_test(NAME bench_smoke_batch
+           COMMAND valseg_bench --smoke --mode batch --trials 1 --warmup 0 --warmup-seconds 0
+                   --batch-trials 0 --cap-mib 64 --tag batch)
+  set_tests_properties(bench_smoke_batch PROPERTIES LABELS "bench")
+
+  add_test(NAME bench_smoke_latency
+           COMMAND valseg_bench --smoke --mode latency --sample-every 16 --trials 1 --warmup 0
+                   --warmup-seconds 0 --batch-trials 0 --cap-mib 64 --tag latency --workload W1)
+  set_tests_properties(bench_smoke_latency PROPERTIES LABELS "bench")
+
+  # One fresh-process cell: the orchestrated confirmatory invocation shape.
+  add_test(NAME bench_smoke_single_cell
+           COMMAND valseg_bench --smoke --mode batch --workload W1 --n 256 --variant 0.000000
+                   --structure persistent --trials 2 --trial-index 1 --warmup 0
+                   --warmup-seconds 0 --batch-trials 0 --cap-mib 64 --tag cell)
+  set_tests_properties(bench_smoke_single_cell PROPERTIES LABELS "bench")
+
+  if(UNIX)
+    add_test(NAME confirmatory_output_overwrite_guard
+             COMMAND bash
+                     ${CMAKE_CURRENT_SOURCE_DIR}/confirmatory_output_overwrite_guard_test.sh
+                     ${CMAKE_CURRENT_SOURCE_DIR}/run_confirmatory.sh)
+    set_tests_properties(confirmatory_output_overwrite_guard PROPERTIES LABELS "bench")
+  endif()
 endif()

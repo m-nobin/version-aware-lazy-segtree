@@ -10,10 +10,29 @@
 #include <valseg/point_only_persistent_segment_tree.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <type_traits>
 #include <vector>
 
 #include "copy_on_push_segment_tree.hpp"
+
+// The external implementation is measured, not maintained, so it compiles
+// as its author wrote it: this project's warnings-as-errors wall stops at
+// the vendor boundary rather than forcing edits to third-party code.
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#pragma GCC diagnostic ignored "-Wconversion"
+#elif defined(_MSC_VER)
+#pragma warning(push, 1)
+#endif
+#include "external/thealgorithms_persistent_lazy.hpp"
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
 #include "workloads.hpp"
 
 namespace valseg::bench {
@@ -227,6 +246,104 @@ public:
 private:
   LazySegmentTree tree;
   std::size_t published = 0;
+};
+
+/**
+ * @brief Adapter for the external implementation this repository did not
+ *        write: TheAlgorithms' persistent lazy segment tree.
+ *
+ * Provenance, license, the audited modifications and the fairness limits are
+ * in bench/external/PROVENANCE.md. Methods are non-const because the external
+ * query materializes lazy tags into copied children, so queries allocate and
+ * mutate; the answers stay version-correct and pass the cross-structure
+ * checksum.
+ */
+class ExternalAdapter {
+public:
+  /**
+   * @brief The external structure answers historical queries.
+   */
+  static constexpr bool historical = true;
+
+  /**
+   * @brief Construct an adapter.
+   *
+   * @param checkpointInterval Ignored; present so the driver stays uniform.
+   */
+  explicit ExternalAdapter(std::size_t checkpointInterval) {
+    (void)checkpointInterval;
+  }
+
+  /**
+   * @brief Build version 0.
+   *
+   * @param values Initial array. Copied into the external element type, which
+   *        is the integration cost of an interface this repository does not
+   *        control; the copy is O(n) against an O(n) build.
+   */
+  void build(const std::vector<ValueType>& values) {
+    const std::vector<std::int64_t> converted(values.begin(), values.end());
+    tree.construct(converted);
+  }
+
+  /**
+   * @brief Apply one range add.
+   *
+   * @param left  Left index (inclusive).
+   * @param right Right index (inclusive).
+   * @param delta Value to add.
+   */
+  void update(std::size_t left, std::size_t right, ValueType delta) {
+    tree.update(static_cast<std::uint32_t>(left), static_cast<std::uint32_t>(right), delta);
+  }
+
+  /**
+   * @brief Answer one range sum.
+   *
+   * @param version Version to read.
+   * @param left    Left index (inclusive).
+   * @param right   Right index (inclusive).
+   * @return The sum.
+   */
+  ValueType query(std::size_t version, std::size_t left, std::size_t right) {
+    return tree.query(static_cast<std::uint32_t>(left), static_cast<std::uint32_t>(right),
+                      static_cast<std::uint32_t>(version));
+  }
+
+  /**
+   * @brief Records ever created, from the audited instrumentation counter.
+   *
+   * The external structure never frees a node during a trial (roots are all
+   * retained), so created equals retained.
+   *
+   * @return Nodes created by build, updates and tag-materializing queries.
+   */
+  std::size_t nodes() const {
+    return static_cast<std::size_t>(tree.nodesCreated());
+  }
+
+  /**
+   * @brief Retained payload in bytes: 48 per node (two shared_ptr and two
+   *        64-bit words). Control blocks and allocator overhead are excluded
+   *        here and measured by the allocation binary and RSS instead.
+   *
+   * @return Retained payload bytes.
+   */
+  std::size_t bytes() const {
+    return nodes() * 48;
+  }
+
+  /**
+   * @brief Published versions.
+   *
+   * @return Version count.
+   */
+  std::size_t versions() {
+    return tree.size();
+  }
+
+private:
+  range_queries::perSegTree tree;
 };
 
 } // namespace valseg::bench

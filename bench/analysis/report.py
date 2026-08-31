@@ -24,7 +24,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 import data  # noqa: E402
 import style  # noqa: E402
 import tables  # noqa: E402
-from tables import compact, escape, number, pvalue, ratio, signed  # noqa: E402
+from tables import compact, escape, micros, number, pvalue, ratio, signed  # noqa: E402
 
 def spaced(value: int) -> str:
     """A count with thin spaces instead of commas, for prose in a figure."""
@@ -122,9 +122,7 @@ def figure_scaling(summary):
         fig, ax = plt.subplots(figsize=(6.4, 3.5))
         draw(ax, frame, "n", metric, shown)
         style.log_size_axis(ax)
-        ax.set_yscale("log")
-        style.nice_log(ax)
-        style.nanoseconds(ax)
+        style.microseconds(ax)
         finish(fig, ax, shown, columns=3, y=0.02)
         style.figure_title(
             fig,
@@ -145,7 +143,7 @@ def figure_memory(summary):
     ax.axhline(4096, color=style.INK_SOFT, linewidth=1.0, linestyle=(0, (1, 2)), zorder=1)
     ax.annotate(
         "memory limit for the run (4 GiB)",
-        xy=(1_000_000, 4096),
+        xy=(frame["n"].max(), 4096),
         xytext=(-2, 5),
         textcoords="offset points",
         fontsize=8,
@@ -178,6 +176,8 @@ def figure_workload_mix(summary):
         ("Publishing a version", "Answering a historical query"),
     ):
         positions = np.arange(len(mixes))
+        # Markers rather than bars: the axis is logarithmic, and a bar encodes
+        # its value as a length from zero, which a log axis does not have.
         width = 0.8 / len(shown)
         for offset, name in enumerate(shown):
             values = [
@@ -186,18 +186,19 @@ def figure_workload_mix(summary):
                 ].median()
                 for workload, _ in mixes
             ]
-            ax.bar(
+            ax.plot(
                 positions + offset * width - 0.4 + width / 2,
                 values,
-                width=width * 0.86,
-                color=style.colour(name),
-                label=style.label(name),
-                zorder=3,
+                linestyle="none",
+                markersize=6,
+                **{k: v for k, v in style.series_style(name).items()
+                   if k in ("color", "marker", "label", "zorder")},
             )
         ax.set_xticks(positions)
         ax.set_xticklabels([text for _, text in mixes])
+        ax.set_xlim(-0.6, len(mixes) - 0.4)
         style.panel_title(ax, heading)
-        ax.set_ylabel("Time per operation (ns)")
+        style.microseconds(ax)
         ax.grid(axis="x", visible=False)
 
     finish(fig, axes[0], shown, columns=3, y=0.02)
@@ -217,10 +218,8 @@ def figure_range_width(summary):
     fig, ax = plt.subplots(figsize=(6.4, 3.5))
     draw(ax, frame, "variant", "update_ns_per_op", shown)
     ax.set_xscale("log")
-    ax.set_yscale("log")
-    style.nice_log(ax)
+    style.microseconds(ax)
     ax.set_xlabel("Number of elements each update covers")
-    style.nanoseconds(ax)
     style.plain_log_ticks(ax, sorted(frame["variant"].unique()))
     finish(fig, ax, shown, columns=3, y=0.02)
     style.figure_title(
@@ -245,16 +244,13 @@ def figure_versions(summary):
     ):
         draw(ax, frame, "versions_stored", metric, shown)
         ax.set_xscale("log")
-        ax.set_yscale("log")
-        style.nice_log(ax)
-        ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+        style.microseconds(ax)
         marks = style.thin(sorted(frame[frame["structure"].isin(shown)]
                                   ["versions_stored"].unique()))
         ax.set_xticks(marks)
         ax.set_xticklabels([compact(v) for v in marks])
         ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
         ax.set_xlabel("Versions stored")
-        ax.set_ylabel("Time per operation (ns)")
         style.panel_title(ax, heading)
 
     finish(fig, axes[0], shown, columns=3, y=0.02)
@@ -297,10 +293,8 @@ def figure_checkpoint(summary):
         ax.axhline(value, color=style.colour("persistent"), linewidth=1.9, zorder=4,
                    label=style.label("persistent"))
         ax.set_xscale("log")
-        ax.set_yscale("log")
-        style.nice_log(ax)
+        style.microseconds(ax)
         ax.set_xlabel("Versions between checkpoints")
-        ax.set_ylabel("Time per operation (ns)")
         style.panel_title(ax, heading)
         ticks = sorted(swept["k_plot"].unique())
         ax.set_xticks(ticks)
@@ -344,8 +338,8 @@ def figure_sweeps(summary):
         populated = populated or ax
         draw(ax, frame, "variant", metric, shown)
         ax.set_xscale("linear" if workload == "W9" else "log")
+        style.microseconds(ax)
         ax.set_xlabel(xlabel)
-        ax.set_ylabel("Time per operation (ns)")
         style.panel_title(ax, heading)
         style.plain_log_ticks(ax, sorted(frame["variant"].unique()))
 
@@ -396,8 +390,7 @@ def figure_latency_tail(summary):
             )
     ax.set_yticks(positions)
     ax.set_yticklabels([style.label(name) for name in shown])
-    ax.set_xscale("log")
-    ax.set_xlabel("Time for a single update (nanoseconds, log scale)")
+    style.microseconds(ax, "x", "Time for a single update")
     ax.grid(axis="y", visible=False)
     style.figure_title(
         fig,
@@ -532,10 +525,9 @@ def figure_space_time(summary):
             color=style.INK,
             ha="right" if offsets.get(name, (9, 4))[0] < 0 else "left",
         )
-    ax.set_xscale("log")
     ax.set_yscale("log")
     style.nice_log(ax)
-    ax.set_xlabel("Time to publish one version (nanoseconds)")
+    style.microseconds(ax, "x", "Time to publish one version")
     ax.set_ylabel("Memory held after the run (MiB)")
     ax.margins(x=0.28, y=0.22)
     style.figure_title(
@@ -1078,11 +1070,11 @@ def table_headline(summary):
         rows.append(
             [
                 escape(style.label(name)),
-                compact(row["update_ns_per_op"]),
-                f"[{compact(row['update_ns_per_op_lo'])}, {compact(row['update_ns_per_op_hi'])}]",
+                micros(row["update_ns_per_op"]),
+                f"[{micros(row['update_ns_per_op_lo'])}, {micros(row['update_ns_per_op_hi'])}]",
                 f"{100 * row['update_ns_per_op_cv']:.1f}",
-                compact(row["query_ns_per_op"]),
-                f"[{compact(row['query_ns_per_op_lo'])}, {compact(row['query_ns_per_op_hi'])}]",
+                micros(row["query_ns_per_op"]),
+                f"[{micros(row['query_ns_per_op_lo'])}, {micros(row['query_ns_per_op_hi'])}]",
                 f"{100 * row['query_ns_per_op_cv']:.1f}",
                 number(row["retained_mib"], 0),
                 "ran out" if row["capped"] else "complete",
@@ -1093,10 +1085,10 @@ def table_headline(summary):
         "lrlrrlrrl",
         [
             "Structure",
-            r"\multicolumn{3}{c}{Update (ns)}",
+            r"\multicolumn{3}{c}{Update ($\mu$s)}",
             "",
             "",
-            r"\multicolumn{3}{c}{Query (ns)}",
+            r"\multicolumn{3}{c}{Query ($\mu$s)}",
             "",
             "",
             "Memory",
@@ -1123,10 +1115,10 @@ def table_scaling(summary):
     sizes = sorted(frame["n"].unique())
     rows = []
     groups = []
-    for metric, heading in (
-        ("update_ns_per_op", "Time to publish one version (nanoseconds)"),
-        ("query_ns_per_op", "Time to answer one query (nanoseconds)"),
-        ("retained_mib", "Memory held at the end of the run (MiB)"),
+    for metric, heading, cell_format in (
+        ("update_ns_per_op", "Time to publish one version (microseconds)", micros),
+        ("query_ns_per_op", "Time to answer one query (microseconds)", micros),
+        ("retained_mib", "Memory held at the end of the run (MiB)", compact),
     ):
         groups.append((len(rows), heading))
         for name in style.PERSISTENT + [style.CONTROL]:
@@ -1136,9 +1128,9 @@ def table_scaling(summary):
                 if cell.empty:
                     values.append("--")
                 elif bool(cell["capped"].iloc[0]):
-                    values.append(rf"\itshape {compact(cell[metric].iloc[0])}")
+                    values.append(rf"\itshape {cell_format(cell[metric].iloc[0])}")
                 else:
-                    values.append(compact(cell[metric].iloc[0]))
+                    values.append(cell_format(cell[metric].iloc[0]))
             rows.append([escape(style.label(name))] + values)
     tables.tabular(
         TABLES / "scaling.tex",
@@ -1254,10 +1246,10 @@ def table_tail(summary):
         rows.append(
             [
                 escape(style.label(name)),
-                compact(row["update_p50"]),
-                compact(row["update_p99"]),
-                compact(row["update_p999"]),
-                compact(row["update_max"]),
+                micros(row["update_p50"]),
+                micros(row["update_p99"]),
+                micros(row["update_p999"]),
+                micros(row["update_max"]),
                 ratio(row["update_max"] / max(row["update_p50"], 1)),
             ]
         )
@@ -1278,8 +1270,8 @@ def table_checkpoint(summary):
         rows.append(
             [
                 "never" if row.k == 0 else f"{row.k}",
-                compact(row.update_ns_per_op),
-                compact(row.query_ns_per_op),
+                micros(row.update_ns_per_op),
+                micros(row.query_ns_per_op),
                 number(row.retained_mib, 0),
                 "ran out" if row.capped else "complete",
             ]
@@ -1287,8 +1279,8 @@ def table_checkpoint(summary):
     rows.append(
         [
             r"\itshape this work",
-            rf"\itshape {compact(ours.update_ns_per_op)}",
-            rf"\itshape {compact(ours.query_ns_per_op)}",
+            rf"\itshape {micros(ours.update_ns_per_op)}",
+            rf"\itshape {micros(ours.query_ns_per_op)}",
             rf"\itshape {number(ours.retained_mib, 0)}",
             r"\itshape complete",
         ]
@@ -1296,7 +1288,8 @@ def table_checkpoint(summary):
     tables.tabular(
         TABLES / "checkpoint.tex",
         "lrrrl",
-        ["Versions between checkpoints", "Update (ns)", "Query (ns)", "Memory (MiB)", "Run"],
+        ["Versions between checkpoints", r"Update ($\mu$s)", r"Query ($\mu$s)",
+         "Memory (MiB)", "Run"],
         rows,
     )
 
@@ -1396,35 +1389,44 @@ def collect_facts(runs, summary, comparisons, system, environment, checks, alloc
     FACTS["workloadCount"] = str(runs["workload"].nunique())
 
     at = pick(summary, workload="W1", axis="none", n=HEADLINE_N, structure="persistent").iloc[0]
-    FACTS["oursUpdate"] = compact(at["update_ns_per_op"])
-    FACTS["oursQuery"] = compact(at["query_ns_per_op"])
+    FACTS["oursUpdate"] = micros(at["update_ns_per_op"])
+    FACTS["oursQuery"] = micros(at["query_ns_per_op"])
     FACTS["oursMemory"] = number(at["retained_mib"], 0)
     FACTS["headlineSize"] = f"{HEADLINE_N:,}".replace(",", r"\,")
 
-    biggest = pick(summary, workload="W1", axis="none", n=1_000_000, structure="persistent")
-    smallest = pick(summary, workload="W1", axis="none", n=1_000, structure="persistent")
+    # The ends of the size sweep are read from the data rather than named here,
+    # so extending the grid moves the sentence with it instead of silently
+    # leaving it describing a size that is no longer the largest one measured.
+    sweep = pick(summary, workload="W1", axis="none")
+    top_n = int(sweep["n"].max()) if not sweep.empty else 0
+    bottom_n = int(sweep["n"].min()) if not sweep.empty else 0
+    FACTS["largestSize"] = f"{top_n:,}".replace(",", r"\,")
+    FACTS["smallestSize"] = f"{bottom_n:,}".replace(",", r"\,")
+
+    biggest = pick(summary, workload="W1", axis="none", n=top_n, structure="persistent")
+    smallest = pick(summary, workload="W1", axis="none", n=bottom_n, structure="persistent")
     if not biggest.empty:
-        FACTS["oursUpdateBig"] = compact(biggest["update_ns_per_op"].iloc[0])
-        FACTS["oursQueryBig"] = compact(biggest["query_ns_per_op"].iloc[0])
+        FACTS["oursUpdateBig"] = micros(biggest["update_ns_per_op"].iloc[0])
+        FACTS["oursQueryBig"] = micros(biggest["query_ns_per_op"].iloc[0])
     if not biggest.empty and not smallest.empty:
         FACTS["oursGrowth"] = (
             f"{biggest['update_ns_per_op'].iloc[0] / smallest['update_ns_per_op'].iloc[0]:.1f}"
         )
         floor = pick(summary, workload="W1", axis="none", structure=style.CONTROL)
-        low = floor[floor["n"] == 1_000]["update_ns_per_op"]
-        high = floor[floor["n"] == 1_000_000]["update_ns_per_op"]
+        low = floor[floor["n"] == bottom_n]["update_ns_per_op"]
+        high = floor[floor["n"] == top_n]["update_ns_per_op"]
         if not low.empty and not high.empty:
             FACTS["controlGrowth"] = f"{high.iloc[0] / low.iloc[0]:.1f}"
 
-    largest = pick(summary, workload="W1", axis="none", n=1_000_000)
+    largest = pick(summary, workload="W1", axis="none", n=top_n)
     largest = largest[largest["structure"].isin(style.COMPARABLE) & ~largest["capped"]]
     for metric, key in (("update_ns_per_op", "Update"), ("query_ns_per_op", "Query")):
         if largest.empty:
             continue
         best = largest.loc[largest[metric].idxmin(), "structure"]
-        FACTS[f"cheapestAtMillion{key}"] = escape(style.label(best))
+        FACTS[f"cheapestAtLargest{key}"] = escape(style.label(best))
         runner = largest[largest["structure"] != best][metric].min()
-        FACTS[f"marginAtMillion{key}"] = f"{runner / largest[metric].min():.2f}"
+        FACTS[f"marginAtLargest{key}"] = f"{runner / largest[metric].min():.2f}"
 
     # Cost of keeping history, against keeping none.
     persistence = []
@@ -1480,15 +1482,15 @@ def collect_facts(runs, summary, comparisons, system, environment, checks, alloc
 
     plateau = ours_widths[ours_widths["variant"] < ours_widths["variant"].max()]
     if not plateau.empty:
-        FACTS["widthPlateauLow"] = compact(plateau["update_ns_per_op"].min())
-        FACTS["widthPlateauHigh"] = compact(plateau["update_ns_per_op"].max())
+        FACTS["widthPlateauLow"] = micros(plateau["update_ns_per_op"].min())
+        FACTS["widthPlateauHigh"] = micros(plateau["update_ns_per_op"].max())
         FACTS["widthPlateauSpread"] = (
             f"{plateau['update_ns_per_op'].max() / plateau['update_ns_per_op'].min():.2f}"
         )
         FACTS["widthPlateauTop"] = compact(plateau["variant"].max())
     whole = ours_widths[ours_widths["variant"] == ours_widths["variant"].max()]
     if not whole.empty:
-        FACTS["widthWholeArray"] = compact(whole["update_ns_per_op"].iloc[0])
+        FACTS["widthWholeArray"] = micros(whole["update_ns_per_op"].iloc[0])
 
     # Space: what the tag policy costs when it is the only thing that differs.
     space = pick(summary, workload="W1", axis="none", n=HEADLINE_N)
@@ -1514,9 +1516,9 @@ def collect_facts(runs, summary, comparisons, system, environment, checks, alloc
     # Tail behaviour.
     tail = pick(summary, workload="W1", axis="none", n=HEADLINE_N, structure="persistent")
     if not tail.empty:
-        FACTS["oursTailP50"] = compact(tail["update_p50"].iloc[0])
-        FACTS["oursTailP99"] = compact(tail["update_p99"].iloc[0])
-        FACTS["oursTailMax"] = compact(tail["update_max"].iloc[0])
+        FACTS["oursTailP50"] = micros(tail["update_p50"].iloc[0])
+        FACTS["oursTailP99"] = micros(tail["update_p99"].iloc[0])
+        FACTS["oursTailMax"] = micros(tail["update_max"].iloc[0])
 
     # Statistical strength of the head-to-head family.
     decisive = comparisons[comparisons["significant"]]
@@ -1576,7 +1578,7 @@ def collect_facts(runs, summary, comparisons, system, environment, checks, alloc
                         other["query_ns_per_op"].iloc[0] / ours_row["query_ns_per_op"].iloc[0]
                     )
             if not ours_row.empty:
-                FACTS[f"audit{key}Ours"] = compact(ours_row["query_ns_per_op"].iloc[0])
+                FACTS[f"audit{key}Ours"] = micros(ours_row["query_ns_per_op"].iloc[0])
         FACTS["auditOldestShare"] = f"{100 * oldest:g}"
 
     if not alloc.empty:
