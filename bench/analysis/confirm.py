@@ -222,7 +222,13 @@ def hierarchical(
     if long.empty or long["cell"].nunique() < 1:
         return pd.DataFrame()
     model = smf.mixedlm("log_ratio ~ 0 + C(cell)", long, groups=long["trial"])
-    fitted = model.fit(method="lbfgs", maxiter=200)
+    # No explicit method: statsmodels' own fallback chain (bfgs, then lbfgs,
+    # then cg) is more robust than pinning to one optimizer. lbfgs alone
+    # converged to a spurious near-zero fixed effect on Linux's BLAS for this
+    # design (raw trial index as the group, shared across every cell) while
+    # working on macOS for the same seed; the fallback chain is stable on
+    # both.
+    fitted = model.fit(maxiter=200)
     effects = fitted.params.filter(like="C(cell)")
     conf = fitted.conf_int().loc[effects.index]
     out = pd.DataFrame(
