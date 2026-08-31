@@ -24,6 +24,12 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 > Gate G1 record is section 9 of the
 > [claim-evidence matrix](docs/research/claim-evidence-matrix.md); the Gate G2 exit record,
 > phase charters and exit reviews are working documents kept outside the repository.
+>
+> Phase 3 (registered confirmatory evaluation) is prepared: the analysis protocol is written in
+> [docs/research/registered-protocol.md](docs/research/registered-protocol.md) with its
+> statistics, blinding, fresh-process orchestration, sensitivity paths and an external
+> implementation in place, and awaits its immutable registration deposit. No confirmatory
+> measurement runs before that deposit.
 
 ## Implemented components
 
@@ -138,12 +144,19 @@ paper/                      Version-controlled manuscript source
 ## Benchmarks
 
 `bench/` replays twelve workloads against every implemented persistence
-strategy; see [bench/README.md](bench/README.md). Measured campaign data, the
+strategy and one vendored external implementation
+([bench/external/PROVENANCE.md](bench/external/PROVENANCE.md)); see
+[bench/README.md](bench/README.md). Measured campaign data, the
 generated tables, figures and PDFs are kept out of version control; the
 analysis and report sources, raw checksum manifest and provenance record are
 versioned. The recorded campaign is an **exploratory pilot** (one machine, no
 registered protocol). With the preserved local data present,
 `bench/verify_pilot.sh` verifies checksums and rebuilds the complete report.
+The confirmatory campaign runs under the registered protocol instead:
+batch-mode primary timing, fresh-process orchestration
+(`bench/run_confirmatory.sh`), blinded confirmatory statistics
+(`bench/analysis/confirm.py`) and second-compiler/second-allocator
+sensitivity paths.
 
 ## Documentation
 
