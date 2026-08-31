@@ -69,11 +69,21 @@ in the record instead of silently in the numbers.
 | `--smoke` | off | n = 256, 400 operations, for CI |
 | `--list` | off | print the workload table and exit |
 
-A full campaign at the committed sizes takes roughly half an hour. Most of what
-used to make it take hours was the no-sharing baselines replaying eleven times
-into the same memory ceiling; `--capped-trials` stops that, since the ceiling is
-the result and re-measuring a truncated replay adds nothing. Run one workload at
-a time with `--workload` while iterating.
+W1-W5 sweep five decades of array size, 1e3 to 1e7. The 1e7 cells dominate the
+wall clock and the memory: the initial tree alone is 2n-1 nodes, so a structure
+that stores a whole tree per version reaches the 4096 MiB cap within a few
+versions there. That is the feasibility result, not a failure, but it costs a
+full allocation of a 1e7 tree per trial to reobserve. Run the excluded dry-run
+seeds (`VALSEG_DRY_RUN=1`) once per machine before a confirmatory campaign and
+add the 1e7 cells that cap to `bench/capped_cells.csv`, so they run two trials
+rather than twenty.
+
+Most of what used to make a campaign take hours was the no-sharing baselines
+replaying eleven times into the same memory ceiling; `--capped-trials` stops
+that, since the ceiling is the result and re-measuring a truncated replay adds
+nothing. Run one workload at a time with `--workload` while iterating, and
+`--n` to skip the largest size while the harness itself is what you are
+testing.
 
 ## The registered confirmatory pipeline
 

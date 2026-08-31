@@ -104,8 +104,20 @@ tagged-partial-update relevance and attainable pilot precision
 (`bench/primary_cells.csv`): W2 at n = 1e5 and 1e6; W11 at widths 64 and
 512; W10 at hot-window share 0.05; W6 at zero-delta share 0.1.
 
+**Array sizes**: W1-W5 run at n = 1e3, 1e4, 1e5, 1e6 and 1e7
+(`bench/workloads.cpp`). The pilot stopped at 1e6, which is inside the working
+set the sharing structures were built for. The fifth decade is where the
+per-version copy cost of a no-sharing baseline meets the 4096 MiB cap and
+where no structure's tree fits a cache level, so it is the decade that
+separates a per-operation cost growing with log n from one growing with n. No
+pilot ran at 1e7, so no 1e7 cell is a primary cell and none informs a trial
+count; 1e7 cells run the 20-trial default and enter the exploratory regime map
+and the censored feasibility estimand E5. The cap is unchanged at every size:
+a structure that cannot finish 1e7 inside it produces a censored feasibility
+outcome, which is the result.
+
 **Replication cells (H4)**: the six primary cells plus W1 at every size and
-W5 at n = 1e4, eleven cells in total, classified independently on both
+W5 at n = 1e4, twelve cells in total, classified independently on both
 machines.
 
 ## 4. Hypotheses and decision rules

@@ -52,7 +52,7 @@ them is attributable to the decision rather than to the implementation.
 \item \textbf{Flat in update width.} From one element to
   \Fact{widthPlateauTop} elements the update cost stays inside
   \Fact{widthPlateauSpread}$\times$; the widest update of all is the cheapest, at
-  \Fact{widthWholeArray}\,ns.
+  \Fact{widthWholeArray}\,$\mu$s.
 \item \textbf{Cheapest at scale.} At one million elements it is the cheapest
   persistent structure on updates and on queries alike.
 \item \textbf{Smallest memory.} \Fact{oursMemory}\,MiB where the closest competitor
@@ -148,10 +148,10 @@ ratios, not confidence intervals. No outliers are removed anywhere.
 \end{figure}
 
 At \Fact{headlineSize} elements this work publishes a version in
-\Fact{oursUpdate}\,ns and answers a historical query in \Fact{oursQuery}\,ns; at one
-million elements, \Fact{oursUpdateBig}\,ns and \Fact{oursQueryBig}\,ns. Publishing
-becomes \Fact{oursGrowth}$\times$ more expensive while the array grows a
-thousandfold. The tree's height only doubles over that span and the non-persistent
+\Fact{oursUpdate}\,$\mu$s and answers a historical query in \Fact{oursQuery}\,$\mu$s; at
+\Fact{largestSize} elements, \Fact{oursUpdateBig}\,$\mu$s and \Fact{oursQueryBig}\,$\mu$s.
+Publishing becomes \Fact{oursGrowth}$\times$ more expensive across the whole size sweep,
+from \Fact{smallestSize} to \Fact{largestSize} elements. The tree's height only doubles over that span and the non-persistent
 reference grows by \Fact{controlGrowth}$\times$, so most of the difference is the
 memory hierarchy, not the algorithm: the arena outgrows each cache level in turn.
 
@@ -187,11 +187,11 @@ element it touches: by \Fact{widthFullNoTagsAt} elements it costs
 \Fact{widthFullNoTags} as much, and at \Fact{widthNoTagsRanOutAt} elements it stops
 being measurable at all.
 
-This work is flat over the same span --- \Fact{widthPlateauLow}\,ns to
-\Fact{widthPlateauHigh}\,ns across four orders of magnitude --- because a fully
+This work is flat over the same span --- \Fact{widthPlateauLow}\,$\mu$s to
+\Fact{widthPlateauHigh}\,$\mu$s across four orders of magnitude --- because a fully
 covered node absorbs the delta into a tag and its children are never visited. An
 update covering the whole array is fully covered at the root, copies one node, and
-costs \Fact{widthWholeArray}\,ns. \emph{The widest update in the sweep is by a wide
+costs \Fact{widthWholeArray}\,$\mu$s. \emph{The widest update in the sweep is by a wide
 margin the cheapest.} The tag does not shrink the constant; it changes what the
 update cost depends on.
 
@@ -256,7 +256,7 @@ and it is not; reporting that is the point of including it. Replay always starts
 the nearest snapshot at or before the requested version, so age costs it nothing.
 What the panel does show is that concentrating reads anywhere makes them cheaper
 for every structure. Confined to the oldest \Fact{auditOldestShare}\% of history
-this work answers in \Fact{auditOldestOurs}\,ns and checkpoint-and-replay costs
+this work answers in \Fact{auditOldestOurs}\,$\mu$s and checkpoint-and-replay costs
 \Fact{auditOldestcheckpointing} that.
 
 \subsection{Memory, and what it makes impossible}
@@ -301,8 +301,8 @@ work, copy-on-push, buffered slots and fat nodes finished all twelve.
 \end{figure}
 
 At \Fact{headlineSize} elements the median single update costs
-\Fact{oursTailP50}\,ns and the slowest one in a hundred \Fact{oursTailP99}\,ns. The
-extreme values --- up to \Fact{oursTailMax}\,ns --- are the \texttt{std::vector}
+\Fact{oursTailP50}\,$\mu$s and the slowest one in a hundred \Fact{oursTailP99}\,$\mu$s. The
+extreme values --- up to \Fact{oursTailMax}\,$\mu$s --- are the \texttt{std::vector}
 arena doubling and copying itself, not the persistence strategy; a structure that
 retains more nodes pays that more often and at greater size.
 
@@ -363,9 +363,9 @@ $O(\log n + K)$ query, chosen from the bound rather than by hand.}
 \toprule
 Condition & Checkpoint and replay & This work \\
 \midrule
-Array size & cheaper up to $\approx10^5$ elements & cheaper at $10^6$, by
-\Fact{marginAtMillionUpdate}$\times$ on updates and
-\Fact{marginAtMillionQuery}$\times$ on queries \\
+Array size & cheaper up to $\approx10^5$ elements & cheaper at
+\Fact{largestSize} elements, by \Fact{marginAtLargestUpdate}$\times$ on updates and
+\Fact{marginAtLargestQuery}$\times$ on queries \\
 Memory & \Fact{memorycheckpointing}\,MiB at \Fact{headlineSize} elements &
 \Fact{oursMemory}\,MiB --- \Fact{memoryRatiocheckpointing}$\times$ less \\
 Reaching the whole campaign & finished \Fact{finishedcheckpointing} of
