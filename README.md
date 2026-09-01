@@ -14,9 +14,10 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 > [exit review](docs/research/phase-1-exit-review.md) and
 > [claim-evidence matrix](docs/research/claim-evidence-matrix.md) record the technical closure
 > and the reconfirmed Gate G1 decision. Phase 2 (theorems, frontier identities and the cost model)
-> passed Gate G2: the
+> passed Gate G2 under the public automated-review governance amendment: the
 > observational commutativity boundary ([docs/proof.md](docs/proof.md) section 9) and the
-> frontier identities (section 10) are merged and independently reviewed; the lower-bound
+> frontier identities (section 10) are merged and independently audited by an automated reviewer
+> who authored neither change; the lower-bound
 > attempt of section 10 found a counterexample, so no optimality claim is made and the adopted
 > paper title is:
 >
@@ -25,7 +26,7 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 >
 > The physical and predictive cost model is specified in
 > [docs/research/cost-model.md](docs/research/cost-model.md), including stream-group holdout
-> separation and a hashable two-stage fit/evaluate artifact. The
+> separation and a hashable three-stage prepare/fit/evaluate path. The
 > Gate G1 evidence assessment is section 9 of the claim-evidence matrix. Phase charters and exit
 > reviews are version-controlled records in `docs/research/`.
 >
@@ -65,7 +66,18 @@ and exact range-family sums) that [docs/proof.md](docs/proof.md) section 10 stat
 identities with. The existing structures remain SumAdd-only; the
 policies and templates feed the research programme, not a new public API for the trees.
 
-All components support zero-based, inclusive range-add and range-sum operations using `long long` values. Persistent updates apply to the latest version only, while queries read any published version. Persistent update time is amortized over arena growth; the bounds are proved in [docs/proof.md](docs/proof.md).
+All components support zero-based, inclusive range-add and range-sum operations using `long long`
+values. Their numeric domain is exact signed-integer arithmetic in which every evaluated
+intermediate, canonical segment sum and retained lazy tag is representable as `long long`.
+Out-of-domain initialization, update, or query operations throw `std::overflow_error`; failed
+writes leave the prior state and published history unchanged. Persistent updates apply to the
+latest version only, while queries read any published version. Persistent update time is amortized
+over arena growth; the bounds are proved in [docs/proof.md](docs/proof.md). The update bounds in
+the table describe the structural algorithm and the constant-time numeric fast path. Lazy-tag
+implementations use a conservative magnitude envelope to prove the full logical array remains in
+domain; when that proof is inconclusive near `long long` boundaries, they run an `O(n)` read-only
+exact preflight before the normal update. This fallback preserves exact acceptance and rejection
+without enlarging the benchmarked node layouts.
 
 ## Build and verify
 

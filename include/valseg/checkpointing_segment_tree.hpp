@@ -1,6 +1,8 @@
 #ifndef VALSEG_CHECKPOINTING_SEGMENT_TREE_HPP
 #define VALSEG_CHECKPOINTING_SEGMENT_TREE_HPP
 
+#include <valseg/detail/sum_add_domain.hpp>
+
 #include <cstddef>
 #include <vector>
 
@@ -46,6 +48,14 @@ namespace valseg {
  * U log entries plus (floor(U / K) + 2)(2n - 1) tree nodes — the ephemeral
  * tree, the version-0 checkpoint and one checkpoint per K versions — i.e.
  * O(U + n + nU / K).
+ *
+ * Numeric domain: every stored long long element, canonical segment sum,
+ * retained lazy tag, replay contribution and evaluated arithmetic intermediate
+ * must be exactly representable. An out-of-domain initialization, update or
+ * query throws std::overflow_error; failed writes leave the live tree, log and
+ * checkpoints unchanged. The listed update bound applies when a constant-time
+ * magnitude envelope proves this domain. If that proof is inconclusive, an
+ * O(n) read-only exact preflight runs before the normal update path.
  */
 class CheckpointingSegmentTree {
 public:
@@ -69,6 +79,7 @@ public:
    *                           of updates keeps only the version-0 copy.
    *
    * @throws std::invalid_argument  checkpointInterval is 0.
+   * @throws std::overflow_error    A canonical segment sum is not representable.
    */
   explicit CheckpointingSegmentTree(const std::vector<ValueType>& values,
                                     std::size_t checkpointInterval = 500);
@@ -84,6 +95,8 @@ public:
    * @param checkpointInterval K, as for the constructor.
    *
    * @throws std::invalid_argument  checkpointInterval is 0.
+   * @throws std::overflow_error    A canonical segment sum is not representable;
+   *                                the previous state is left unchanged.
    */
   void initialize(const std::vector<ValueType>& values, std::size_t checkpointInterval = 500);
 
@@ -106,6 +119,8 @@ public:
    * @throws std::runtime_error     No initialized version or empty structure.
    * @throws std::invalid_argument  left is greater than right.
    * @throws std::out_of_range      right is not smaller than size().
+   * @throws std::overflow_error    The update leaves the numeric domain; no
+   *                                event or checkpoint is published.
    */
   std::size_t rangeAdd(std::size_t left, std::size_t right, ValueType value);
 
@@ -126,6 +141,8 @@ public:
    * @throws std::out_of_range      Invalid version number.
    * @throws std::invalid_argument  left is greater than right.
    * @throws std::out_of_range      right is not smaller than size().
+   * @throws std::overflow_error    The exact requested or replayed sum is not
+   *                                representable.
    */
   ValueType rangeSum(std::size_t version, std::size_t left, std::size_t right) const;
 
@@ -224,6 +241,7 @@ private:
 
   std::size_t interval;
   std::size_t arraySize;
+  detail::SumAddDomainGuard numericDomain;
 
   /*
   ============================================
@@ -234,7 +252,7 @@ private:
   /**
    * Number of elements in [segmentLeft, segmentRight] as a ValueType.
    */
-  static ValueType segmentLength(std::size_t segmentLeft, std::size_t segmentRight);
+  static std::size_t segmentLength(std::size_t segmentLeft, std::size_t segmentRight);
 
   /**
    * Slot of the right child of the node at nodeIndex covering
@@ -250,9 +268,17 @@ private:
                      std::size_t segmentRight, std::size_t queryLeft, std::size_t queryRight,
                      ValueType value);
 
+  static ValueType validateUpdate(const std::vector<Node>& nodes, std::size_t nodeIndex,
+                                  std::size_t segmentLeft, std::size_t segmentRight,
+                                  std::size_t queryLeft, std::size_t queryRight, ValueType value);
+
   static ValueType query(const std::vector<Node>& nodes, std::size_t nodeIndex,
                          std::size_t segmentLeft, std::size_t segmentRight, std::size_t queryLeft,
                          std::size_t queryRight, ValueType inheritedLazy);
+
+  static void materialize(const std::vector<Node>& nodes, std::size_t nodeIndex,
+                          std::size_t segmentLeft, std::size_t segmentRight,
+                          ValueType inheritedLazy, std::vector<ValueType>& values);
 
   void validateInitialized() const;
   void validateVersion(std::size_t version) const;

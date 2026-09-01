@@ -18,7 +18,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -49,6 +51,48 @@ using valseg::bench::CopyOnPushSegmentTree;
 using valseg::testing::ElementWiseOracle;
 
 using WideAffine = valseg::AffineSumModPolicy<998244353ULL>;
+
+TEST(FrontierDomain, RejectsEmptyReversedAndOutOfBoundsInputs) {
+  EXPECT_THROW(frontierCounts(0, 0, 0), std::invalid_argument);
+  EXPECT_THROW(closedFormFrontier(0, 0, 0), std::invalid_argument);
+  EXPECT_THROW(intersectingNodes(0, 0, 0), std::invalid_argument);
+  EXPECT_THROW(frontierCounts(4, 3, 2), std::invalid_argument);
+  EXPECT_THROW(closedFormFrontier(4, 0, 4), std::out_of_range);
+  EXPECT_THROW(intersectingNodes(4, 4, 4), std::out_of_range);
+  EXPECT_THROW(frontierSum(0, allRangesCounter(1)), std::invalid_argument);
+}
+
+TEST(FrontierDomain, HeightAndRangeFamiliesCheckTheirRepresentabilityDomains) {
+  const std::size_t maximum = std::numeric_limits<std::size_t>::max();
+  EXPECT_THROW(treeHeight(0), std::invalid_argument);
+  EXPECT_EQ(treeHeight(maximum), std::numeric_limits<std::size_t>::digits);
+  EXPECT_THROW(maximumFrontier(maximum), std::overflow_error);
+  EXPECT_THROW(allRangesCounter(0), std::invalid_argument);
+  EXPECT_THROW(allRangesCounter(maximum), std::overflow_error);
+  EXPECT_THROW(fixedWidthCounter(0, 1), std::invalid_argument);
+  EXPECT_THROW(fixedWidthCounter(8, 0), std::invalid_argument);
+  EXPECT_THROW(fixedWidthCounter(8, 9), std::invalid_argument);
+
+  const auto maximumWidth = fixedWidthCounter(maximum, maximum);
+  const valseg::RangeFamilyCounts counts = maximumWidth(0, maximum - 1);
+  EXPECT_EQ(counts.intersecting, 1U);
+  EXPECT_EQ(counts.containing, 1U);
+  EXPECT_EQ(frontierCounts(maximum, maximum - 1, maximum - 1).visited(),
+            closedFormFrontier(maximum, maximum - 1, maximum - 1));
+  EXPECT_EQ(intersectingNodes(maximum, maximum - 1, maximum - 1),
+            frontierCounts(maximum, maximum - 1, maximum - 1).visited());
+  EXPECT_THROW(intersectingNodes(maximum, 0, maximum - 1), std::overflow_error);
+}
+
+TEST(FrontierDomain, PushCountingModelChecksStorageAndUpdateRanges) {
+  const std::size_t maximum = std::numeric_limits<std::size_t>::max();
+  EXPECT_THROW(PushCountingModel<SumAddPolicy>(0), std::invalid_argument);
+  EXPECT_THROW(PushCountingModel<SumAddPolicy>(maximum / 4 + 1), std::overflow_error);
+
+  PushCountingModel<SumAddPolicy> model(8);
+  EXPECT_THROW(model.apply(4, 3, 1), std::invalid_argument);
+  EXPECT_THROW(model.apply(0, 8, 1), std::out_of_range);
+}
 
 std::pair<std::size_t, std::size_t> randomRange(std::size_t n, std::mt19937_64& rng) {
   std::size_t left = rng() % n;

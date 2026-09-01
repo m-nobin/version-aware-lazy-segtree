@@ -1,4 +1,6 @@
+#include <valseg/detail/checked_size.hpp>
 #include <valseg/full_copy_persistent_segment_tree.hpp>
+#include <valseg/policy.hpp>
 
 #include <stdexcept>
 
@@ -30,7 +32,7 @@ void FullCopyPersistentSegmentTree::initialize(const std::vector<ValueType>& val
   if (values.empty()) {
     newRoots.push_back(noNode);
   } else {
-    newNodes.reserve(2 * values.size() - 1);
+    newNodes.reserve(detail::canonicalNodeCount(values.size()));
     newRoots.push_back(build(values, newNodes, 0, values.size() - 1));
   }
 
@@ -111,11 +113,11 @@ std::size_t FullCopyPersistentSegmentTree::build(const std::vector<ValueType>& v
     return arena.size() - 1;
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
   std::size_t leftRoot = build(values, arena, segmentLeft, middle);
   std::size_t rightRoot = build(values, arena, middle + 1, segmentRight);
 
-  arena.push_back(Node{leftRoot, rightRoot, arena[leftRoot].sum + arena[rightRoot].sum});
+  arena.push_back(Node{leftRoot, rightRoot, checkedAdd(arena[leftRoot].sum, arena[rightRoot].sum)});
   return arena.size() - 1;
 }
 
@@ -139,13 +141,13 @@ std::size_t FullCopyPersistentSegmentTree::fullCopyUpdate(std::size_t nodeIndex,
     // add the delta; otherwise, just copy it exactly.
     ValueType newValue = current.sum;
     if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
-      newValue += value;
+      newValue = checkedAdd(newValue, value);
     }
     nodes.push_back(Node{noNode, noNode, newValue});
     return nodes.size() - 1;
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
   // The defining property of this baseline: children are never reused.
   // Both sides are copied unconditionally, so every version owns 2n - 1 nodes.
@@ -155,7 +157,7 @@ std::size_t FullCopyPersistentSegmentTree::fullCopyUpdate(std::size_t nodeIndex,
       fullCopyUpdate(current.rightChild, middle + 1, segmentRight, queryLeft, queryRight, value);
 
   // The sum of the new node is simply the sum of its newly created children.
-  nodes.push_back(Node{newLeft, newRight, nodes[newLeft].sum + nodes[newRight].sum});
+  nodes.push_back(Node{newLeft, newRight, checkedAdd(nodes[newLeft].sum, nodes[newRight].sum)});
   return nodes.size() - 1;
 }
 
@@ -179,10 +181,10 @@ FullCopyPersistentSegmentTree::query(std::size_t nodeIndex, std::size_t segmentL
     return current.sum;
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
-  return query(current.leftChild, segmentLeft, middle, queryLeft, queryRight) +
-         query(current.rightChild, middle + 1, segmentRight, queryLeft, queryRight);
+  return checkedAdd(query(current.leftChild, segmentLeft, middle, queryLeft, queryRight),
+                    query(current.rightChild, middle + 1, segmentRight, queryLeft, queryRight));
 }
 
 /*

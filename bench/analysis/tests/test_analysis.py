@@ -4,6 +4,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -124,6 +125,8 @@ class CostModelTests(unittest.TestCase):
             ],
             "test-salt",
             0.25,
+            "a" * 64,
+            "b" * 64,
         )
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "model.json"
@@ -133,14 +136,112 @@ class CostModelTests(unittest.TestCase):
         self.assertEqual(loaded, value)
         self.assertEqual(read_hash, written_hash)
 
-    def test_fit_is_independent_of_holdout_responses(self) -> None:
+    def test_fit_rejects_mixed_training_and_holdout_responses(self) -> None:
         rows = self.model_rows()
-        first = cost_model.fit_models(rows, 4096)
-        rows.loc[rows["partition"] == "holdout", "update_ns_per_op"] = 10**9
-        rows.loc[rows["partition"] == "holdout", "query_ns_per_op"] = 10**9
-        second = cost_model.fit_models(rows, 4096)
+        with self.assertRaisesRegex(ValueError, "training responses only"):
+            cost_model.fit_models(rows, 4096)
 
-        self.assertEqual(first, second)
+    def test_fit_process_does_not_open_holdout_response_file(self) -> None:
+        rows = self.model_rows()
+        training = rows[rows["partition"] == "training"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            training_path = root / cost_model.TRAINING_RESPONSES_NAME
+            holdout_path = root / cost_model.HOLDOUT_RESPONSES_NAME
+            training.to_csv(training_path, index=False)
+            # Deliberately not a CSV. Fitting succeeds only if the holdout
+            # response is never opened or deserialized.
+            holdout_path.write_bytes(b"this file must remain unread\x00\xff")
+            manifest = {
+                "schema_version": 1,
+                "cache_bytes": 4096,
+                "split": {
+                    "salt": "test-salt",
+                    "hold_out_share": 0.25,
+                    "unit": "stream-equivalence group of measurement cells",
+                },
+                "responses": {
+                    "training": {
+                        "file": training_path.name,
+                        "sha256": cost_model.sha256_file(training_path),
+                        "rows": len(training),
+                        "cells": 8,
+                    },
+                    "holdout": {
+                        "file": holdout_path.name,
+                        "sha256": cost_model.sha256_file(holdout_path),
+                        "rows": 1,
+                        "cells": 1,
+                    },
+                },
+            }
+            manifest_path = root / cost_model.PARTITION_MANIFEST_NAME
+            cost_model.write_partition_manifest(manifest_path, manifest)
+            model_path = root / "model.json"
+
+            original_open = pathlib.Path.open
+
+            def reject_holdout_open(path: pathlib.Path, *args, **kwargs):
+                if path == holdout_path:
+                    self.fail("fit attempted to open the holdout response")
+                return original_open(path, *args, **kwargs)
+
+            with mock.patch.object(pathlib.Path, "open", reject_holdout_open):
+                artifact, _ = cost_model.fit_from_manifest(manifest_path, model_path)
+
+            self.assertTrue(artifact["models"])
+            self.assertTrue(model_path.is_file())
+            self.assertTrue(model_path.with_suffix(".json.sha256").is_file())
+
+    def test_evaluation_verifies_model_hash_before_opening_holdout(self) -> None:
+        rows = self.model_rows()
+        training = rows[rows["partition"] == "training"]
+        holdout = rows[rows["partition"] == "holdout"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            training_path = root / cost_model.TRAINING_RESPONSES_NAME
+            holdout_path = root / cost_model.HOLDOUT_RESPONSES_NAME
+            training.to_csv(training_path, index=False)
+            holdout.to_csv(holdout_path, index=False)
+            manifest = {
+                "schema_version": 1,
+                "cache_bytes": 4096,
+                "split": {
+                    "salt": "test-salt",
+                    "hold_out_share": 0.25,
+                    "unit": "stream-equivalence group of measurement cells",
+                },
+                "responses": {
+                    "training": {
+                        "file": training_path.name,
+                        "sha256": cost_model.sha256_file(training_path),
+                        "rows": len(training),
+                        "cells": 8,
+                    },
+                    "holdout": {
+                        "file": holdout_path.name,
+                        "sha256": cost_model.sha256_file(holdout_path),
+                        "rows": len(holdout),
+                        "cells": 8,
+                    },
+                },
+            }
+            manifest_path = root / cost_model.PARTITION_MANIFEST_NAME
+            cost_model.write_partition_manifest(manifest_path, manifest)
+            model_path = root / "model.json"
+            cost_model.fit_from_manifest(manifest_path, model_path)
+            model_path.write_bytes(model_path.read_bytes() + b" ")
+
+            original_open = pathlib.Path.open
+
+            def reject_holdout_open(path: pathlib.Path, *args, **kwargs):
+                if path == holdout_path:
+                    self.fail("evaluation opened holdout before verifying the model hash")
+                return original_open(path, *args, **kwargs)
+
+            with mock.patch.object(pathlib.Path, "open", reject_holdout_open):
+                with self.assertRaisesRegex(SystemExit, "checksum"):
+                    cost_model.evaluate_from_manifest(manifest_path, model_path)
 
     def test_missing_structural_directory_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

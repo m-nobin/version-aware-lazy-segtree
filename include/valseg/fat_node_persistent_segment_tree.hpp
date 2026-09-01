@@ -1,6 +1,8 @@
 #ifndef VALSEG_FAT_NODE_PERSISTENT_SEGMENT_TREE_HPP
 #define VALSEG_FAT_NODE_PERSISTENT_SEGMENT_TREE_HPP
 
+#include <valseg/detail/sum_add_domain.hpp>
+
 #include <array>
 #include <cstddef>
 #include <vector>
@@ -58,6 +60,15 @@ namespace valseg {
  * on top of a fixed 128 (2n - 1)-byte build (four times the lazy tree's),
  * growth costs 128 / K ~ 42.7 bytes per modification amortized against
  * 32 bytes per copied node in PersistentLazySegmentTree.
+ *
+ * Numeric domain: every stored long long element, canonical segment sum,
+ * versioned lazy tag and evaluated arithmetic intermediate must be exactly
+ * representable. An out-of-domain initialization, update or query throws
+ * std::overflow_error; update arithmetic is preflighted before any fat-node
+ * state is appended, so failed writes publish nothing. The listed update
+ * bound applies when a constant-time magnitude envelope proves this domain.
+ * If that proof is inconclusive, an O(n) read-only exact preflight runs before
+ * the logarithmic update.
  */
 class FatNodePersistentSegmentTree {
 public:
@@ -83,6 +94,8 @@ public:
    * @brief Construct version 0 from an initial array.
    *
    * @param values Initial array; may be empty.
+   *
+   * @throws std::overflow_error A canonical segment sum is not representable.
    */
   explicit FatNodePersistentSegmentTree(const std::vector<ValueType>& values);
 
@@ -93,6 +106,9 @@ public:
    * succeeds, so a failed initialization leaves the tree unchanged.
    *
    * @param values Initial array; may be empty.
+   *
+   * @throws std::overflow_error A canonical segment sum is not representable;
+   *                             the previous versions are left unchanged.
    */
   void initialize(const std::vector<ValueType>& values);
 
@@ -117,6 +133,8 @@ public:
    * @throws std::runtime_error     No initialized version or empty structure.
    * @throws std::invalid_argument  left is greater than right.
    * @throws std::out_of_range      right is not smaller than size().
+   * @throws std::overflow_error    The update leaves the numeric domain; no
+   *                                version, node or state is published.
    */
   std::size_t rangeAdd(std::size_t left, std::size_t right, ValueType value);
 
@@ -135,6 +153,7 @@ public:
    * @throws std::out_of_range      Invalid version number.
    * @throws std::invalid_argument  left is greater than right.
    * @throws std::out_of_range      right is not smaller than size().
+   * @throws std::overflow_error    The exact requested sum is not representable.
    */
   ValueType rangeSum(std::size_t version, std::size_t left, std::size_t right) const;
 
@@ -221,6 +240,8 @@ private:
 
   std::size_t arraySize;
 
+  detail::SumAddDomainGuard numericDomain;
+
   /**
    * ceil(log2 arraySize): a range update visits at most 4 nodes per level,
    * so at most 4 * (treeHeight + 1) nodes in total.
@@ -236,13 +257,16 @@ private:
   static std::size_t build(const std::vector<ValueType>& values, std::vector<Node>& arena,
                            std::size_t segmentLeft, std::size_t segmentRight);
 
-  static ValueType segmentLength(std::size_t segmentLeft, std::size_t segmentRight);
+  static std::size_t segmentLength(std::size_t segmentLeft, std::size_t segmentRight);
 
   static const Modification& stateAt(const Node& node, std::size_t version);
   static const Modification& latestState(const Node& node);
 
   void reserveForUpdate();
   std::size_t record(std::size_t nodeIndex, const Modification& state);
+
+  ValueType validateUpdate(std::size_t nodeIndex, std::size_t segmentLeft, std::size_t segmentRight,
+                           std::size_t queryLeft, std::size_t queryRight, ValueType value) const;
 
   std::size_t update(std::size_t nodeIndex, std::size_t version, std::size_t segmentLeft,
                      std::size_t segmentRight, std::size_t queryLeft, std::size_t queryRight,
@@ -251,6 +275,9 @@ private:
   ValueType query(std::size_t nodeIndex, std::size_t version, std::size_t segmentLeft,
                   std::size_t segmentRight, std::size_t queryLeft, std::size_t queryRight,
                   ValueType inheritedLazy) const;
+
+  void materialize(std::size_t nodeIndex, std::size_t segmentLeft, std::size_t segmentRight,
+                   ValueType inheritedLazy, std::vector<ValueType>& values) const;
 
   void validateInitialized() const;
   void validateVersion(std::size_t version) const;

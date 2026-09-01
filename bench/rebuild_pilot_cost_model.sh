@@ -28,9 +28,16 @@ for workload in W1 W2 W3 W4 W5 W6 W7 W8 W9 W10 W11 W12; do
 done
 
 model="$summary/cost_model_pilot_fit.json"
+partitions="$scratch/model-inputs"
 uv run --frozen --project "$root/bench/analysis" "$root/bench/analysis/cost_model.py" \
-  --raw "$raw" --structural "$scratch" --summary "$summary" --stage fit \
+  --raw "$raw" --structural "$scratch" --summary "$summary" --stage prepare \
+  --partition-directory "$partitions"
+uv run --frozen --project "$root/bench/analysis" "$root/bench/analysis/cost_model.py" \
+  --summary "$summary" --stage fit \
+  --partition-manifest "$partitions/cost_model_partitions.json" \
   --model-artifact "$model"
 uv run --frozen --project "$root/bench/analysis" "$root/bench/analysis/cost_model.py" \
-  --raw "$raw" --structural "$scratch" --summary "$summary" --stage evaluate \
-  --model-artifact "$model"
+  --summary "$summary" --stage evaluate \
+  --partition-manifest "$partitions/cost_model_partitions.json" \
+  --model-artifact "$model" --output-stem cost_model_pilot \
+  --analysis-label "exploratory pilot, one machine; not the registered holdout evaluation"

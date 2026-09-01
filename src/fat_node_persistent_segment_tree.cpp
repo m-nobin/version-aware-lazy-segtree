@@ -1,4 +1,6 @@
+#include <valseg/detail/checked_size.hpp>
 #include <valseg/fat_node_persistent_segment_tree.hpp>
+#include <valseg/policy.hpp>
 
 #include <algorithm>
 #include <stdexcept>
@@ -25,6 +27,7 @@ Initialization
 */
 
 void FatNodePersistentSegmentTree::initialize(const std::vector<ValueType>& values) {
+  const detail::SumAddDomainGuard newNumericDomain(values);
   // Build replacement state separately so a failed build leaves the
   // currently published versions unchanged.
   std::vector<Node> newNodes;
@@ -34,18 +37,16 @@ void FatNodePersistentSegmentTree::initialize(const std::vector<ValueType>& valu
     newRoots.push_back(noNode);
   } else {
     // A segment tree over n leaves stores exactly 2 * n - 1 nodes.
-    newNodes.reserve(2 * values.size() - 1);
+    newNodes.reserve(detail::canonicalNodeCount(values.size()));
     newRoots.push_back(build(values, newNodes, 0, values.size() - 1));
   }
 
-  std::size_t height = 0;
-  while ((static_cast<std::size_t>(1) << height) < values.size()) {
-    ++height;
-  }
+  const std::size_t height = values.empty() ? 0 : detail::treeHeight(values.size());
 
   nodes.swap(newNodes);
   roots.swap(newRoots);
   arraySize = values.size();
+  numericDomain = newNumericDomain;
   treeHeight = height;
 }
 
@@ -67,16 +68,23 @@ std::size_t FatNodePersistentSegmentTree::rangeAdd(std::size_t left, std::size_t
     return roots.size() - 1;
   }
 
+  const auto nextMagnitudeBound = numericDomain.validateRangeAdd(
+      arraySize, left, right, value, [this](std::vector<ValueType>& values) {
+        materialize(roots.back(), 0, arraySize - 1, 0, values);
+      });
+
   // Unlike path copying, an update mutates existing nodes in place by
   // appending states, so a half-finished update could not be undone by
   // shrinking the arena. Instead, every allocation the update could need
   // is made here, before the first mutation: from this point on nothing
   // below can throw, and a failed reservation leaves the tree untouched.
+  static_cast<void>(validateUpdate(roots.back(), 0, arraySize - 1, left, right, value));
   reserveForUpdate();
 
   const std::size_t version = roots.size();
   const std::size_t newRoot = update(roots.back(), version, 0, arraySize - 1, left, right, value);
   roots.push_back(newRoot);
+  numericDomain.commit(nextMagnitudeBound);
 
   return version;
 }
@@ -127,13 +135,14 @@ std::size_t FatNodePersistentSegmentTree::build(const std::vector<ValueType>& va
     return arena.size() - 1;
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
   std::size_t leftRoot = build(values, arena, segmentLeft, middle);
   std::size_t rightRoot = build(values, arena, middle + 1, segmentRight);
 
-  node.history[0] = Modification{
-      0, leftRoot, rightRoot, arena[leftRoot].history[0].sum + arena[rightRoot].history[0].sum, 0};
+  node.history[0] =
+      Modification{0, leftRoot, rightRoot,
+                   checkedAdd(arena[leftRoot].history[0].sum, arena[rightRoot].history[0].sum), 0};
   arena.push_back(node);
 
   return arena.size() - 1;
@@ -145,10 +154,9 @@ Segment Arithmetic
 =========================================================
 */
 
-FatNodePersistentSegmentTree::ValueType
-FatNodePersistentSegmentTree::segmentLength(std::size_t segmentLeft, std::size_t segmentRight) {
-  // Indices always fit in ValueType, so the arithmetic stays in the signed type.
-  return static_cast<ValueType>(segmentRight) - static_cast<ValueType>(segmentLeft) + 1;
+std::size_t FatNodePersistentSegmentTree::segmentLength(std::size_t segmentLeft,
+                                                        std::size_t segmentRight) {
+  return detail::inclusiveLength(segmentLeft, segmentRight);
 }
 
 /*
@@ -185,12 +193,18 @@ void FatNodePersistentSegmentTree::reserveForUpdate() {
   // Every visited node may overflow into a fresh copy, and a range update
   // visits at most 4 nodes per level. Growing geometrically keeps the
   // amortized cost per appended node constant, as push_back would.
-  const std::size_t visitLimit = 4 * (treeHeight + 1);
+  const std::size_t visitLimit =
+      detail::checkedSizeMultiply(4, detail::checkedSizeAdd(treeHeight, 1));
   if (nodes.capacity() - nodes.size() < visitLimit) {
-    nodes.reserve(std::max(2 * nodes.capacity(), nodes.size() + visitLimit));
+    const std::size_t required = detail::checkedSizeAdd(nodes.size(), visitLimit);
+    const std::size_t geometric =
+        nodes.capacity() <= nodes.max_size() / 2 ? nodes.capacity() * 2 : nodes.max_size();
+    nodes.reserve(std::max(geometric, required));
   }
   if (roots.size() == roots.capacity()) {
-    roots.reserve(2 * roots.capacity());
+    const std::size_t geometric =
+        roots.capacity() <= roots.max_size() / 2 ? roots.capacity() * 2 : roots.max_size();
+    roots.reserve(std::max<std::size_t>(geometric, 1));
   }
 }
 
@@ -214,6 +228,30 @@ std::size_t FatNodePersistentSegmentTree::record(std::size_t nodeIndex, const Mo
   return nodes.size() - 1;
 }
 
+FatNodePersistentSegmentTree::ValueType
+FatNodePersistentSegmentTree::validateUpdate(std::size_t nodeIndex, std::size_t segmentLeft,
+                                             std::size_t segmentRight, std::size_t queryLeft,
+                                             std::size_t queryRight, ValueType value) const {
+  const Modification& current = latestState(nodes[nodeIndex]);
+  const std::size_t length = segmentLength(segmentLeft, segmentRight);
+  if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
+    static_cast<void>(checkedAdd(current.lazy, value));
+    return SumAddPolicy::apply(value, current.sum, length);
+  }
+
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
+  ValueType leftSum = latestState(nodes[current.leftChild]).sum;
+  ValueType rightSum = latestState(nodes[current.rightChild]).sum;
+  if (queryLeft <= middle) {
+    leftSum = validateUpdate(current.leftChild, segmentLeft, middle, queryLeft, queryRight, value);
+  }
+  if (queryRight > middle) {
+    rightSum =
+        validateUpdate(current.rightChild, middle + 1, segmentRight, queryLeft, queryRight, value);
+  }
+  return SumAddPolicy::apply(current.lazy, checkedAdd(leftSum, rightSum), length);
+}
+
 /*
 =========================================================
 Fat-Node Persistent Range Update
@@ -230,17 +268,17 @@ std::size_t FatNodePersistentSegmentTree::update(std::size_t nodeIndex, std::siz
   Modification next = latestState(nodes[nodeIndex]);
   next.version = version;
 
-  const ValueType length = segmentLength(segmentLeft, segmentRight);
+  const std::size_t length = segmentLength(segmentLeft, segmentRight);
 
   if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
     // Full coverage: the node's own sum absorbs the delta and the lazy tag
     // defers it for descendants, so both children stay untouched.
-    next.sum += value * length;
-    next.lazy += value;
+    next.sum = SumAddPolicy::apply(value, next.sum, length);
+    next.lazy = checkedAdd(next.lazy, value);
     return record(nodeIndex, next);
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
   // A child that overflows returns a fresh index, which this node's new
   // state records; a child that appends in place keeps its index.
@@ -256,8 +294,10 @@ std::size_t FatNodePersistentSegmentTree::update(std::size_t nodeIndex, std::siz
 
   // Child sums exclude this node's lazy tag, so the invariant
   // sum = left.sum + right.sum + lazy * length reconstructs the exact sum.
-  next.sum = latestState(nodes[next.leftChild]).sum + latestState(nodes[next.rightChild]).sum +
-             next.lazy * length;
+  next.sum = SumAddPolicy::apply(
+      next.lazy,
+      checkedAdd(latestState(nodes[next.leftChild]).sum, latestState(nodes[next.rightChild]).sum),
+      length);
 
   return record(nodeIndex, next);
 }
@@ -280,18 +320,35 @@ FatNodePersistentSegmentTree::ValueType FatNodePersistentSegmentTree::query(
   if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
     // The node's own lazy value is already included in its sum, so full
     // coverage adds only the lazy values inherited from ancestors.
-    return current.sum + inheritedLazy * segmentLength(segmentLeft, segmentRight);
+    return SumAddPolicy::apply(inheritedLazy, current.sum,
+                               segmentLength(segmentLeft, segmentRight));
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
   // Lazy values are accumulated on the way down instead of pushed into
   // children because published states are immutable.
-  const ValueType nextLazy = inheritedLazy + current.lazy;
+  const ValueType nextLazy = checkedAdd(inheritedLazy, current.lazy);
 
-  return query(current.leftChild, version, segmentLeft, middle, queryLeft, queryRight, nextLazy) +
-         query(current.rightChild, version, middle + 1, segmentRight, queryLeft, queryRight,
-               nextLazy);
+  return checkedAdd(
+      query(current.leftChild, version, segmentLeft, middle, queryLeft, queryRight, nextLazy),
+      query(current.rightChild, version, middle + 1, segmentRight, queryLeft, queryRight,
+            nextLazy));
+}
+
+void FatNodePersistentSegmentTree::materialize(std::size_t nodeIndex, std::size_t segmentLeft,
+                                               std::size_t segmentRight, ValueType inheritedLazy,
+                                               std::vector<ValueType>& values) const {
+  const Modification& current = latestState(nodes[nodeIndex]);
+  if (segmentLeft == segmentRight) {
+    values.push_back(SumAddPolicy::apply(inheritedLazy, current.sum, 1));
+    return;
+  }
+
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
+  const ValueType nextLazy = checkedAdd(inheritedLazy, current.lazy);
+  materialize(current.leftChild, segmentLeft, middle, nextLazy, values);
+  materialize(current.rightChild, middle + 1, segmentRight, nextLazy, values);
 }
 
 /*

@@ -7,7 +7,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
+#include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -20,7 +22,9 @@ namespace valseg::bench {
  *
  * Counts are properties of the generated stream and the checkpoint interval,
  * not measurements of one benchmark implementation. They are the candidate
- * predictors defined in docs/research/cost-model.md.
+ * predictors defined in docs/research/cost-model.md. Exact totals must be
+ * representable in their declared std::size_t or std::uint64_t field; the
+ * function throws std::overflow_error instead of wrapping a total.
  */
 struct StructuralCounts {
   std::size_t updates = 0;
@@ -44,45 +48,64 @@ struct StructuralCounts {
  * interval == 0 denotes the unbounded checkpoint interval: historical reads
  * replay from version zero. Latest-version reads always use the live tree and
  * replay no entries, matching CheckpointingSegmentTree::rangeSum.
+ *
+ * @throws std::invalid_argument size is zero or an operation range is reversed.
+ * @throws std::out_of_range an operation exceeds size or queries a future version.
+ * @throws std::overflow_error an exact structural total is not representable.
  */
 inline StructuralCounts structuralCounts(const std::vector<Operation>& stream, std::size_t size,
                                          std::size_t interval) {
+  if (size == 0) {
+    throw std::invalid_argument("structural-count size must be positive");
+  }
   StructuralCounts counts;
   PushCountingModel<SumAddPolicy> pushes(size);
   std::size_t latestVersion = 0;
   for (const Operation& op : stream) {
     if (op.isUpdate) {
-      ++counts.updates;
-      ++latestVersion;
+      const FrontierCounts frontier = frontierCounts(size, op.left, op.right);
+      counts.updates = valseg::detail::checkedSizeAdd(counts.updates, 1);
+      latestVersion = valseg::detail::checkedSizeAdd(latestVersion, 1);
       if (op.delta == 0) {
         continue;
       }
-      ++counts.nonZeroUpdates;
-      const FrontierCounts frontier = frontierCounts(size, op.left, op.right);
-      counts.updateVisits += frontier.visited();
+      counts.nonZeroUpdates = valseg::detail::checkedSizeAdd(counts.nonZeroUpdates, 1);
+      counts.updateVisits = valseg::detail::checkedSizeAdd(counts.updateVisits, frontier.visited());
       if (interval != 0 && latestVersion % interval == 0) {
         // CheckpointingSegmentTree copies the pre-update live tree and then
         // applies the update to both the live tree and the checkpoint copy.
-        counts.checkpointUpdateVisits += frontier.visited();
+        counts.checkpointUpdateVisits =
+            valseg::detail::checkedSizeAdd(counts.checkpointUpdateVisits, frontier.visited());
       }
-      counts.pushes += pushes.apply(op.left, op.right, op.delta);
-      counts.intersecting +=
-          frontier.partial + 2 * (op.right - op.left + 1) - frontier.decomposition;
+      counts.pushes =
+          valseg::detail::checkedSizeAdd(counts.pushes, pushes.apply(op.left, op.right, op.delta));
+      counts.intersecting = valseg::detail::checkedSizeAdd(
+          counts.intersecting, intersectingNodes(size, op.left, op.right));
       if (op.left == 0 && op.right == size - 1) {
-        ++counts.fullCoverageUpdates;
+        counts.fullCoverageUpdates = valseg::detail::checkedSizeAdd(counts.fullCoverageUpdates, 1);
       }
     } else {
-      ++counts.queries;
-      counts.queryVisits += frontierCounts(size, op.left, op.right).visited();
-      if (op.left == 0 && op.right == size - 1) {
-        ++counts.fullCoverageQueries;
+      const std::size_t visits = frontierCounts(size, op.left, op.right).visited();
+      if (op.version > latestVersion) {
+        throw std::out_of_range("query references an unpublished version");
       }
-      counts.queryVersionDistance += static_cast<std::uint64_t>(latestVersion - op.version);
+      counts.queries = valseg::detail::checkedSizeAdd(counts.queries, 1);
+      counts.queryVisits = valseg::detail::checkedSizeAdd(counts.queryVisits, visits);
+      if (op.left == 0 && op.right == size - 1) {
+        counts.fullCoverageQueries = valseg::detail::checkedSizeAdd(counts.fullCoverageQueries, 1);
+      }
+      const std::size_t distance = latestVersion - op.version;
+      if (distance > std::numeric_limits<std::uint64_t>::max() - counts.queryVersionDistance) {
+        throw std::overflow_error("query-version distance total is not representable");
+      }
+      counts.queryVersionDistance += static_cast<std::uint64_t>(distance);
       if (op.version == latestVersion) {
-        ++counts.latestVersionQueries;
+        counts.latestVersionQueries =
+            valseg::detail::checkedSizeAdd(counts.latestVersionQueries, 1);
         continue;
       }
-      counts.replayEntries += interval == 0 ? op.version : op.version % interval;
+      counts.replayEntries = valseg::detail::checkedSizeAdd(
+          counts.replayEntries, interval == 0 ? op.version : op.version % interval);
     }
   }
   return counts;

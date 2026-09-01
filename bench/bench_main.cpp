@@ -420,7 +420,7 @@ const std::vector<Structure>& structures() {
 /**
  * How a trial is timed.
  */
-enum class TimingMode {
+enum class TimingMode : std::uint8_t {
   Interleaved, ///< the pilot protocol: a clock pair around every operation
   Batch,       ///< the registered primary: one clock pair per operation batch
   Latency      ///< the registered secondary: sampled per-operation clock pairs

@@ -4,8 +4,9 @@ This document states the algebraic policy model, audits which implemented
 persistence strategy supports which action class, and fixes the
 representation model used by the planned lower-bound attempt. Every claim
 here is either checked by `tests/policy_test.cpp`, cited to source, or
-marked as a proof obligation for a later theory PR. Nothing in this document
-is a theorem until that PR's independent review passes.
+marked as a proof obligation for a later theory PR. The theorem claims passed
+the disclosed independent automated G2 audit permitted by the 31 August 2026
+governance amendment; that audit is not a human review.
 
 ## 1. Operation model
 
@@ -110,11 +111,11 @@ The proof obligations (sufficiency of induced commutativity; necessity under
 explicit reachability and order-separation assumptions; the faithful-action
 corollary) are discharged in `docs/proof.md` section 9: Theorem 9.4, Theorem
 9.5 with its three named assumptions, and Corollary 9.7, with the minimal
-`n = 2` counterexample in section 9.5. Their independent review (section
-9.10 of that document) passed on 30 August 2026 with every required change
-applied. The executable evidence remains the commutation checks, the concrete
-counterexample and agreement of every generic instantiation with the
-element-wise oracle.
+`n = 2` counterexample in section 9.5. Their independent automated G2 audit
+(section 9.10 of that document) passed on 30 August 2026 with every required
+change applied. The executable evidence remains the commutation checks, the
+concrete counterexample and agreement of every generic instantiation with the
+element-wise oracle. A named human theory review remains required before G4.
 
 ## 3. Capability facts in code
 
@@ -150,8 +151,8 @@ obligation; no strategy is claimed beyond what its mechanism preserves.
 
 | Strategy | Source | Mechanism (audited) | Action class | Why / obligation |
 | --- | --- | --- | --- | --- |
-| Subject: tag-retaining persistent lazy tree | `include/valseg/persistent_lazy_segment_tree.hpp`, `src/persistent_lazy_segment_tree.cpp`; generic form `RetainedTagPersistentTree` in `include/valseg/policy_trees.hpp` | Path copying; the copied node keeps its lazy tag (`Node::lazy`, included in own `sum`, not in children); queries accumulate ancestor tags outermost-first (`query`'s `inheritedLazy`) | Policies with commuting induced actions | A tag retained through a partial descent is applied outside newer tags below it; see section 2.2. Theorems 9.4 and 9.5 of `docs/proof.md`, independently reviewed in section 9.10. |
-| Copy-on-push ablation | `bench/copy_on_push_segment_tree.hpp`; generic form `CopyOnPushPersistentTree` in `include/valseg/policy_trees.hpp` | Same layout; a partial descent pushes the tag into copied children first | Arbitrary valid action monoids | Push-down preserves chronological order at every node. Theorem 9.8 of `docs/proof.md`, independently reviewed in section 9.10. |
+| Subject: tag-retaining persistent lazy tree | `include/valseg/persistent_lazy_segment_tree.hpp`, `src/persistent_lazy_segment_tree.cpp`; generic form `RetainedTagPersistentTree` in `include/valseg/policy_trees.hpp` | Path copying; the copied node keeps its lazy tag (`Node::lazy`, included in own `sum`, not in children); queries accumulate ancestor tags outermost-first (`query`'s `inheritedLazy`) | Policies with commuting induced actions | A tag retained through a partial descent is applied outside newer tags below it; see section 2.2. Theorems 9.4 and 9.5 of `docs/proof.md`, independently audited by an automated reviewer in section 9.10. |
+| Copy-on-push ablation | `bench/copy_on_push_segment_tree.hpp`; generic form `CopyOnPushPersistentTree` in `include/valseg/policy_trees.hpp` | Same layout; a partial descent pushes the tag into copied children first | Arbitrary valid action monoids | Push-down preserves chronological order at every node. Theorem 9.8 of `docs/proof.md`, independently audited by an automated reviewer in section 9.10. |
 | Ordinary lazy tree (control) | `include/valseg/lazy_segment_tree.hpp`; generic form `PushedLazyTree` in `include/valseg/policy_trees.hpp` | In-place push-down; latest state only | Arbitrary valid action monoids; no history | Textbook lazy propagation; chronological order preserved. Theorem 9.8. |
 | Point-only persistence | `include/valseg/point_only_persistent_segment_tree.hpp`; generic form `PointMaterializedPersistentTree` in `include/valseg/policy_trees.hpp` | Path-copies to every affected leaf; no tags | Arbitrary valid action monoids | Actions are fully materialized at leaves in order; update cost grows with range width. Theorem 9.8. |
 | Full copy | `include/valseg/full_copy_persistent_segment_tree.hpp` | Complete tagless tree copy per update | Arbitrary valid action monoids | Every version is a materialized tree; no deferred state at all. Audited from source in `docs/proof.md` section 9.7. |
@@ -237,9 +238,10 @@ lower-bound question open. R is not narrowed.
 - No generic checkpoint replay.
 - No `O(log n)` bound for any version-stamped structure beyond what its own
   header documents.
-- No reviewed correctness boundary theorem yet: sufficiency, necessity and
-  the faithful-action corollary are drafted with named assumptions in
-  `docs/proof.md` section 9 and await the independent review recorded there.
+- No human-reviewed correctness boundary theorem yet: sufficiency, necessity
+  and the faithful-action corollary passed the permitted automated G2 audit in
+  `docs/proof.md` section 9, but named human theory review remains mandatory
+  before G4.
 - No claim that two policy instantiations prove generic correctness.
 - No generic buffered, fat-node or checkpoint structure; their action class
   is an audit of the SumAdd source, not a generalized implementation.

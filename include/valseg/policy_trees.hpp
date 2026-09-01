@@ -1,6 +1,8 @@
 #ifndef VALSEG_POLICY_TREES_HPP
 #define VALSEG_POLICY_TREES_HPP
 
+#include <valseg/detail/checked_size.hpp>
+
 #include <cstddef>
 #include <iterator>
 #include <stdexcept>
@@ -33,11 +35,10 @@ namespace valseg {
  *
  * The SumAdd instantiations follow the production structures: on the seeded
  * history in tests/policy_trees_test.cpp the arena size after every update and
- * every probed answer equal PersistentLazySegmentTree's and CopyOnPushSegmentTree's;
- * they differ only where the policy rejects an unrepresentable result, which
- * the SumAdd classes leave to their representable-input precondition. The
- * public SumAdd classes are unchanged; these templates are the research
- * instruments, not a replacement API.
+ * every probed answer equal PersistentLazySegmentTree's and CopyOnPushSegmentTree's.
+ * SumAdd instantiations use the same checked policy operations as the production
+ * structures. These templates remain research instruments, not a replacement
+ * public API.
  *
  * Shared operation model and validation contract, in this order:
  *  - a persistent tree with no versions rejects updates and queries with
@@ -180,7 +181,7 @@ public:
     if (values.empty()) {
       newRoots.push_back(noNode);
     } else {
-      newNodes.reserve(2 * values.size() - 1);
+      newNodes.reserve(detail::canonicalNodeCount(values.size()));
       newRoots.push_back(build(values, newNodes, 0, values.size() - 1));
     }
     nodes.swap(newNodes);
@@ -298,7 +299,7 @@ private:
       arena.push_back(Node{noNode, noNode, values[segmentLeft], Policy::actionIdentity()});
       return arena.size() - 1;
     }
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
+    const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
     const std::size_t leftRoot = build(values, arena, segmentLeft, middle);
     const std::size_t rightRoot = build(values, arena, middle + 1, segmentRight);
     arena.push_back(Node{leftRoot, rightRoot,
@@ -333,7 +334,7 @@ private:
       return nodes.size() - 1;
     }
 
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
+    const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
     std::size_t leftChild = current.leftChild;
     std::size_t rightChild = current.rightChild;
     Action retained = current.tag;
@@ -371,7 +372,7 @@ private:
     if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
       return Policy::apply(inherited, current.aggregate, segmentRight - segmentLeft + 1);
     }
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
+    const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
     // Outermost-first accumulation: the inherited composition is outer, this
     // node's tag inner, so compose(inherited, tag) applies the tag first.
     const Action next = Policy::compose(inherited, current.tag);
@@ -441,7 +442,7 @@ public:
     if (values.empty()) {
       newRoots.push_back(noNode);
     } else {
-      newNodes.reserve(2 * values.size() - 1);
+      newNodes.reserve(detail::canonicalNodeCount(values.size()));
       newRoots.push_back(build(values, newNodes, 0, values.size() - 1));
     }
     nodes.swap(newNodes);
@@ -555,7 +556,7 @@ private:
       arena.push_back(Node{noNode, noNode, values[segmentLeft]});
       return arena.size() - 1;
     }
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
+    const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
     const std::size_t leftRoot = build(values, arena, segmentLeft, middle);
     const std::size_t rightRoot = build(values, arena, middle + 1, segmentRight);
     arena.push_back(Node{leftRoot, rightRoot,
@@ -571,7 +572,7 @@ private:
       nodes.push_back(Node{noNode, noNode, Policy::apply(action, current.aggregate, 1)});
       return nodes.size() - 1;
     }
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
+    const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
     std::size_t newLeft = current.leftChild;
     std::size_t newRight = current.rightChild;
     if (queryLeft <= middle) {
@@ -595,7 +596,7 @@ private:
     if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
       return current.aggregate;
     }
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
+    const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
     return Policy::combine(
         query(current.leftChild, segmentLeft, middle, queryLeft, queryRight),
         query(current.rightChild, middle + 1, segmentRight, queryLeft, queryRight));
@@ -644,12 +645,15 @@ public:
    *               tree empty.
    */
   void initialize(const std::vector<Aggregate>& values) {
-    arraySize = values.size();
-    aggregates.assign(4 * arraySize, Policy::aggregateIdentity());
-    tags.assign(4 * arraySize, Policy::actionIdentity());
-    if (arraySize > 0) {
-      build(values, 0, 0, arraySize - 1);
+    const std::size_t storageCount = detail::lazyStorageCount(values.size());
+    std::vector<Aggregate> newAggregates(storageCount, Policy::aggregateIdentity());
+    std::vector<Action> newTags(storageCount, Policy::actionIdentity());
+    if (!values.empty()) {
+      build(values, newAggregates, 0, 0, values.size() - 1);
     }
+    aggregates.swap(newAggregates);
+    tags.swap(newTags);
+    arraySize = values.size();
   }
 
   /**
@@ -701,16 +705,16 @@ private:
   std::vector<Action> tags;
   std::size_t arraySize = 0;
 
-  void build(const std::vector<Aggregate>& values, std::size_t node, std::size_t segmentLeft,
-             std::size_t segmentRight) {
+  static void build(const std::vector<Aggregate>& values, std::vector<Aggregate>& output,
+                    std::size_t node, std::size_t segmentLeft, std::size_t segmentRight) {
     if (segmentLeft == segmentRight) {
-      aggregates[node] = values[segmentLeft];
+      output[node] = values[segmentLeft];
       return;
     }
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
-    build(values, 2 * node + 1, segmentLeft, middle);
-    build(values, 2 * node + 2, middle + 1, segmentRight);
-    aggregates[node] = Policy::combine(aggregates[2 * node + 1], aggregates[2 * node + 2]);
+    const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
+    build(values, output, 2 * node + 1, segmentLeft, middle);
+    build(values, output, 2 * node + 2, middle + 1, segmentRight);
+    output[node] = Policy::combine(output[2 * node + 1], output[2 * node + 2]);
   }
 
   // Apply the pending tag to this node and hand it to the children, newest
@@ -738,7 +742,7 @@ private:
       push(node, segmentLeft, segmentRight);
       return;
     }
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
+    const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
     update(2 * node + 1, segmentLeft, middle, queryLeft, queryRight, action);
     update(2 * node + 2, middle + 1, segmentRight, queryLeft, queryRight, action);
     aggregates[node] = Policy::combine(aggregates[2 * node + 1], aggregates[2 * node + 2]);
@@ -753,7 +757,7 @@ private:
     if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
       return aggregates[node];
     }
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
+    const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
     return Policy::combine(query(2 * node + 1, segmentLeft, middle, queryLeft, queryRight),
                            query(2 * node + 2, middle + 1, segmentRight, queryLeft, queryRight));
   }

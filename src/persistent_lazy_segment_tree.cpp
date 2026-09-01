@@ -1,4 +1,6 @@
+#include <valseg/detail/checked_size.hpp>
 #include <valseg/persistent_lazy_segment_tree.hpp>
+#include <valseg/policy.hpp>
 
 #include <stdexcept>
 
@@ -24,6 +26,7 @@ Initialization
 */
 
 void PersistentLazySegmentTree::initialize(const std::vector<ValueType>& values) {
+  const detail::SumAddDomainGuard newNumericDomain(values);
   // Build replacement state separately so a failed build leaves the
   // currently published versions unchanged.
   std::vector<Node> newNodes;
@@ -33,13 +36,14 @@ void PersistentLazySegmentTree::initialize(const std::vector<ValueType>& values)
     newRoots.push_back(noNode);
   } else {
     // A segment tree over n leaves stores exactly 2 * n - 1 nodes.
-    newNodes.reserve(2 * values.size() - 1);
+    newNodes.reserve(detail::canonicalNodeCount(values.size()));
     newRoots.push_back(build(values, newNodes, 0, values.size() - 1));
   }
 
   nodes.swap(newNodes);
   roots.swap(newRoots);
   arraySize = values.size();
+  numericDomain = newNumericDomain;
 }
 
 /*
@@ -60,6 +64,11 @@ std::size_t PersistentLazySegmentTree::rangeAdd(std::size_t left, std::size_t ri
     return roots.size() - 1;
   }
 
+  const auto nextMagnitudeBound = numericDomain.validateRangeAdd(
+      arraySize, left, right, value, [this](std::vector<ValueType>& values) {
+        materialize(roots.back(), 0, arraySize - 1, 0, values);
+      });
+
   // Publish the new root only after the complete update succeeds; on
   // failure, roll the arena back to the checkpoint so no partial state
   // remains observable.
@@ -72,6 +81,8 @@ std::size_t PersistentLazySegmentTree::rangeAdd(std::size_t left, std::size_t ri
     nodes.resize(checkpoint);
     throw;
   }
+
+  numericDomain.commit(nextMagnitudeBound);
 
   return roots.size() - 1;
 }
@@ -118,12 +129,13 @@ std::size_t PersistentLazySegmentTree::build(const std::vector<ValueType>& value
     return arena.size() - 1;
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
   std::size_t leftRoot = build(values, arena, segmentLeft, middle);
   std::size_t rightRoot = build(values, arena, middle + 1, segmentRight);
 
-  arena.push_back(Node{leftRoot, rightRoot, arena[leftRoot].sum + arena[rightRoot].sum, 0});
+  arena.push_back(
+      Node{leftRoot, rightRoot, checkedAdd(arena[leftRoot].sum, arena[rightRoot].sum), 0});
 
   return arena.size() - 1;
 }
@@ -134,10 +146,9 @@ Segment Arithmetic
 =========================================================
 */
 
-PersistentLazySegmentTree::ValueType
-PersistentLazySegmentTree::segmentLength(std::size_t segmentLeft, std::size_t segmentRight) {
-  // Indices always fit in ValueType, so the arithmetic stays in the signed type.
-  return static_cast<ValueType>(segmentRight) - static_cast<ValueType>(segmentLeft) + 1;
+std::size_t PersistentLazySegmentTree::segmentLength(std::size_t segmentLeft,
+                                                     std::size_t segmentRight) {
+  return detail::inclusiveLength(segmentLeft, segmentRight);
 }
 
 /*
@@ -153,17 +164,18 @@ std::size_t PersistentLazySegmentTree::update(std::size_t nodeIndex, std::size_t
   // arena and invalidate references into it.
   const Node current = nodes[nodeIndex];
 
-  const ValueType length = segmentLength(segmentLeft, segmentRight);
+  const std::size_t length = segmentLength(segmentLeft, segmentRight);
 
   if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
     // Full coverage: the node's own sum absorbs the delta and the lazy tag
     // defers it for descendants, so both shared children stay untouched.
-    nodes.push_back(Node{current.leftChild, current.rightChild, current.sum + value * length,
-                         current.lazy + value});
+    nodes.push_back(Node{current.leftChild, current.rightChild,
+                         SumAddPolicy::apply(value, current.sum, length),
+                         checkedAdd(current.lazy, value)});
     return nodes.size() - 1;
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
   std::size_t newLeft = current.leftChild;
   std::size_t newRight = current.rightChild;
@@ -179,9 +191,11 @@ std::size_t PersistentLazySegmentTree::update(std::size_t nodeIndex, std::size_t
   // The copied parent keeps its own lazy tag. Child sums exclude that tag,
   // so the invariant sum = left.sum + right.sum + lazy * length
   // reconstructs the exact sum without pushing into shared children.
-  nodes.push_back(Node{newLeft, newRight,
-                       nodes[newLeft].sum + nodes[newRight].sum + current.lazy * length,
-                       current.lazy});
+  nodes.push_back(
+      Node{newLeft, newRight,
+           SumAddPolicy::apply(current.lazy, checkedAdd(nodes[newLeft].sum, nodes[newRight].sum),
+                               length),
+           current.lazy});
 
   return nodes.size() - 1;
 }
@@ -205,17 +219,34 @@ PersistentLazySegmentTree::query(std::size_t nodeIndex, std::size_t segmentLeft,
   if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
     // The node's own lazy value is already included in its sum, so full
     // coverage adds only the lazy values inherited from ancestors.
-    return current.sum + inheritedLazy * segmentLength(segmentLeft, segmentRight);
+    return SumAddPolicy::apply(inheritedLazy, current.sum,
+                               segmentLength(segmentLeft, segmentRight));
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
   // Lazy values are accumulated on the way down instead of pushed into
   // children because published nodes are immutable.
-  const ValueType nextLazy = inheritedLazy + current.lazy;
+  const ValueType nextLazy = checkedAdd(inheritedLazy, current.lazy);
 
-  return query(current.leftChild, segmentLeft, middle, queryLeft, queryRight, nextLazy) +
-         query(current.rightChild, middle + 1, segmentRight, queryLeft, queryRight, nextLazy);
+  return checkedAdd(
+      query(current.leftChild, segmentLeft, middle, queryLeft, queryRight, nextLazy),
+      query(current.rightChild, middle + 1, segmentRight, queryLeft, queryRight, nextLazy));
+}
+
+void PersistentLazySegmentTree::materialize(std::size_t nodeIndex, std::size_t segmentLeft,
+                                            std::size_t segmentRight, ValueType inheritedLazy,
+                                            std::vector<ValueType>& values) const {
+  const Node& current = nodes[nodeIndex];
+  if (segmentLeft == segmentRight) {
+    values.push_back(SumAddPolicy::apply(inheritedLazy, current.sum, 1));
+    return;
+  }
+
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
+  const ValueType nextLazy = checkedAdd(inheritedLazy, current.lazy);
+  materialize(current.leftChild, segmentLeft, middle, nextLazy, values);
+  materialize(current.rightChild, middle + 1, segmentRight, nextLazy, values);
 }
 
 /*
