@@ -34,11 +34,7 @@ include(GoogleTest)
 # Helper function — avoids repeating the same boilerplate for every target.
 # ---------------------------------------------------------------------------
 
-function(add_valseg_test target source)
-  add_executable(${target} ${source})
-
-  target_link_libraries(${target} PRIVATE valseg::valseg GTest::gtest_main)
-
+function(configure_valseg_test target)
   target_compile_features(${target} PRIVATE cxx_std_17)
 
   if(VALSEG_ENABLE_CLANG_TIDY)
@@ -65,6 +61,12 @@ function(add_valseg_test target source)
   gtest_discover_tests(${target})
 endfunction()
 
+function(add_valseg_test target source)
+  add_executable(${target} ${source})
+  target_link_libraries(${target} PRIVATE valseg::valseg GTest::gtest_main)
+  configure_valseg_test(${target})
+endfunction()
+
 # ---------------------------------------------------------------------------
 # Test targets
 # ---------------------------------------------------------------------------
@@ -87,7 +89,19 @@ add_valseg_test(record_layout_test record_layout_test.cpp)
 add_valseg_test(structural_counts_test structural_counts_test.cpp)
 target_include_directories(structural_counts_test PRIVATE ${PROJECT_SOURCE_DIR}/bench)
 add_valseg_test(numeric_contract_test numeric_contract_test.cpp)
-add_valseg_test(brute_force_allocation_failure_test brute_force_allocation_failure_test.cpp)
+
+# Compile the real implementation with a one-shot allocation-boundary hook for
+# this executable only. Replacing the process-wide allocator is not portable to
+# MSVC and can terminate GoogleTest before it reports the expected exception.
+add_executable(brute_force_allocation_failure_test
+  brute_force_allocation_failure_test.cpp
+  ${PROJECT_SOURCE_DIR}/src/brute_force_array.cpp)
+target_include_directories(brute_force_allocation_failure_test PRIVATE
+  ${PROJECT_SOURCE_DIR}/include)
+target_compile_definitions(brute_force_allocation_failure_test PRIVATE
+  VALSEG_ENABLE_BRUTE_FORCE_ALLOCATION_FAILURE_TEST_HOOK)
+target_link_libraries(brute_force_allocation_failure_test PRIVATE GTest::gtest_main)
+configure_valseg_test(brute_force_allocation_failure_test)
 
 # ---------------------------------------------------------------------------
 # Compile-fail test: the tag-retaining subject must reject a policy whose

@@ -5,7 +5,32 @@
 #include <stdexcept>
 #include <utility>
 
+#if defined(VALSEG_ENABLE_BRUTE_FORCE_ALLOCATION_FAILURE_TEST_HOOK)
+#include <new>
+#endif
+
 namespace valseg {
+
+#if defined(VALSEG_ENABLE_BRUTE_FORCE_ALLOCATION_FAILURE_TEST_HOOK)
+namespace detail {
+namespace {
+
+thread_local bool failNextReplacementAllocation = false;
+
+void throwIfReplacementAllocationShouldFail() {
+  if (std::exchange(failNextReplacementAllocation, false)) {
+    throw std::bad_alloc();
+  }
+}
+
+} // namespace
+
+void failNextBruteForceReplacementAllocationForTesting() noexcept {
+  failNextReplacementAllocation = true;
+}
+
+} // namespace detail
+#endif
 
 /*
 =========================================================
@@ -27,6 +52,9 @@ Initialization
 
 void BruteForceArray::initialize(const std::vector<ValueType>& initial) {
   std::vector<std::vector<ValueType>> replacement;
+#if defined(VALSEG_ENABLE_BRUTE_FORCE_ALLOCATION_FAILURE_TEST_HOOK)
+  detail::throwIfReplacementAllocationShouldFail();
+#endif
   replacement.push_back(initial);
   detail::validateCanonicalSums(replacement.front());
   versions.swap(replacement);
