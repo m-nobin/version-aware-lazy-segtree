@@ -1,7 +1,10 @@
 #ifndef VALSEG_FRONTIER_HPP
 #define VALSEG_FRONTIER_HPP
 
+#include <valseg/detail/checked_size.hpp>
+
 #include <cstddef>
+#include <stdexcept>
 #include <vector>
 
 namespace valseg {
@@ -32,9 +35,12 @@ namespace valseg {
  *    number of partially covered visited nodes whose retained tag is not the
  *    identity at the time of the update.
  *
- * Every function is exact for every n >= 1 and every valid range; nothing here
- * is a bound unless its name says so. The tests in tests/frontier_test.cpp
- * compare each function with the arena growth of the implemented structures.
+ * Every function is exact for n >= 1, valid ranges and results representable
+ * as std::size_t; nothing here is a bound unless its name says so. Invalid
+ * domains throw std::invalid_argument or std::out_of_range, and an exact count
+ * outside std::size_t throws std::overflow_error. The tests in
+ * tests/frontier_test.cpp cover those boundaries and compare the formulas with
+ * arena growth of the implemented structures.
  */
 
 /**
@@ -53,7 +59,7 @@ struct FrontierCounts {
    * @return partial + decomposition.
    */
   std::size_t visited() const {
-    return partial + decomposition;
+    return detail::checkedSizeAdd(partial, decomposition);
   }
 };
 
@@ -71,43 +77,17 @@ namespace detail {
 inline void countFrontier(std::size_t segmentLeft, std::size_t segmentRight, std::size_t left,
                           std::size_t right, FrontierCounts& counts) {
   if (left <= segmentLeft && segmentRight <= right) {
-    ++counts.decomposition;
+    counts.decomposition = checkedSizeAdd(counts.decomposition, 1);
     return;
   }
-  ++counts.partial;
-  const std::size_t middle = (segmentLeft + segmentRight) / 2;
+  counts.partial = checkedSizeAdd(counts.partial, 1);
+  const std::size_t middle = midpoint(segmentLeft, segmentRight);
   if (left <= middle) {
     countFrontier(segmentLeft, middle, left, right, counts);
   }
   if (right > middle) {
     countFrontier(middle + 1, segmentRight, left, right, counts);
   }
-}
-
-/**
- * @brief Count canonical nodes of a segment that meet the range.
- *
- * @param segmentLeft  Segment start.
- * @param segmentRight Segment end.
- * @param left         Range start.
- * @param right        Range end.
- *
- * @return The count.
- */
-inline std::size_t countIntersecting(std::size_t segmentLeft, std::size_t segmentRight,
-                                     std::size_t left, std::size_t right) {
-  if (segmentLeft == segmentRight) {
-    return 1;
-  }
-  const std::size_t middle = (segmentLeft + segmentRight) / 2;
-  std::size_t count = 1;
-  if (left <= middle) {
-    count += countIntersecting(segmentLeft, middle, left, right);
-  }
-  if (right > middle) {
-    count += countIntersecting(middle + 1, segmentRight, left, right);
-  }
-  return count;
 }
 
 /**
@@ -125,7 +105,7 @@ inline std::size_t nodesContainingBoth(std::size_t n, std::size_t first, std::si
   std::size_t segmentRight = n - 1;
   std::size_t count = 1;
   while (segmentLeft != segmentRight) {
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
+    const std::size_t middle = midpoint(segmentLeft, segmentRight);
     if (first <= middle && second <= middle) {
       segmentRight = middle;
     } else if (first > middle && second > middle) {
@@ -133,7 +113,7 @@ inline std::size_t nodesContainingBoth(std::size_t n, std::size_t first, std::si
     } else {
       break;
     }
-    ++count;
+    count = checkedSizeAdd(count, 1);
   }
   return count;
 }
@@ -160,7 +140,7 @@ inline std::size_t decompositionAlongBoundary(std::size_t n, std::size_t outer, 
   std::size_t segmentRight = n - 1;
   std::size_t count = 0;
   while (true) {
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
+    const std::size_t middle = midpoint(segmentLeft, segmentRight);
     const bool containsOther =
         otherBoundaryExists && segmentLeft <= otherOuter && otherOuter <= segmentRight;
     const bool innerOnLeft = inner <= middle;
@@ -175,7 +155,7 @@ inline std::size_t decompositionAlongBoundary(std::size_t n, std::size_t outer, 
       // inner index (the range side) is on the side nearer the split.
       const bool rangeIsLeftOfBoundary = inner < outer;
       if ((rangeIsLeftOfBoundary && !innerOnLeft) || (!rangeIsLeftOfBoundary && innerOnLeft)) {
-        ++count;
+        count = checkedSizeAdd(count, 1);
       }
     }
     if (innerOnLeft) {
@@ -183,6 +163,27 @@ inline std::size_t decompositionAlongBoundary(std::size_t n, std::size_t outer, 
     } else {
       segmentLeft = middle + 1;
     }
+  }
+}
+
+/**
+ * @brief Validate the common frontier range domain.
+ *
+ * @param n     Positive element count.
+ * @param left  Inclusive range start.
+ * @param right Inclusive range end.
+ * @throws std::invalid_argument n is zero or the range is reversed.
+ * @throws std::out_of_range right is not smaller than n.
+ */
+inline void validateFrontierRange(std::size_t n, std::size_t left, std::size_t right) {
+  if (n == 0) {
+    throw std::invalid_argument("frontier size must be positive");
+  }
+  if (left > right) {
+    throw std::invalid_argument("frontier range is reversed");
+  }
+  if (right >= n) {
+    throw std::out_of_range("frontier range exceeds the element count");
   }
 }
 
@@ -199,8 +200,13 @@ inline std::size_t decompositionAlongBoundary(std::size_t n, std::size_t outer, 
  * @param right Right index (inclusive), smaller than n.
  *
  * @return The two counts; visited() is F(n, left, right).
+ *
+ * @throws std::invalid_argument n is zero or the range is reversed.
+ * @throws std::out_of_range right is not smaller than n.
+ * @throws std::overflow_error an exact count is not representable as std::size_t.
  */
 inline FrontierCounts frontierCounts(std::size_t n, std::size_t left, std::size_t right) {
+  detail::validateFrontierRange(n, left, right);
   FrontierCounts counts{0, 0};
   detail::countFrontier(0, n - 1, left, right, counts);
   return counts;
@@ -221,8 +227,13 @@ inline FrontierCounts frontierCounts(std::size_t n, std::size_t left, std::size_
  * @param right Right index (inclusive), smaller than n.
  *
  * @return F(n, left, right).
+ *
+ * @throws std::invalid_argument n is zero or the range is reversed.
+ * @throws std::out_of_range right is not smaller than n.
+ * @throws std::overflow_error the exact result is not representable as std::size_t.
  */
 inline std::size_t closedFormFrontier(std::size_t n, std::size_t left, std::size_t right) {
+  detail::validateFrontierRange(n, left, right);
   const bool leftBoundary = left > 0;
   const bool rightBoundary = right + 1 < n;
   if (!leftBoundary && !rightBoundary) {
@@ -231,19 +242,21 @@ inline std::size_t closedFormFrontier(std::size_t n, std::size_t left, std::size
   std::size_t partial = 0;
   std::size_t decomposition = 0;
   if (leftBoundary) {
-    partial += detail::nodesContainingBoth(n, left - 1, left);
-    decomposition +=
-        detail::decompositionAlongBoundary(n, left - 1, left, rightBoundary, right + 1);
+    partial = detail::checkedSizeAdd(partial, detail::nodesContainingBoth(n, left - 1, left));
+    decomposition = detail::checkedSizeAdd(
+        decomposition,
+        detail::decompositionAlongBoundary(n, left - 1, left, rightBoundary, right + 1));
   }
   if (rightBoundary) {
-    partial += detail::nodesContainingBoth(n, right, right + 1);
-    decomposition += detail::decompositionAlongBoundary(n, right + 1, right, leftBoundary,
-                                                        leftBoundary ? left - 1 : 0);
+    partial = detail::checkedSizeAdd(partial, detail::nodesContainingBoth(n, right, right + 1));
+    decomposition = detail::checkedSizeAdd(
+        decomposition, detail::decompositionAlongBoundary(n, right + 1, right, leftBoundary,
+                                                          leftBoundary ? left - 1 : 0));
   }
   if (leftBoundary && rightBoundary) {
     partial -= detail::nodesContainingBoth(n, left - 1, right + 1);
   }
-  return partial + decomposition;
+  return detail::checkedSizeAdd(partial, decomposition);
 }
 
 /**
@@ -259,9 +272,21 @@ inline std::size_t closedFormFrontier(std::size_t n, std::size_t left, std::size
  * @param right Right index (inclusive), smaller than n.
  *
  * @return The intersecting-node count.
+ *
+ * @throws std::invalid_argument n is zero or the range is reversed.
+ * @throws std::out_of_range right is not smaller than n.
+ * @throws std::overflow_error the exact result is not representable as std::size_t.
  */
 inline std::size_t intersectingNodes(std::size_t n, std::size_t left, std::size_t right) {
-  return detail::countIntersecting(0, n - 1, left, right);
+  const FrontierCounts frontier = frontierCounts(n, left, right);
+  const std::size_t leaves = detail::inclusiveLength(left, right);
+  // N = partial + 2k - decomposition. Since every decomposition node
+  // contains at least one distinct leaf, decomposition <= k; evaluating this
+  // as k + (k - decomposition) avoids overflowing a temporary 2k when the
+  // exact result itself is representable.
+  const std::size_t decompositionSubtrees =
+      detail::checkedSizeAdd(leaves, leaves - frontier.decomposition);
+  return detail::checkedSizeAdd(frontier.partial, decompositionSubtrees);
 }
 
 /**
@@ -270,15 +295,11 @@ inline std::size_t intersectingNodes(std::size_t n, std::size_t left, std::size_
  * @param n Number of elements, at least one.
  *
  * @return The height; zero for a single element.
+ *
+ * @throws std::invalid_argument n is zero.
  */
 inline std::size_t treeHeight(std::size_t n) {
-  std::size_t height = 0;
-  std::size_t capacity = 1;
-  while (capacity < n) {
-    capacity *= 2;
-    ++height;
-  }
-  return height;
+  return detail::treeHeight(n);
 }
 
 /**
@@ -291,6 +312,8 @@ inline std::size_t treeHeight(std::size_t n) {
  * @param height Tree height.
  *
  * @return The maximum frontier.
+ *
+ * @throws std::overflow_error the exact result is not representable as std::size_t.
  */
 inline std::size_t maximumFrontier(std::size_t height) {
   if (height == 0) {
@@ -299,7 +322,7 @@ inline std::size_t maximumFrontier(std::size_t height) {
   if (height == 1) {
     return 2;
   }
-  return 4 * height - 3;
+  return detail::checkedSizeAdd(detail::checkedSizeMultiply(4, height - 1), 1);
 }
 
 /**
@@ -327,8 +350,15 @@ struct RangeFamilyCounts {
  * @param counter Counts of the family for one canonical interval.
  *
  * @return Sum over the family of F(n, left, right).
+ *
+ * @throws std::invalid_argument n is zero or the counter violates the
+ *                               intersection/containment contract.
+ * @throws std::overflow_error the exact sum is not representable as std::size_t.
  */
 template <class Counter> std::size_t frontierSum(std::size_t n, Counter counter) {
+  if (n == 0) {
+    throw std::invalid_argument("frontier size must be positive");
+  }
   struct Frame {
     std::size_t segmentLeft;
     std::size_t segmentRight;
@@ -341,9 +371,14 @@ template <class Counter> std::size_t frontierSum(std::size_t n, Counter counter)
     const Frame frame = stack.back();
     stack.pop_back();
     const RangeFamilyCounts counts = counter(frame.segmentLeft, frame.segmentRight);
-    sum += (counts.intersecting - counts.containing) + (counts.containing - frame.parentContaining);
+    if (counts.containing > counts.intersecting || frame.parentContaining > counts.containing) {
+      throw std::invalid_argument("range-family counts violate containment");
+    }
+    const std::size_t contribution = detail::checkedSizeAdd(
+        counts.intersecting - counts.containing, counts.containing - frame.parentContaining);
+    sum = detail::checkedSizeAdd(sum, contribution);
     if (frame.segmentLeft != frame.segmentRight) {
-      const std::size_t middle = (frame.segmentLeft + frame.segmentRight) / 2;
+      const std::size_t middle = detail::midpoint(frame.segmentLeft, frame.segmentRight);
       stack.push_back(Frame{frame.segmentLeft, middle, counts.containing});
       stack.push_back(Frame{middle + 1, frame.segmentRight, counts.containing});
     }
@@ -356,16 +391,26 @@ template <class Counter> std::size_t frontierSum(std::size_t n, Counter counter)
  *
  * @param n Number of elements, at least one.
  *
- * @return A callable usable with frontierSum.
+ * @return A callable usable with frontierSum. The factory rejects n when the
+ *         exact family size n(n + 1)/2 is not representable as std::size_t.
+ *
+ * @throws std::invalid_argument n is zero.
+ * @throws std::overflow_error n(n + 1)/2 is not representable as std::size_t.
  */
 inline auto allRangesCounter(std::size_t n) {
-  return [n](std::size_t segmentLeft, std::size_t segmentRight) {
-    const std::size_t total = n * (n + 1) / 2;
-    const std::size_t entirelyLeft = segmentLeft * (segmentLeft + 1) / 2;
+  if (n == 0) {
+    throw std::invalid_argument("range-family size must be positive");
+  }
+  const std::size_t total = detail::triangularNumber(n);
+  return [n, total](std::size_t segmentLeft, std::size_t segmentRight) {
+    if (segmentLeft > segmentRight || segmentRight >= n) {
+      throw std::out_of_range("canonical interval exceeds the range-family domain");
+    }
+    const std::size_t entirelyLeft = detail::triangularNumber(segmentLeft);
     const std::size_t tail = n - 1 - segmentRight;
-    const std::size_t entirelyRight = tail * (tail + 1) / 2;
+    const std::size_t entirelyRight = detail::triangularNumber(tail);
     return RangeFamilyCounts{total - entirelyLeft - entirelyRight,
-                             (segmentLeft + 1) * (n - segmentRight)};
+                             detail::checkedSizeMultiply(segmentLeft + 1, n - segmentRight)};
   };
 }
 
@@ -376,9 +421,20 @@ inline auto allRangesCounter(std::size_t n) {
  * @param width Window width, between one and n.
  *
  * @return A callable usable with frontierSum.
+ *
+ * @throws std::invalid_argument n is zero or width is outside [1, n].
  */
 inline auto fixedWidthCounter(std::size_t n, std::size_t width) {
+  if (n == 0) {
+    throw std::invalid_argument("range-family size must be positive");
+  }
+  if (width == 0 || width > n) {
+    throw std::invalid_argument("fixed width must be between one and n");
+  }
   return [n, width](std::size_t segmentLeft, std::size_t segmentRight) {
+    if (segmentLeft > segmentRight || segmentRight >= n) {
+      throw std::out_of_range("canonical interval exceeds the range-family domain");
+    }
     const std::size_t lastStart = n - width;
     auto windowsIn = [lastStart](std::size_t low, std::size_t high) {
       // Windows starting in [low, high] clipped to the valid starts.
@@ -418,8 +474,12 @@ public:
    * @brief Model over n elements with every tag the identity.
    *
    * @param n Number of elements, at least one.
+   *
+   * @throws std::invalid_argument n is zero.
+   * @throws std::overflow_error 4n tag slots are not representable as std::size_t.
    */
-  explicit PushCountingModel(std::size_t n) : arraySize(n), tags(4 * n, Policy::actionIdentity()) {}
+  explicit PushCountingModel(std::size_t n)
+      : arraySize(validateSize(n)), tags(detail::lazyStorageCount(n), Policy::actionIdentity()) {}
 
   /**
    * @brief Apply an action to [left, right] and count the pushes it causes.
@@ -429,8 +489,13 @@ public:
    * @param action Action applied; the identity causes no pushes and no change.
    *
    * @return The push frontier P of this update.
+   *
+   * @throws std::invalid_argument the range is reversed.
+   * @throws std::out_of_range right is not smaller than the element count.
+   * @throws std::overflow_error an exact count or policy composition is not representable.
    */
   std::size_t apply(std::size_t left, std::size_t right, const Action& action) {
+    detail::validateFrontierRange(arraySize, left, right);
     if (action == Policy::actionIdentity()) {
       return 0;
     }
@@ -440,6 +505,13 @@ public:
 private:
   std::size_t arraySize;
   std::vector<Action> tags;
+
+  static std::size_t validateSize(std::size_t n) {
+    if (n == 0) {
+      throw std::invalid_argument("push-counting size must be positive");
+    }
+    return n;
+  }
 
   std::size_t update(std::size_t node, std::size_t segmentLeft, std::size_t segmentRight,
                      std::size_t left, std::size_t right, const Action& action) {
@@ -454,12 +526,14 @@ private:
       tags[node] = Policy::actionIdentity();
       pushes = 1;
     }
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
+    const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
     if (left <= middle) {
-      pushes += update(2 * node + 1, segmentLeft, middle, left, right, action);
+      pushes = detail::checkedSizeAdd(
+          pushes, update(2 * node + 1, segmentLeft, middle, left, right, action));
     }
     if (right > middle) {
-      pushes += update(2 * node + 2, middle + 1, segmentRight, left, right, action);
+      pushes = detail::checkedSizeAdd(
+          pushes, update(2 * node + 2, middle + 1, segmentRight, left, right, action));
     }
     return pushes;
   }

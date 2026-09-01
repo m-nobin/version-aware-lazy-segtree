@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <stdexcept>
 #include <vector>
 
 #include "structural_counts.hpp"
@@ -62,6 +63,13 @@ TEST(StructuralCountsTest, FingerprintCoversSeedSizeAndEveryOperationField) {
   EXPECT_NE(streamFingerprint(original, 4, 18), fingerprint);
   EXPECT_NE(streamFingerprint(changed, 4, 17), fingerprint);
   EXPECT_EQ(fingerprintText(fingerprint).size(), 24U);
+}
+
+TEST(StructuralCountsTest, RejectsEmptyInvalidRangeAndFutureVersionDomains) {
+  EXPECT_THROW(structuralCounts({}, 0, 2), std::invalid_argument);
+  EXPECT_THROW(structuralCounts({update(2, 1, 0)}, 4, 2), std::invalid_argument);
+  EXPECT_THROW(structuralCounts({update(0, 4, 0)}, 4, 2), std::out_of_range);
+  EXPECT_THROW(structuralCounts({query(1)}, 4, 2), std::out_of_range);
 }
 
 } // namespace
