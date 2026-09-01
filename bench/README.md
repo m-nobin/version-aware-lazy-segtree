@@ -385,14 +385,17 @@ drift from the data it describes — re-running the campaign updates the prose.
 
 The cost-model tools are specified in `docs/research/cost-model.md`.
 `split.py` groups cells with identical generated streams before the salted
-training/holdout assignment. `cost_model.py --stage fit` writes a canonical,
-hashable model artifact from training rows; `--stage evaluate` scores that
-fixed artifact without refitting. Synthetic fixtures exercise grouping,
-rank-deficient fitting, non-positive-error treatment, missing inputs and
-artifact stability.
+training/holdout assignment. `cost_model.py --stage prepare` fixes membership
+from structural predictors before loading response data and writes disjoint,
+checksummed training and holdout files. `--stage fit` can open only the
+training file and writes a canonical model plus a SHA-256 sidecar;
+`--stage evaluate` verifies that artifact before opening and scoring the
+holdout file, without refitting. Synthetic fixtures exercise grouping,
+rank-deficient fitting, non-positive-error treatment, missing inputs, artifact
+stability and the fit process's inability to open the holdout response.
 
 One command regenerates the pilot structural counts into temporary storage,
-without modifying the checksummed raw pilot, then runs both stages:
+without modifying the checksummed raw pilot, then runs all three stages:
 
 ```sh
 bench/rebuild_pilot_cost_model.sh

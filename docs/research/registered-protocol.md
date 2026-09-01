@@ -236,10 +236,12 @@ external trace is reported in the paper as a limitation, not a finding.
 The model form, response transform, candidate variables and column-removal
 rule are exactly `docs/research/cost-model.md` section 3, frozen at G2 and
 unchanged here. This protocol registers: the confirmatory split salt and
-share (section 3 above), the two-stage procedure (`cost_model.py --stage
-fit` on training rows, artifact SHA-256 recorded in the campaign log, then
-one `--stage evaluate`), and the H3/H5 thresholds. Hold-out rows are neither
-plotted nor tabulated before the artifact hash is recorded.
+share (section 3 above), the three-stage procedure (`cost_model.py --stage
+prepare` to write disjoint response files, one `--stage fit` that can read only
+the training file and records the artifact SHA-256, then one `--stage
+evaluate` that verifies that hash before opening holdout), and the H3/H5
+thresholds. Hold-out rows are neither opened, plotted nor tabulated before the
+artifact hash is recorded.
 
 ## 10. Campaign execution order
 

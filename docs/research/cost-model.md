@@ -112,22 +112,40 @@ W11 at width 1 — is exercised by a synthetic fixture and was also verified
 against the real generator. The earlier cell-key leak is closed.
 
 The pilot salt and 30% share remain development values. PR6 registers a new
-salt and share before the confirmatory campaign. Model fitting and evaluation
-are separate commands: `--stage fit` receives only training rows in the
-model-selection function and writes a canonical JSON artifact; `--stage
-evaluate` loads that fixed artifact without refitting it. Its SHA-256 is
-registered before holdout evaluation. Operational access control to the
-confirmatory holdout files is a PR6 orchestration requirement; Phase 2 fixes
-the code boundary and artifact format.
+salt and share before the confirmatory campaign. The data path has three
+explicit stages:
+
+1. `--stage prepare` loads predictor-only structural rows, fixes every
+   stream-group membership, and only then loads timing responses. It writes
+   separate `cost_model_training_responses.csv` and
+   `cost_model_holdout_responses.csv` files plus a checksum manifest.
+2. `--stage fit` receives that manifest, verifies and deserializes only the
+   training response file, fits/selects the registered form, and writes both a
+   canonical JSON artifact and its `.sha256` sidecar. It has no code path that
+   resolves or opens the holdout response file.
+3. `--stage evaluate` verifies the artifact and sidecar first, checks their
+   training-input provenance against the partition manifest, and only then
+   verifies and opens the holdout response file. It never refits.
+
+The synthetic integration fixture makes the holdout file deliberately invalid,
+installs a guard that fails on any attempt to open it, and proves the actual fit
+entry point still succeeds. A second guard proves evaluation rejects a changed
+artifact hash before opening holdout. These tests exercise the process boundary
+rather than merely showing that changed holdout values leave coefficients
+unchanged. Campaign custody and the one-shot evaluation record remain Phase 3
+orchestration responsibilities.
 
 ## 5. Pilot-only model development
 
 `bench/rebuild_pilot_cost_model.sh` regenerates the section 3 structural
 counts into a temporary directory without modifying the checksummed raw
-pilot, runs the synthetic analysis fixtures, fits the training partition,
-fixes the JSON model artifact and evaluates that artifact on the pilot
-holdout. It reports median and 90th-percentile absolute percentage error and
-the median absolute log ratio, with residuals by workload.
+pilot, runs the synthetic analysis fixtures, prepares the disjoint response
+files, fits the training partition, fixes and hashes the JSON model artifact,
+and evaluates that artifact on the pilot holdout. It opts into the
+`cost_model_pilot` output stem and exploratory label; the analysis command's
+defaults are confirmatory-neutral. It reports median and 90th-percentile
+absolute percentage error and the median absolute log ratio, with residuals by
+workload.
 
 Its output is exploratory: one machine, one compiler and the per-operation
 clock pair of the pilot harness rather than batch timing. The pilot numbers
@@ -158,8 +176,8 @@ subject's update fit drops `visited_records` because it equals
 What the pilot says, and what it does not:
 
 - Every predictor exists before timing, the fit artifact is explicit and all
-  predictions are positive. The two-stage fit/evaluate path and synthetic
-  fixtures are the properties PR6 needs from Phase 2.
+  predictions are positive. The three-stage prepare/fit/evaluate path and
+  synthetic fixtures are the properties PR6 needs from Phase 2.
 - The revision improves the subject substantially, but the initial H3 target
   (median at most 15%, p90 at most 30%) is still not met: subject update is
   18.0%/45.6% and query is 14.5%/67.7%. The pilot therefore justifies a
