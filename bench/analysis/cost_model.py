@@ -56,6 +56,8 @@ SUMMARY = ROOT / "bench" / "results" / "summary"
 PARTITION_MANIFEST_NAME = "cost_model_partitions.json"
 TRAINING_RESPONSES_NAME = "cost_model_training_responses.csv"
 HOLDOUT_RESPONSES_NAME = "cost_model_holdout_responses.csv"
+CAPPED_CELLS = ROOT / "bench" / "capped_cells.csv"
+CAPPED_COLUMNS = ["workload", "n", "variant", "structure"]
 CANDIDATE_COLUMNS = [
     "visited_records",
     "allocated_records",
@@ -562,8 +564,15 @@ def prepare_response_partitions(
     split_salt: str,
     hold_out_share: float,
     cache_bytes: int,
+    capped_cells: pd.DataFrame,
 ) -> tuple[pathlib.Path, str]:
-    """Write disjoint response files after predictor-only membership is fixed."""
+    """Write disjoint response files after predictor-only membership is fixed.
+
+    ``capped_cells`` is the registered pilot-capped structure-cell list. Its
+    holdout members are recorded in the manifest so that every structure's
+    H3 holdout inventory is fixed prospectively as the holdout cells minus
+    that structure's registered caps.
+    """
     # This call completes every membership decision without opening a timing
     # CSV. Keep it before data.load_runs: the order is part of the holdout
     # contract and is covered by the integration test.
@@ -616,8 +625,16 @@ def prepare_response_partitions(
     )
     expected_holdout["n"] = expected_holdout["n"].astype(int)
     expected_holdout["variant"] = expected_holdout["variant"].astype(float)
+    # The capped registry carries no axis column, so (workload, n, variant)
+    # must identify one holdout cell; the workload inventory fixes one axis per
+    # workload and this check records that invariant.
+    if expected_holdout.duplicated(["workload", "n", "variant"]).any():
+        raise SystemExit("holdout cells are not identified by (workload, n, variant)")
+    capped_holdout = registered_capped_cells(capped_cells).merge(
+        expected_holdout[["workload", "n", "variant"]], on=["workload", "n", "variant"]
+    )
     manifest = {
-        "schema_version": 2,
+        "schema_version": 3,
         "cache_bytes": int(cache_bytes),
         "split": {
             "salt": split_salt,
@@ -625,6 +642,8 @@ def prepare_response_partitions(
             "unit": "stream-equivalence group of measurement cells",
         },
         "expected_holdout_cells": expected_holdout.to_dict("records"),
+        "registered_capped_holdout_cells": capped_holdout.sort_values(CAPPED_COLUMNS)
+        .to_dict("records"),
         "responses": files,
     }
     manifest_path = output_directory / PARTITION_MANIFEST_NAME
@@ -632,10 +651,25 @@ def prepare_response_partitions(
     return manifest_path, manifest_hash
 
 
+def registered_capped_cells(cells: pd.DataFrame) -> pd.DataFrame:
+    """Normalize the registered capped structure-cell list; reject duplicates."""
+    if not set(CAPPED_COLUMNS).issubset(cells.columns):
+        raise SystemExit("capped-cell registry must carry workload, n, variant and structure")
+    normalized = cells[CAPPED_COLUMNS].assign(
+        workload=cells["workload"].astype(str),
+        n=cells["n"].astype(int),
+        variant=cells["variant"].astype(float),
+        structure=cells["structure"].astype(str),
+    )
+    if normalized.duplicated().any():
+        raise SystemExit("capped-cell registry contains a duplicate structure-cell")
+    return normalized.reset_index(drop=True)
+
+
 def read_partition_manifest(path: pathlib.Path) -> tuple[dict, str]:
     encoded = path.read_bytes()
     value = json.loads(encoded)
-    if value.get("schema_version") != 2:
+    if value.get("schema_version") != 3:
         raise SystemExit(f"unsupported response-partition manifest schema in {path}")
     if int(value.get("cache_bytes", 0)) <= 0:
         raise SystemExit(f"invalid cache size in {path}")
@@ -648,6 +682,17 @@ def read_partition_manifest(path: pathlib.Path) -> tuple[dict, str]:
         raise SystemExit(f"expected holdout-cell inventory is missing from {path}")
     if expected.duplicated(expected_columns).any():
         raise SystemExit(f"expected holdout-cell inventory contains duplicates in {path}")
+    if "registered_capped_holdout_cells" not in value:
+        raise SystemExit(f"registered capped holdout inventory is missing from {path}")
+    capped = pd.DataFrame(value["registered_capped_holdout_cells"], columns=CAPPED_COLUMNS)
+    if capped.duplicated().any():
+        raise SystemExit(f"registered capped holdout inventory contains duplicates in {path}")
+    if not capped.empty:
+        outside = capped.merge(
+            expected, on=["workload", "n", "variant"], how="left", indicator=True
+        )
+        if (outside["_merge"] != "both").any():
+            raise SystemExit(f"registered capped holdout cell is outside the holdout in {path}")
     responses = value.get("responses", {})
     for partition in ("training", "holdout"):
         entry = responses.get(partition, {})
@@ -714,6 +759,14 @@ def evaluate_from_manifest(
     ):
         raise SystemExit("model artifact training-response hash does not match the manifest")
     holdout_rows, _ = load_prepared_responses(manifest_path, manifest, "holdout")
+    # A registered-capped structure-cell's result is the cap itself: it is
+    # excluded from that structure's H3 inventory whether or not it completed.
+    capped = pd.DataFrame(manifest["registered_capped_holdout_cells"], columns=CAPPED_COLUMNS)
+    if not capped.empty:
+        flagged = holdout_rows.merge(
+            capped.assign(_capped=True), on=CAPPED_COLUMNS, how="left"
+        )
+        holdout_rows = holdout_rows[flagged["_capped"].isna().to_numpy()]
     table, diagnostics, cells = evaluate(holdout_rows, model_artifact)
     if table.empty:
         raise SystemExit("holdout responses produced no model-evaluation rows")
@@ -724,9 +777,18 @@ def evaluate_from_manifest(
     if (unexpected["_merge"] != "both").any():
         raise SystemExit("model evaluation produced a cell outside the registered holdout")
     inventory_hash = hashlib.sha256(
-        artifact_bytes(manifest["expected_holdout_cells"])
+        artifact_bytes(
+            {
+                "expected_holdout_cells": manifest["expected_holdout_cells"],
+                "registered_capped_holdout_cells": manifest["registered_capped_holdout_cells"],
+            }
+        )
     ).hexdigest()
-    cells["expected_cell_count"] = int(len(expected))
+    capped_per_structure = capped.groupby("structure").size() if not capped.empty else {}
+    cells["expected_cell_count"] = [
+        int(len(expected)) - int(capped_per_structure.get(structure, 0))
+        for structure in cells["structure"]
+    ]
     cells["expected_inventory_sha256"] = inventory_hash
     return table, diagnostics, cells, model_hash, int(model_artifact["cache_bytes"])
 
@@ -804,6 +866,12 @@ def main(argv: list[str] | None = None) -> None:
         type=pathlib.Path,
         help="PR7-produced external response/predictor rows required by transfer",
     )
+    parser.add_argument(
+        "--capped-cells",
+        type=pathlib.Path,
+        default=CAPPED_CELLS,
+        help="registered pilot-capped structure-cell list excluded from H3 inventories",
+    )
     args = parser.parse_args(argv)
     if not 0.0 < args.hold_out_share < 1.0:
         parser.error("--hold-out-share must be strictly between zero and one")
@@ -840,6 +908,7 @@ def main(argv: list[str] | None = None) -> None:
             args.split_salt,
             args.hold_out_share,
             cache_bytes,
+            pd.read_csv(args.capped_cells),
         )
         print(f"prepared disjoint response manifest: {manifest_path} (sha256 {manifest_hash})")
         if args.stage == "prepare":

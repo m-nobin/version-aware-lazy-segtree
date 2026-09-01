@@ -18,7 +18,7 @@ nothing and no confirmatory measurement may run.
 | Manifest SHA-256 | Pending clean-commit generation and verification |
 | Immutable DOI / URL | Pending OSF or Zenodo deposit |
 | Deposit UTC timestamp | Pending |
-| Statistical reviewer / approval record | Pending independent review; packet in `docs/research/pr6-statistical-review.md` |
+| Statistical reviewer / approval record | Approved at round 3 on 1 September 2026 by the automated reviewer acting for Sunjare Zulfiker; record in `docs/research/statistical-review.md` |
 | Blinding custodian / controlled location | Pending assignment in the deposit access log |
 
 Pilot-informed choices are marked *(pilot)* throughout and their basis is
@@ -82,11 +82,22 @@ runs; it is never inferred from the primary batch replays.
 - **Failures:** a trial that reaches the cap is a censored feasibility
   outcome (E5). Its truncated timing never enters a throughput ratio. Cells
   the pilot already showed capped run 2 trials (`bench/capped_cells.csv`);
-  the cap is their result. A structurally incomplete CSV row is counted and
-  excluded. Apart from H2's explicit conservative insufficient-pair rule, no
-  other missing row, non-finite value, failed registered model, or absent
-  H3/H4/H5 cell is silently removed: the affected registered decision is
-  unavailable and the locked analysis command exits non-zero.
+  the cap is their result. A structurally incomplete CSV row (any empty
+  field, as a process killed mid-write leaves) is counted and excluded. Apart
+  from H2's explicit conservative insufficient-pair rule, no other missing
+  row, non-finite value, failed registered model, or absent H3/H4/H5 cell is
+  silently removed: the affected registered decision is unavailable, an
+  explicit `<stage>_unavailable.json` record carrying the reason and
+  diagnostics stands in for its output and is hashed with the other outputs,
+  and the locked analysis command exits non-zero after every other registered
+  decision has been produced. One unavailable decision never blocks the
+  hashing or unblinding of the rest. A prepare or fit failure of the cost
+  model makes both H3 and H5 unavailable because they share the frozen
+  artifact. A software defect that is not a registered failure (a crash
+  outside the registered rules) leaves neither output nor record; unblinding
+  refuses to proceed until the defect is fixed and the stage rerun, which is
+  safe because every stage removes its own stale output or record first and
+  the rerun is recorded as a deviation in section 12.
 
 ## 3. Registered constants
 
@@ -147,7 +158,7 @@ never computed on the intersection of what happened to finish.
 | --- | --- | --- |
 | **H1 Structural** | The derived identities predict stored records exactly: subject Σ F, copy-on-push Σ (F + 2P), point-only Σ N, full copy (2n − 1) per nonzero update. | Exact integer equality on every complete confirmatory trial (`confirm.py --stage h1`). No p-value. Any mismatch contradicts H1 for that structure. |
 | **H2 Ablation** | On the six primary cells, tag retention beats copy-on-push on batch update throughput by more than `delta`. | Per cell: median paired log ratio with bootstrap CI; *meaningfully faster* only when the whole CI clears `log(delta)`. Holm over the six-cell family for the reported p-values. Anything else is equivalent, slower, inconclusive or underpowered per the classification rule. |
-| **H3 Prediction** | The frozen cost model (docs/research/cost-model.md section 3, unchanged) predicts unseen confirmatory cells. | Fit once on training cells, evaluate once on hold-out under the registered salt/share. The unit is one `(workload, n, axis, variant, structure, operation)` cell: actual and predicted trial responses are reduced separately by the median, then every cell has equal weight regardless of its registered trial count. For each included in-house persistent structure and operation, hold-out median APE ≤ 15% and p90 ≤ 30%. Lazy control, full copy and the external adapter are excluded from H3. A miss removes *predictive* language; the failure and residual structure are reported. |
+| **H3 Prediction** | The frozen cost model (docs/research/cost-model.md section 3, unchanged) predicts unseen confirmatory cells. | Fit once on training cells, evaluate once on hold-out under the registered salt/share. The unit is one `(workload, n, axis, variant, structure, operation)` cell: actual and predicted trial responses are reduced separately by the median, then every cell has equal weight regardless of its registered trial count. Each structure's hold-out inventory is fixed prospectively by the prepare stage as the registered hold-out cells minus that structure's rows in `bench/capped_cells.csv`; a registered-capped structure-cell is outside the inventory whether or not it completes, and an unregistered cap or missing cell makes H3 unavailable rather than shrinking the inventory. The capped registry identifies a cell by `(workload, n, variant)`; the prepare stage verifies that this identifies one hold-out cell. For each included in-house persistent structure and operation, hold-out median APE ≤ 15% and p90 ≤ 30%. Lazy control, full copy and the external adapter are excluded from H3. A miss removes *predictive* language; the failure and residual structure are reported. H5 runs whether or not H3 is available. |
 | **H4 Replication** | The four-state classification is stable across the two machines. | ≥ 80% agreement on all twelve rows of `bench/h4_cells.csv` (`confirm.py --stage h4`); every disagreement is reported. Any missing/unclassified cell makes H4 unavailable. |
 | **H5 External** | The copy-on-push model transfers to an independently authored implementation under an externally motivated workload distribution. | `cost_model.py --stage transfer` applies the copy-on-push training coefficients without refitting to the external adapter's structural predictors on both operations of every one of the twelve registered trace draws. H5 is supported only when at least 80% of all 24 draw-operation cells fall inside predicted × [1/1.5, 1.5]. A missing draw/operation or non-finite/non-positive value makes H5 unavailable. Adapter-specific residuals (per-node allocation and allocating queries) are reported beside the share. |
 
@@ -168,7 +179,12 @@ file hashes are in the registration manifest.
   zero and `p = 1` by definition. Any non-finite input, statistic or p-value
   aborts the registered stage; it is never omitted before Holm/BH correction.
   Otherwise SciPy's two-sided Wilcoxon uses `zero_method="wilcox"`, no
-  continuity correction and the locked version's `method="auto"` rule.
+  continuity correction and the locked version's `method="auto"` rule. The
+  locked environment (`bench/analysis/uv.lock`, in the manifest) resolves
+  SciPy 1.18.0 with NumPy 2.5.2 on Python 3.12 and later and SciPy 1.17.1
+  with NumPy 2.4.6 on Python 3.11; both confirmatory machines run Python 3.12
+  or later, and every stage table records the resolved `scipy_version` and
+  `numpy_version` it was computed with.
 - **Classification:** the four-state rule of `classify()` against
   `log(delta)`, interval-based, never point-estimate-based.
 - **Blinded orientation:** the custodian supplies the registered contrast's
@@ -182,9 +198,11 @@ file hashes are in the registration manifest.
   rule applies to H2 and its paired sensitivities.
 - **Primary family:** the six H2 cells, one metric (batch update
   throughput), one baseline (copy-on-push): Holm-controlled. A cell with too
-  few pairs is assigned the conservative `p = 1`, labeled
-  `insufficient_pairs` and kept in the six-value Holm family; it is
-  underpowered/inconclusive, never silently removed. The H2 registry must
+  fewer pairs than its registered trial count is assigned the conservative
+  `p = 1`, labeled `insufficient_pairs`, classified `inconclusive` whatever
+  its interval says (the interval is retained in the row), marked
+  underpowered and kept in the six-value Holm family; it is never silently
+  removed. The H2 registry must
   contain exactly six unique `(workload, n, axis, variant)` rows; extra pairs
   are a protocol error rather than additional evidence.
 - **Broad regime map:** every cell × baseline, exploratory, BH at 5% FDR per
@@ -205,10 +223,10 @@ file hashes are in the registration manifest.
   reports convergence, every matrix/value is finite, the random-intercept
   variance exceeds `1e-10`, and the fixed-effect covariance has positive
   minimum eigenvalue greater than `1e-12` times its maximum eigenvalue. There
-  is no OLS inferential fallback. If
-  every attempt fails, the pooled view is unavailable, its diagnostics are
-  preserved, and the locked command stops; per-cell H2 is not replaced or
-  reinterpreted.
+  is no OLS inferential fallback. If every attempt fails, the pooled view is
+  unavailable, its diagnostics are preserved in the diagnostics file and the
+  unavailable record, and the locked command records that and continues;
+  per-cell H2 is not replaced or reinterpreted.
 - **Mean-versus-median sensitivity:** for every eligible H2 contrast, report
   median and arithmetic-mean paired log effects, separate seeded bootstrap
   intervals/classifications, their effect difference and whether the
@@ -248,9 +266,15 @@ The explicit decision entry points are `confirm.py --stage h3`, `--stage h4`
 and `--stage h5`. H3/H5 verify the generated prediction CSV sidecar and require
 its recorded model hash to equal the supplied frozen artifact before reading
 the decision values. `bench/run_registered_analysis.sh` is the one locked
-end-to-end command: it runs blinded primary, regime, hierarchical and
-sensitivity stages; hashes and unblinds; runs named deterministic checks;
-executes the three-stage cost model; and finally runs H3 and H5. An exploratory
+end-to-end script, in two halves run by different people. The `analyst` half
+takes only the opaque analyst campaigns and the two lexically ordered contrast
+labels and runs the blinded primary, regime, hierarchical, feasibility,
+sensitivity, H4, compiler and allocator stages; it never receives a named
+campaign or the custody directory. The `custodian` half hashes every machine's
+outputs and unblinds; verifies the named inputs against custody; runs the
+named deterministic checks; executes the three-stage cost model; runs H3, then
+H5 regardless of H3's status; and finally re-verifies that every
+pre-unblinding output still matches its recorded hash. An exploratory
 table is always labeled exploratory and can never be promoted into H1–H5, the
 abstract, or the primary family through a deviation.
 
@@ -293,7 +317,12 @@ first campaign is the coordinating campaign and must also contain H4,
 compiler and allocator outputs. It writes named copies under each campaign's
 `analysis/unblinded/` and an `unblinding.json` record containing both the
 campaign and study-wide primary-output SHA-256 plus the common UTC unblinding
-time. The custodian and controlled path are recorded in the
+time. Before names are written, `unblind` reads the opaque contrast labels
+that the blinded outputs carry and refuses to proceed unless they resolve to
+exactly the registered pair; the named copies gain a `persistent_direction`
+column that applies the orientation rule of section 5 mechanically. The
+custodian executes the `custodian` half of the locked script and the analyst
+the `analyst` half; the custodian and controlled path are recorded in the
 registration deposit access log; they must not be the primary analyst or a
 location routinely available to that analyst. H3 holdout responses remain
 unopened until the fitted artifact and its hash exist, as specified in
@@ -302,7 +331,9 @@ unopened until the fitted artifact and its hash exist, as specified in
 Before named checksums or H1 run, `blind.py verify-named` verifies the named
 campaign inventory and hashes against that custody manifest and rechecks the
 blinded input hashes. Thus post-unblinding deterministic checks cannot be
-silently redirected to a different named dataset.
+silently redirected to a different named dataset. After the named stages,
+`blind.py verify-outputs` re-hashes every pre-unblinding output against the
+recorded manifest, so a post-unblinding rerun of a blinded stage is detected.
 
 This is label blinding, not a claim of perfect implementation concealment.
 The analyst necessarily knows which two opaque labels form the registered
@@ -398,10 +429,13 @@ artifact hash is recorded.
    map under independent custody, then per machine:
    `structural`, `timing`, `alloc`, `latency`, `trace` phases, then the two
    sensitivity campaigns.
-4. Run `bench/run_registered_analysis.sh`: primary/regime/hierarchical and
-   registered sensitivities on the opaque analyst copies; H4 across machines;
-   hash primary outputs; unblind; verify controlled named input against its
-   custody manifest; run checksums and H1; H3 prepare/fit/evaluate; then H5.
+4. The analyst runs `bench/run_registered_analysis.sh analyst`:
+   primary/regime/hierarchical and registered sensitivities on the opaque
+   analyst copies; H4 across machines; compiler and allocator sensitivities.
+   The custodian then runs `bench/run_registered_analysis.sh custodian`: hash
+   every output; unblind; verify controlled named input against its custody
+   manifest; run checksums and H1; H3 prepare/fit/evaluate; H5; verify the
+   pre-unblinding outputs are unchanged.
 5. Freeze the claim–evidence matrix to the obtained results (Gate G3).
 
 ## 11. What the pilot informed

@@ -40,7 +40,7 @@ fi
 frozen=(
   docs/research/registered-protocol.md
   docs/research/cost-model.md
-  docs/research/pr6-statistical-review.md
+  docs/research/statistical-review.md
   bench/analysis/blind.py
   bench/analysis/confirm.py
   bench/analysis/cost_model.py

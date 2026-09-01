@@ -27,6 +27,7 @@ exploratory statistics stay in data.py. The estimator conventions:
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import hashlib
 import json
 import pathlib
@@ -36,6 +37,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+import scipy
 from scipy import stats
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
@@ -153,22 +155,27 @@ def paired_cell_ratios(
 
     Only complete trials pair; a capped trial is censored. Cells with fewer
     than four shared complete pairs are reported with an empty classification
-    rather than silently dropped.
+    rather than silently dropped. A complete trial whose metric is non-finite
+    or non-positive aborts the stage; it is never dropped from the pairing.
     """
     rows = []
     for keys, cell in runs.groupby(CELL_KEYS, sort=False):
         mine = cell[(cell["structure"] == subject) & cell["complete"]]
         if mine["trial"].duplicated().any():
             raise RegisteredAnalysisError(f"duplicate {subject} trial in cell {keys}")
-        mine = mine.set_index("trial")[metric].dropna()
+        mine = mine.set_index("trial")[metric]
         for name, other in cell.groupby("structure"):
             if name == subject or (baselines is not None and name not in baselines):
                 continue
             complete_other = other[other["complete"]]
             if complete_other["trial"].duplicated().any():
                 raise RegisteredAnalysisError(f"duplicate {name} trial in cell {keys}")
-            theirs = complete_other.set_index("trial")[metric].dropna()
+            theirs = complete_other.set_index("trial")[metric]
             shared = mine.index.intersection(theirs.index)
+            mine_values = finite_positive(mine.loc[shared], f"{subject} {metric} in cell {keys}")
+            baseline_values = finite_positive(
+                theirs.loc[shared], f"{name} {metric} in cell {keys}"
+            )
             row = dict(zip(CELL_KEYS, keys))
             row.update(
                 {
@@ -179,12 +186,6 @@ def paired_cell_ratios(
                 }
             )
             if len(shared) >= 4:
-                mine_values = finite_positive(
-                    mine.loc[shared], f"{subject} {metric} in cell {keys}"
-                )
-                baseline_values = finite_positive(
-                    theirs.loc[shared], f"{name} {metric} in cell {keys}"
-                )
                 log_ratios = np.log(baseline_values / mine_values)
                 lo, hi = bootstrap_median_ci(log_ratios)
                 _, pvalue = registered_wilcoxon(log_ratios)
@@ -229,8 +230,9 @@ def primary_family(
     """H2: the small primary inferential family, Holm-controlled.
 
     ``primary_cells`` carries the registered (workload, n, axis, variant) rows.
-    Cells with fewer than MIN_TRIALS pairs are labeled underpowered whatever
-    their interval says, per the registered precision rule.
+    A cell with fewer pairs than its registered trial count keeps its interval
+    for the record but is classified inconclusive with ``p = 1`` whatever the
+    interval says, per the registered precision rule.
     """
     table = paired_cell_ratios(runs, subject, metric, [baseline], log_delta)
     keys = normalize_registered_cells(primary_cells, H2_EXPECTED_CELLS, "H2")
@@ -258,11 +260,7 @@ def primary_family(
     table.loc[insufficient, "p"] = 1.0
     table["p_holm"] = data.holm(table["p"].tolist())
     table.loc[insufficient, "underpowered"] = True
-    table.loc[
-        table["underpowered"]
-        & table["classification"].isin(["", "practically equivalent"]),
-        "classification",
-    ] = "inconclusive"
+    table.loc[insufficient, "classification"] = "inconclusive"
     return table
 
 
@@ -570,18 +568,26 @@ def h3_decisions(cell_predictions: pd.DataFrame) -> pd.DataFrame:
         )
         if not np.allclose(recomputed, cells[f"ape_{aggregation}"], rtol=1e-12, atol=1e-12):
             raise RegisteredAnalysisError(f"H3 {aggregation} APE does not match its cell values")
-    expected_counts = cells["expected_cell_count"].astype(int)
     inventory_hashes = cells["expected_inventory_sha256"].astype(str)
-    if expected_counts.nunique() != 1 or inventory_hashes.nunique() != 1:
+    if inventory_hashes.nunique() != 1:
         raise RegisteredAnalysisError("H3 cell groups use different registered holdout inventories")
-    expected_count = int(expected_counts.iloc[0])
-    if expected_count <= 0 or re.fullmatch(r"[0-9a-f]{64}", inventory_hashes.iloc[0]) is None:
+    if re.fullmatch(r"[0-9a-f]{64}", inventory_hashes.iloc[0]) is None:
+        raise RegisteredAnalysisError("H3 registered holdout inventory metadata is invalid")
+    # The inventory is per structure: the registered holdout cells minus that
+    # structure's registered pilot-capped cells, fixed by the prepare stage.
+    expected_counts = cells["expected_cell_count"].astype(int)
+    if (cells.assign(count=expected_counts).groupby("structure")["count"].nunique() != 1).any():
+        raise RegisteredAnalysisError("H3 structure groups disagree on their holdout inventory")
+    if (expected_counts <= 0).any():
         raise RegisteredAnalysisError("H3 registered holdout inventory metadata is invalid")
 
     rows = []
     for structure in H3_STRUCTURES:
         for op in ("update", "query"):
             group = cells[(cells["structure"] == structure) & (cells["op"] == op)]
+            if group.empty:
+                raise RegisteredAnalysisError(f"H3 {structure}/{op} has no holdout predictions")
+            expected_count = int(group["expected_cell_count"].iloc[0])
             if len(group) != expected_count:
                 raise RegisteredAnalysisError(
                     f"H3 {structure}/{op} requires {expected_count} holdout cells, "
@@ -871,14 +877,9 @@ def restrict_primary_effects(
 ) -> pd.DataFrame:
     if primary_cells is None:
         return effects
-    registered = primary_cells[["workload", "n", "variant"]].assign(
-        n=primary_cells["n"].astype(int), variant=primary_cells["variant"].astype(float)
-    )
-    registered = registered.drop_duplicates()
-    selected = effects.merge(
-        registered, on=["workload", "n", "variant"], how="inner", validate="many_to_one"
-    )
-    observed = selected[["workload", "n", "variant"]].drop_duplicates()
+    registered = normalize_registered_cells(primary_cells, H2_EXPECTED_CELLS, "H2")[CELL_KEYS]
+    selected = effects.merge(registered, on=CELL_KEYS, how="inner", validate="many_to_one")
+    observed = selected[CELL_KEYS].drop_duplicates()
     missing = registered.merge(observed, how="left", indicator=True)
     if (missing["_merge"] != "both").any():
         raise RegisteredAnalysisError(f"{context} is missing a registered H2 primary cell")
@@ -1184,6 +1185,33 @@ def assert_blinded(runs: pd.DataFrame) -> None:
         )
 
 
+def unavailable_record_path(output: pathlib.Path) -> pathlib.Path:
+    """The explicit unavailable record that stands in for a decision CSV."""
+    return output.with_name(output.stem + "_unavailable.json")
+
+
+def record_unavailable(output: pathlib.Path, stage: str, error: RegisteredAnalysisError) -> None:
+    """Replace a decision output with a hashed record of why it is unavailable.
+
+    The registered failure policy makes only the affected decision
+    unavailable: the record, not the missing CSV, is what the blinding stage
+    hashes, so the locked command can continue and unblind the rest.
+    """
+    output.unlink(missing_ok=True)
+    record = {
+        "schema_version": 1,
+        "stage": stage,
+        "output": output.name,
+        "status": "unavailable",
+        "reason": str(error),
+        "diagnostics": error.diagnostics,
+        "recorded_utc": dt.datetime.now(dt.timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z"),
+    }
+    unavailable_record_path(output).write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+
+
 def verify_file_sidecar(path: pathlib.Path) -> str:
     """Verify a generated prediction CSV against its adjacent SHA-256 sidecar."""
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -1277,16 +1305,58 @@ def main(argv: list[str] | None = None) -> None:
     out = args.campaign / "analysis"
     out.mkdir(parents=True, exist_ok=True)
     metric = METRICS[args.metric]
+    tag = f"_{args.output_tag}" if args.output_tag else ""
+    path = out / f"{args.stage}_{args.metric}{tag}.csv"
+    unavailable_record_path(path).unlink(missing_ok=True)
 
+    try:
+        table, input_incomplete_rows, comparison_incomplete_rows = run_stage(
+            args, parser, raw, out, metric
+        )
+    except RegisteredAnalysisError as error:
+        record_unavailable(path, args.stage, error)
+        raise SystemExit(f"{args.stage} is unavailable: {error}") from error
+
+    if args.stage not in ("h3", "h5"):
+        table["input_incomplete_rows"] = input_incomplete_rows
+        table["scipy_version"] = scipy.__version__
+        table["numpy_version"] = np.__version__
+        if comparison_incomplete_rows is not None:
+            table["comparison_incomplete_rows"] = comparison_incomplete_rows
+    table.to_csv(path, index=False)
+    print(f"{len(table)} rows -> {path}")
+    if not table.empty:
+        pd.set_option("display.width", 200)
+        print(table.head(40).to_string(index=False))
+
+
+def run_stage(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    raw: pathlib.Path,
+    out: pathlib.Path,
+    metric: str,
+) -> tuple[pd.DataFrame, int, int | None]:
+    """Compute one registered stage; raise RegisteredAnalysisError to fail closed."""
+    input_incomplete_rows = 0
+    comparison_incomplete_rows = None
     if args.stage in ("h3", "h5"):
         if args.cell_predictions is None:
             parser.error(f"--stage {args.stage} requires --cell-predictions")
         if args.model_artifact is None:
             parser.error(f"--stage {args.stage} requires --model-artifact")
-        verify_file_sidecar(args.cell_predictions)
         import cost_model
 
-        _, model_hash = cost_model.read_artifact(args.model_artifact)
+        for path in (args.cell_predictions, args.model_artifact):
+            if not path.is_file():
+                raise RegisteredAnalysisError(
+                    f"{args.stage.upper()} input does not exist: {path}"
+                )
+        verify_file_sidecar(args.cell_predictions)
+        try:
+            _, model_hash = cost_model.read_artifact(args.model_artifact)
+        except SystemExit as error:
+            raise RegisteredAnalysisError(f"{args.stage.upper()} model artifact: {error}")
         predictions = pd.read_csv(args.cell_predictions)
         if set(predictions["model_artifact_sha256"].astype(str)) != {model_hash}:
             raise RegisteredAnalysisError(
@@ -1300,7 +1370,6 @@ def main(argv: list[str] | None = None) -> None:
     else:
         runs = data.load_runs(raw, args.mode)
         input_incomplete_rows = int(runs.attrs.get("incomplete_rows", 0))
-        comparison_incomplete_rows = None
         if args.blinded:
             assert_blinded(runs)
 
@@ -1371,6 +1440,7 @@ def main(argv: list[str] | None = None) -> None:
             if args.blinded:
                 assert_blinded(comparison_runs)
             if args.stage == "h4":
+                (out / f"h4_{args.metric}_disagreements.csv").unlink(missing_ok=True)
                 left = paired_cell_ratios(runs, args.subject, metric, [args.baseline])
                 right = paired_cell_ratios(
                     comparison_runs, args.subject, metric, [args.baseline]
@@ -1402,18 +1472,7 @@ def main(argv: list[str] | None = None) -> None:
                 )
         else:
             raise AssertionError(f"unhandled stage {args.stage}")
-
-    if args.stage not in ("h3", "h5"):
-        table["input_incomplete_rows"] = input_incomplete_rows
-        if comparison_incomplete_rows is not None:
-            table["comparison_incomplete_rows"] = comparison_incomplete_rows
-    tag = f"_{args.output_tag}" if args.output_tag else ""
-    path = out / f"{args.stage}_{args.metric}{tag}.csv"
-    table.to_csv(path, index=False)
-    print(f"{len(table)} rows -> {path}")
-    if not table.empty:
-        pd.set_option("display.width", 200)
-        print(table.head(40).to_string(index=False))
+    return table, input_incomplete_rows, comparison_incomplete_rows
 
 
 if __name__ == "__main__":

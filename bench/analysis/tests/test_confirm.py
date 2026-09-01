@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
 import json
 import pathlib
 import sys
@@ -16,6 +18,7 @@ sys.path.insert(0, str(ANALYSIS))
 
 import blind  # noqa: E402
 import confirm  # noqa: E402
+import data  # noqa: E402
 
 
 def synthetic_runs(
@@ -61,6 +64,23 @@ def synthetic_runs(
     return pd.DataFrame(rows)
 
 
+def timing_csv(runs: pd.DataFrame, path: pathlib.Path) -> None:
+    """Write synthetic runs in the raw timing CSV schema that load_runs reads."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    runs.assign(
+        update_ns=lambda frame: frame["update_ns_per_op"] * 10,
+        query_ns=1000.0,
+        updates=10,
+        queries=10,
+        batch_ns=2000.0,
+        bytes=1024,
+        alloc_peak_bytes=0,
+        nodes=20,
+        build_nodes=10,
+        build_ns=100,
+    ).drop(columns=["update_ns_per_op", "complete"]).to_csv(path, index=False)
+
+
 class ClassificationTests(unittest.TestCase):
     def test_four_states(self) -> None:
         margin = confirm.LOG_DELTA
@@ -101,6 +121,30 @@ class ClassificationTests(unittest.TestCase):
         runs.loc[0, "update_ns_per_op"] = np.inf
         with self.assertRaisesRegex(confirm.RegisteredAnalysisError, "non-finite"):
             confirm.paired_cell_ratios(runs, "persistent", "update_ns_per_op")
+
+
+class NonFiniteResponseTests(unittest.TestCase):
+    def test_nan_metric_in_complete_trial_fails_closed(self) -> None:
+        runs = synthetic_runs(ratio=1.2, trials=20)
+        runs.loc[0, "update_ns_per_op"] = np.nan
+        with self.assertRaisesRegex(confirm.RegisteredAnalysisError, "non-finite"):
+            confirm.paired_cell_ratios(runs, "persistent", "update_ns_per_op")
+        few = synthetic_runs(ratio=1.2, trials=3)
+        few.loc[0, "update_ns_per_op"] = np.nan
+        with self.assertRaisesRegex(confirm.RegisteredAnalysisError, "non-finite"):
+            confirm.paired_cell_ratios(few, "persistent", "update_ns_per_op")
+
+    def test_zero_operation_count_is_not_silently_dropped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            raw = pathlib.Path(directory)
+            timing_csv(synthetic_runs(ratio=1.2, trials=20), raw / "runs_timing-W1.csv")
+            frame = pd.read_csv(raw / "runs_timing-W1.csv")
+            frame.loc[0, "updates"] = 0
+            frame.to_csv(raw / "runs_timing-W1.csv", index=False)
+            runs = data.load_runs(raw, "timing")
+            self.assertEqual(runs.attrs["incomplete_rows"], 0)
+            with self.assertRaisesRegex(confirm.RegisteredAnalysisError, "non-finite"):
+                confirm.paired_cell_ratios(runs, "persistent", "update_ns_per_op")
 
 
 class CensoringTests(unittest.TestCase):
@@ -144,6 +188,22 @@ class PrimaryFamilyTests(unittest.TestCase):
         table = confirm.primary_family(runs, self.registry(20))
         self.assertTrue(bool(table["underpowered"].all()))
         self.assertFalse((table["classification"] == "practically equivalent").any())
+
+    def test_insufficient_pairs_cell_is_inconclusive(self) -> None:
+        runs = synthetic_runs(
+            ratio=1.5, noise=0.01, trials=20, cells=confirm.H2_EXPECTED_CELLS, capped_trials=(0,)
+        )
+        table = confirm.primary_family(runs, self.registry(20))
+        self.assertTrue((table["pairs"] == 19).all())
+        self.assertTrue((table["p_status"] == "insufficient_pairs").all())
+        self.assertTrue((table["p"] == 1.0).all())
+        self.assertTrue((table["classification"] == "inconclusive").all())
+        self.assertTrue(bool(table["underpowered"].all()))
+        self.assertTrue((table["ci_lo"] > confirm.LOG_DELTA).all())
+
+    def test_holm_arithmetic(self) -> None:
+        adjusted = data.holm([0.01, 0.04, 0.03, 0.005])
+        np.testing.assert_allclose(adjusted, [0.03, 0.06, 0.06, 0.02])
 
     def test_primary_registry_requires_exactly_six_unique_cells(self) -> None:
         runs = synthetic_runs(
@@ -285,8 +345,26 @@ class H3Tests(unittest.TestCase):
         missing = missing[
             ~((missing["structure"] == "persistent") & (missing["op"] == "query"))
         ]
-        with self.assertRaisesRegex(confirm.RegisteredAnalysisError, "requires 3"):
+        with self.assertRaisesRegex(confirm.RegisteredAnalysisError, "no holdout predictions"):
             confirm.h3_decisions(missing)
+        short = self.cells()
+        short = short.drop(short[(short["structure"] == "persistent")].index[:1])
+        with self.assertRaisesRegex(confirm.RegisteredAnalysisError, "requires 3"):
+            confirm.h3_decisions(short)
+
+    def test_per_structure_inventory_excludes_registered_caps(self) -> None:
+        cells = self.cells()
+        capped = cells["structure"] == "point-only"
+        cells.loc[capped, "expected_cell_count"] = 2
+        cells = cells.drop(cells[capped & (cells["workload"] == "W1")].index)
+        table = confirm.h3_decisions(cells)
+        point_only = table[table["structure"] == "point-only"]
+        self.assertEqual(point_only["cells"].tolist(), [2, 2])
+        self.assertTrue(bool(table["supported"].all()))
+        mixed = self.cells()
+        mixed.loc[mixed.index[0], "expected_cell_count"] = 2
+        with self.assertRaisesRegex(confirm.RegisteredAnalysisError, "disagree"):
+            confirm.h3_decisions(mixed)
 
     def test_prediction_sidecar_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -407,6 +485,13 @@ class HierarchicalTests(unittest.TestCase):
         for effect in table["effect"]:
             self.assertAlmostEqual(effect, np.log(1.5), delta=0.05)
 
+    def test_singular_random_effect_fails_closed_with_diagnostics(self) -> None:
+        runs = synthetic_runs(ratio=1.5, trials=8, cells=3)
+        with self.assertRaises(confirm.RegisteredAnalysisError) as caught:
+            confirm.hierarchical(runs)
+        self.assertEqual(len(caught.exception.diagnostics), len(confirm.MIXEDLM_OPTIMIZERS))
+        self.assertTrue(all("optimizer" in entry for entry in caught.exception.diagnostics))
+
     def test_non_convergence_fails_without_ols_fallback(self) -> None:
         runs = synthetic_runs(ratio=1.5, pair_noise=0.03, trials=16, cells=3)
         with mock.patch("statsmodels.formula.api.mixedlm") as mixedlm:
@@ -451,6 +536,26 @@ class SensitivityTests(unittest.TestCase):
                 registry,
             )
 
+    def test_restrict_primary_effects_uses_the_full_cell_key(self) -> None:
+        effects = pd.concat(
+            [
+                confirm.paired_effects(
+                    synthetic_runs(
+                        ratio=1.3, trials=6, cells=confirm.H2_EXPECTED_CELLS
+                    ).assign(axis=axis),
+                    "persistent",
+                    "copy-on-push",
+                    "update_ns_per_op",
+                )
+                for axis in ("none", "width")
+            ],
+            ignore_index=True,
+        )
+        registry = PrimaryFamilyTests.registry(20)
+        selected = confirm.restrict_primary_effects(effects, registry, "order")
+        self.assertEqual(set(selected["axis"]), {"none"})
+        self.assertEqual(len(selected), 6 * confirm.H2_EXPECTED_CELLS)
+
     def test_constant_execution_order_is_rejected(self) -> None:
         runs = synthetic_runs(ratio=1.3, trials=20, cells=2)
         runs["exec_order"] = 0
@@ -478,7 +583,122 @@ class SensitivityTests(unittest.TestCase):
         )
 
 
+class UnavailableRecordTests(unittest.TestCase):
+    def test_stage_failure_writes_unavailable_record(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            campaign = pathlib.Path(directory)
+            raw_file = campaign / "raw" / "runs_timing-W1.csv"
+            timing_csv(synthetic_runs(ratio=1.2, trials=20), raw_file)
+            registry = campaign / "primary.csv"
+            PrimaryFamilyTests.registry(20).to_csv(registry, index=False)
+            argv = ["--campaign", str(campaign), "--stage", "primary"]
+            argv += ["--primary-cells", str(registry)]
+            with self.assertRaisesRegex(SystemExit, "primary is unavailable"):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    confirm.main(argv)
+            output = campaign / "analysis" / "primary_update.csv"
+            record = confirm.unavailable_record_path(output)
+            self.assertFalse(output.exists())
+            body = json.loads(record.read_text())
+            self.assertEqual((body["stage"], body["status"]), ("primary", "unavailable"))
+            self.assertIn("missing registered primary cells", body["reason"])
+            self.assertRegex(body["recorded_utc"], r"Z$")
+
+            timing_csv(
+                synthetic_runs(ratio=1.2, trials=20, cells=confirm.H2_EXPECTED_CELLS), raw_file
+            )
+            with contextlib.redirect_stdout(io.StringIO()):
+                confirm.main(argv)
+            self.assertTrue(output.is_file())
+            self.assertFalse(record.exists())
+
+    def test_missing_h3_inputs_write_unavailable_record(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            campaign = pathlib.Path(directory)
+            argv = ["--campaign", str(campaign), "--stage", "h3"]
+            argv += ["--cell-predictions", str(campaign / "missing_cells.csv")]
+            argv += ["--model-artifact", str(campaign / "missing_model.json")]
+            with self.assertRaisesRegex(SystemExit, "h3 is unavailable"):
+                confirm.main(argv)
+            record = campaign / "analysis" / "h3_update_unavailable.json"
+            self.assertIn("does not exist", json.loads(record.read_text())["reason"])
+
+    def test_failed_h4_removes_stale_disagreement_table(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            campaign = pathlib.Path(directory)
+            other = pathlib.Path(directory) / "other"
+            runs = synthetic_runs(ratio=1.5, noise=0.01, trials=20, cells=11)
+            timing_csv(runs, campaign / "raw" / "runs_timing-W1.csv")
+            timing_csv(runs, other / "raw" / "runs_timing-W1.csv")
+            stale = campaign / "analysis" / "h4_update_disagreements.csv"
+            stale.parent.mkdir()
+            stale.write_text("stale\n")
+            argv = ["--campaign", str(campaign), "--comparison-campaign", str(other)]
+            argv += ["--stage", "h4", "--h4-cells", str(campaign / "h4.csv")]
+            runs[confirm.CELL_KEYS].drop_duplicates().assign(trials=20).to_csv(
+                campaign / "h4.csv", index=False
+            )
+            with self.assertRaisesRegex(SystemExit, "h4 is unavailable"):
+                confirm.main(argv)
+            self.assertFalse(stale.exists())
+            self.assertTrue((campaign / "analysis" / "h4_update_unavailable.json").is_file())
+
+    def test_unavailable_record_satisfies_required_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            campaign = pathlib.Path(directory)
+            analysis = campaign / "analysis"
+            analysis.mkdir()
+            required = ["primary_update.csv", "hierarchical_update_diagnostics.json"]
+            (analysis / "hierarchical_update_diagnostics.json").write_text("[]\n")
+            with self.assertRaisesRegex(SystemExit, "required primary outputs"):
+                blind.hash_primary_outputs(campaign, required)
+            (analysis / "primary_update_unavailable.json").write_text("{}\n")
+            _, manifest = blind.hash_primary_outputs(campaign, required)
+            self.assertIn(
+                "primary_update_unavailable.json", [entry["file"] for entry in manifest["files"]]
+            )
+            (analysis / "primary_update.csv").write_text("subject\n")
+            with self.assertRaisesRegex(SystemExit, "both exist"):
+                blind.hash_primary_outputs(campaign, required)
+
+
 class BlindTests(unittest.TestCase):
+    def test_persistent_direction_rule(self) -> None:
+        faster, slower = "meaningfully faster", "meaningfully slower"
+        self.assertEqual(
+            blind.persistent_direction("persistent", "copy-on-push", faster), "supports persistent"
+        )
+        self.assertEqual(
+            blind.persistent_direction("copy-on-push", "persistent", slower), "supports persistent"
+        )
+        self.assertEqual(
+            blind.persistent_direction("copy-on-push", "persistent", faster),
+            "contradicts persistent",
+        )
+        self.assertEqual(
+            blind.persistent_direction("persistent", "copy-on-push", slower),
+            "contradicts persistent",
+        )
+        for state in ("practically equivalent", "inconclusive", ""):
+            self.assertEqual(blind.persistent_direction("persistent", "copy-on-push", state), "")
+
+    def test_contrast_labels_must_resolve_to_registered_pair(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            analysis = pathlib.Path(directory)
+            pd.DataFrame({"subject": ["S01"], "baseline": ["S02"]}).to_csv(
+                analysis / "primary_update.csv", index=False
+            )
+            pd.DataFrame({"subject": ["S01"] * 2, "baseline": ["S02", "S03"]}).to_csv(
+                analysis / "regime_update_contrast-a.csv", index=False
+            )
+            required = ["primary_update.csv", "regime_update_contrast-a.csv"]
+            self.assertEqual(blind.contrast_labels(analysis, required), ("S01", "S02"))
+            pd.DataFrame({"subject": ["S04"], "baseline": ["S02"]}).to_csv(
+                analysis / "mean-median_update.csv", index=False
+            )
+            with self.assertRaisesRegex(SystemExit, "exactly one registered contrast"):
+                blind.contrast_labels(analysis, required + ["mean-median_update.csv"])
+
     def test_mapping_is_deterministic_and_key_dependent(self) -> None:
         first = blind.label_map(b"k" * 32)
         self.assertEqual(first, blind.label_map(b"k" * 32))
@@ -562,11 +782,37 @@ class BlindTests(unittest.TestCase):
                 self.assertTrue((second_analysis / "primary-results.json").is_file())
                 return original(*args, **kwargs)
 
+            wrong_pair = analysis / "order_update.csv"
+            pd.DataFrame({"subject": [label_a], "baseline": [mapping["lazy"]]}).to_csv(
+                wrong_pair, index=False
+            )
+            with self.assertRaisesRegex(SystemExit, "exactly one registered contrast"):
+                blind.unblind_study([analyst, second_analyst], custody, "study")
+            pd.DataFrame(
+                {
+                    "subject": [label_a],
+                    "baseline": [label_b],
+                    "classification": ["meaningfully faster"],
+                }
+            ).to_csv(wrong_pair, index=False)
             with mock.patch.object(blind, "load_custody", custody_after_hash):
                 records = blind.unblind_study(
                     [analyst, second_analyst], custody, "study"
                 )
             self.assertEqual(len(records), 2)
+            named_order = pd.read_csv(analysis / "unblinded" / "order_update.csv")
+            self.assertIn(
+                named_order["persistent_direction"].iloc[0],
+                {"supports persistent", "contradicts persistent"},
+            )
+            self.assertEqual(
+                named_order["persistent_direction"].iloc[0] == "supports persistent",
+                named_order["subject"].iloc[0] == "persistent",
+            )
+            self.assertRegex(blind.verify_outputs(analyst), r"^[0-9a-f]{64}$")
+            (analysis / "primary_update.csv").write_text("subject,baseline\nS09,S08\n")
+            with self.assertRaisesRegex(SystemExit, "changed after it was hashed"):
+                blind.verify_outputs(analyst)
             self.assertTrue(all(record.is_file() for record in records))
             unblinded = pd.read_csv(analysis / "unblinded" / "primary_update.csv")
             self.assertEqual(

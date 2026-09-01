@@ -18,8 +18,11 @@ Typical custodian workflow::
         --custody-dir CONTROLLED --study-id STUDY
 
 ``unblind`` hashes every machine's primary output before opening custody
-material, then writes named copies under ``analysis/unblinded`` and records
-the study-wide pre-unblinding hash and UTC timestamp.
+material, refuses a contrast that does not resolve to the registered pair,
+then writes named copies under ``analysis/unblinded`` (with the registered
+``persistent_direction`` orientation column) and records the study-wide
+pre-unblinding hash and UTC timestamp. ``verify-outputs`` re-hashes those
+pre-unblinding outputs after the named stages have run.
 """
 
 from __future__ import annotations
@@ -70,6 +73,7 @@ REQUIRED_COORDINATOR_OUTPUTS = [
 ]
 # Backward-compatible public name for the complete coordinator requirement.
 REQUIRED_BLINDED_OUTPUTS = REQUIRED_COORDINATOR_OUTPUTS
+REGISTERED_CONTRAST = {"persistent", "copy-on-push"}
 
 
 def canonical_json(value: dict | list) -> bytes:
@@ -347,10 +351,21 @@ def hash_primary_outputs(
     campaign: pathlib.Path,
     required_outputs: list[str] = REQUIRED_COORDINATOR_OUTPUTS,
 ) -> tuple[pathlib.Path, dict]:
-    """Hash all blinded analysis outputs before any name map is opened."""
+    """Hash all blinded analysis outputs before any name map is opened.
+
+    A required decision CSV may be replaced by its explicit
+    ``<stem>_unavailable.json`` record; that record is then what gets hashed.
+    A CSV beside its own unavailable record is ambiguous and refused.
+    """
     analysis = campaign / "analysis"
-    required = [analysis / name for name in required_outputs]
-    missing = [str(path) for path in required if not path.is_file()]
+    missing = []
+    for name in required_outputs:
+        output = analysis / name
+        record = output.with_name(output.stem + "_unavailable.json")
+        if output.is_file() and record.is_file():
+            raise SystemExit(f"decision output and its unavailable record both exist: {output}")
+        if not output.is_file() and not (output.suffix == ".csv" and record.is_file()):
+            missing.append(str(output))
     if missing:
         raise SystemExit(
             "cannot unblind before required primary outputs exist: " + ", ".join(missing)
@@ -373,6 +388,63 @@ def hash_primary_outputs(
     path = analysis / "primary-results.json"
     path.write_bytes(canonical_json(manifest))
     return path, manifest
+
+
+def contrast_labels(analysis: pathlib.Path, required_outputs: list[str]) -> tuple[str, str]:
+    """The one (subject, baseline) label pair the blinded contrast outputs carry."""
+    pairs = set()
+    for name in required_outputs:
+        path = analysis / name
+        if path.suffix != ".csv" or not path.is_file():
+            continue
+        frame = pd.read_csv(path)
+        if {"subject", "baseline"}.issubset(frame.columns) and not frame.empty:
+            subjects = frame["subject"].astype(str).unique()
+            baselines = frame["baseline"].astype(str).unique()
+            if len(subjects) == 1 and len(baselines) == 1:
+                pairs.add((str(subjects[0]), str(baselines[0])))
+    if len(pairs) != 1:
+        raise SystemExit("blinded outputs do not carry exactly one registered contrast pair")
+    return pairs.pop()
+
+
+def persistent_direction(subject: str, baseline: str, classification: str) -> str:
+    """The registered post-unblinding orientation rule for one named row."""
+    if classification == "meaningfully faster":
+        favoured, disfavoured = subject, baseline
+    elif classification == "meaningfully slower":
+        favoured, disfavoured = baseline, subject
+    else:
+        return ""
+    if favoured == "persistent":
+        return "supports persistent"
+    if disfavoured == "persistent":
+        return "contradicts persistent"
+    return ""
+
+
+def verify_outputs(campaign: pathlib.Path) -> str:
+    """Re-hash every pre-unblinding output against its recorded manifest."""
+    analysis = campaign / "analysis"
+    manifest_path = analysis / "primary-results.json"
+    record_path = analysis / "unblinding.json"
+    if not manifest_path.is_file() or not record_path.is_file():
+        raise SystemExit(f"campaign has not been hashed and unblinded: {campaign}")
+    manifest = json.loads(manifest_path.read_text())
+    record = json.loads(record_path.read_text())
+    entries = manifest.get("files", [])
+    aggregate = hashlib.sha256(canonical_json(entries)).hexdigest()
+    if aggregate != manifest.get("aggregate_sha256") or aggregate != record.get(
+        "campaign_output_sha256"
+    ):
+        raise SystemExit(
+            f"primary-output manifest does not match its unblinding record: {campaign}"
+        )
+    for entry in entries:
+        path = analysis / entry["file"]
+        if not path.is_file() or sha256_file(path) != entry["sha256"]:
+            raise SystemExit(f"pre-unblinding output changed after it was hashed: {path}")
+    return aggregate
 
 
 def unblind_study(
@@ -423,6 +495,15 @@ def unblind_study(
     if any(mapping != mappings[0] for mapping in mappings[1:]):
         raise SystemExit("analyst campaigns do not resolve to one label map")
     inverse = {label: name for name, label in mappings[0].items()}
+    for index, (campaign, _, _) in enumerate(hashed):
+        required = (
+            REQUIRED_COORDINATOR_OUTPUTS if index == 0 else REQUIRED_LOCAL_BLINDED_OUTPUTS
+        )
+        subject, baseline = contrast_labels(campaign / "analysis", required)
+        if {inverse.get(subject), inverse.get(baseline)} != REGISTERED_CONTRAST:
+            raise SystemExit(
+                f"blinded contrast labels do not resolve to the registered pair: {campaign}"
+            )
     unblinded_utc = utc_now()
     records = []
     for campaign, manifest_path, manifest in hashed:
@@ -437,6 +518,13 @@ def unblind_study(
             frame = pd.read_csv(source)
             for column in frame.select_dtypes(include=["object", "string"]):
                 frame[column] = frame[column].map(lambda value: inverse.get(value, value))
+            if {"subject", "baseline", "classification"}.issubset(frame.columns):
+                frame["persistent_direction"] = [
+                    persistent_direction(
+                        str(row.subject), str(row.baseline), str(row.classification)
+                    )
+                    for row in frame.itertuples(index=False)
+                ]
             target = destination / source.name
             frame.to_csv(target, index=False)
             written.append(target.name)
@@ -476,6 +564,8 @@ def main(argv: list[str] | None = None) -> None:
     verify_parser.add_argument("campaign", type=pathlib.Path)
     unblind_parser = subparsers.add_parser("unblind")
     unblind_parser.add_argument("campaign", type=pathlib.Path, nargs="+")
+    outputs_parser = subparsers.add_parser("verify-outputs")
+    outputs_parser.add_argument("campaign", type=pathlib.Path, nargs="+")
     for command_parser in (
         seal_parser,
         attach_parser,
@@ -503,6 +593,9 @@ def main(argv: list[str] | None = None) -> None:
             args.source_campaign, args.campaign, args.custody_dir, args.study_id
         )
         print(f"named input matches custody manifest sha256 {digest}")
+    elif args.command == "verify-outputs":
+        for campaign in args.campaign:
+            print(f"pre-unblinding outputs intact, sha256 {verify_outputs(campaign)}")
     else:
         paths = unblind_study(args.campaign, args.custody_dir, args.study_id)
         for path in paths:

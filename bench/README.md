@@ -127,11 +127,15 @@ The differences that matter:
   compiler and allocator sensitivities. `bench/analysis/blind.py` keeps the
   key, named input and label map under separate custody; primary analysis reads
   only opaque analyst copies. `bench/run_registered_analysis.sh` fixes the
-  stage order and hashes every machine's required outputs before one
-  study-wide unblinding operation opens the custody map, then verifies the
-  reopened named inputs against their custody-held source manifests. Its two
-  contrast labels must be opaque and lexically ordered; both possible regime
-  subjects are computed before identities are disclosed.
+  stage order in two halves: the `analyst` half sees only opaque campaigns
+  and two lexically ordered contrast labels, and the `custodian` half hashes
+  every machine's required outputs before one study-wide unblinding operation
+  opens the custody map, verifies the reopened named inputs against their
+  custody-held source manifests, runs the named and model stages, and
+  re-verifies the pre-unblinding hashes. A registered decision that fails
+  closed leaves a hashed `<stage>_unavailable.json` record in place of its
+  CSV, so one unavailable decision never blocks unblinding the rest. Both
+  possible regime subjects are computed before identities are disclosed.
 - **Registration is a file list with hashes.** `bench/make_registration.sh`
   writes `docs/research/registration-manifest.txt` over every frozen file;
   the deposit of that manifest with the protocol is the registration

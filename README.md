@@ -34,9 +34,10 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 > protocol is written in
 > [docs/research/registered-protocol.md](docs/research/registered-protocol.md) with its
 > statistics, fail-closed H3/H4/H5 decisions, custody-separated blinding, sensitivity paths and
-> an external implementation in place. Independent statistical review, final PR7 dry runs and the
-> immutable registration deposit remain open. No confirmatory measurement runs before that
-> deposit.
+> an external implementation in place, and the statistical machinery approved by an independent
+> review ([docs/research/statistical-review.md](docs/research/statistical-review.md)). The
+> custodian assignment, final PR7 dry runs and the immutable registration deposit remain open.
+> No confirmatory measurement runs before that deposit.
 
 ## Implemented components
 
