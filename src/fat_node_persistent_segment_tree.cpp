@@ -27,6 +27,7 @@ Initialization
 */
 
 void FatNodePersistentSegmentTree::initialize(const std::vector<ValueType>& values) {
+  const detail::SumAddDomainGuard newNumericDomain(values);
   // Build replacement state separately so a failed build leaves the
   // currently published versions unchanged.
   std::vector<Node> newNodes;
@@ -45,6 +46,7 @@ void FatNodePersistentSegmentTree::initialize(const std::vector<ValueType>& valu
   nodes.swap(newNodes);
   roots.swap(newRoots);
   arraySize = values.size();
+  numericDomain = newNumericDomain;
   treeHeight = height;
 }
 
@@ -66,6 +68,11 @@ std::size_t FatNodePersistentSegmentTree::rangeAdd(std::size_t left, std::size_t
     return roots.size() - 1;
   }
 
+  const auto nextMagnitudeBound = numericDomain.validateRangeAdd(
+      arraySize, left, right, value, [this](std::vector<ValueType>& values) {
+        materialize(roots.back(), 0, arraySize - 1, 0, values);
+      });
+
   // Unlike path copying, an update mutates existing nodes in place by
   // appending states, so a half-finished update could not be undone by
   // shrinking the arena. Instead, every allocation the update could need
@@ -77,6 +84,7 @@ std::size_t FatNodePersistentSegmentTree::rangeAdd(std::size_t left, std::size_t
   const std::size_t version = roots.size();
   const std::size_t newRoot = update(roots.back(), version, 0, arraySize - 1, left, right, value);
   roots.push_back(newRoot);
+  numericDomain.commit(nextMagnitudeBound);
 
   return version;
 }
@@ -326,6 +334,21 @@ FatNodePersistentSegmentTree::ValueType FatNodePersistentSegmentTree::query(
       query(current.leftChild, version, segmentLeft, middle, queryLeft, queryRight, nextLazy),
       query(current.rightChild, version, middle + 1, segmentRight, queryLeft, queryRight,
             nextLazy));
+}
+
+void FatNodePersistentSegmentTree::materialize(std::size_t nodeIndex, std::size_t segmentLeft,
+                                               std::size_t segmentRight, ValueType inheritedLazy,
+                                               std::vector<ValueType>& values) const {
+  const Modification& current = latestState(nodes[nodeIndex]);
+  if (segmentLeft == segmentRight) {
+    values.push_back(SumAddPolicy::apply(inheritedLazy, current.sum, 1));
+    return;
+  }
+
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
+  const ValueType nextLazy = checkedAdd(inheritedLazy, current.lazy);
+  materialize(current.leftChild, segmentLeft, middle, nextLazy, values);
+  materialize(current.rightChild, middle + 1, segmentRight, nextLazy, values);
 }
 
 /*

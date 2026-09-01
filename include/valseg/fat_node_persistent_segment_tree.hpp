@@ -1,6 +1,8 @@
 #ifndef VALSEG_FAT_NODE_PERSISTENT_SEGMENT_TREE_HPP
 #define VALSEG_FAT_NODE_PERSISTENT_SEGMENT_TREE_HPP
 
+#include <valseg/detail/sum_add_domain.hpp>
+
 #include <array>
 #include <cstddef>
 #include <vector>
@@ -63,7 +65,10 @@ namespace valseg {
  * versioned lazy tag and evaluated arithmetic intermediate must be exactly
  * representable. An out-of-domain initialization, update or query throws
  * std::overflow_error; update arithmetic is preflighted before any fat-node
- * state is appended, so failed writes publish nothing.
+ * state is appended, so failed writes publish nothing. The listed update
+ * bound applies when a constant-time magnitude envelope proves this domain.
+ * If that proof is inconclusive, an O(n) read-only exact preflight runs before
+ * the logarithmic update.
  */
 class FatNodePersistentSegmentTree {
 public:
@@ -235,6 +240,8 @@ private:
 
   std::size_t arraySize;
 
+  detail::SumAddDomainGuard numericDomain;
+
   /**
    * ceil(log2 arraySize): a range update visits at most 4 nodes per level,
    * so at most 4 * (treeHeight + 1) nodes in total.
@@ -268,6 +275,9 @@ private:
   ValueType query(std::size_t nodeIndex, std::size_t version, std::size_t segmentLeft,
                   std::size_t segmentRight, std::size_t queryLeft, std::size_t queryRight,
                   ValueType inheritedLazy) const;
+
+  void materialize(std::size_t nodeIndex, std::size_t segmentLeft, std::size_t segmentRight,
+                   ValueType inheritedLazy, std::vector<ValueType>& values) const;
 
   void validateInitialized() const;
   void validateVersion(std::size_t version) const;

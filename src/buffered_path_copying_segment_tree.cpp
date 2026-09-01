@@ -27,6 +27,7 @@ Initialization
 */
 
 void BufferedPathCopyingSegmentTree::initialize(const std::vector<ValueType>& values) {
+  const detail::SumAddDomainGuard newNumericDomain(values);
   std::vector<Node> newNodes;
   std::vector<std::size_t> newRoots;
 
@@ -40,6 +41,7 @@ void BufferedPathCopyingSegmentTree::initialize(const std::vector<ValueType>& va
   nodes.swap(newNodes);
   roots.swap(newRoots);
   arraySize = values.size();
+  numericDomain = newNumericDomain;
   bufferedThisUpdate.clear();
 }
 
@@ -60,6 +62,12 @@ std::size_t BufferedPathCopyingSegmentTree::rangeAdd(std::size_t left, std::size
     return roots.size() - 1;
   }
 
+  const std::size_t latestVersion = roots.size() - 1;
+  const auto nextMagnitudeBound = numericDomain.validateRangeAdd(
+      arraySize, left, right, value, [this, latestVersion](std::vector<ValueType>& values) {
+        materialize(roots.back(), latestVersion, 0, arraySize - 1, 0, values);
+      });
+
   const std::size_t version = roots.size();
   const std::size_t checkpoint = nodes.size();
   bufferedThisUpdate.clear();
@@ -77,6 +85,8 @@ std::size_t BufferedPathCopyingSegmentTree::rangeAdd(std::size_t left, std::size
     nodes.resize(checkpoint);
     throw;
   }
+
+  numericDomain.commit(nextMagnitudeBound);
 
   return roots.size() - 1;
 }
@@ -284,6 +294,23 @@ BufferedPathCopyingSegmentTree::ValueType BufferedPathCopyingSegmentTree::query(
       query(current.leftChild, version, segmentLeft, middle, queryLeft, queryRight, nextLazy),
       query(current.rightChild, version, middle + 1, segmentRight, queryLeft, queryRight,
             nextLazy));
+}
+
+void BufferedPathCopyingSegmentTree::materialize(std::size_t nodeIndex, std::size_t version,
+                                                 std::size_t segmentLeft, std::size_t segmentRight,
+                                                 ValueType inheritedLazy,
+                                                 std::vector<ValueType>& values) const {
+  const Node& current = nodes[nodeIndex];
+  const Snapshot state = snapshotAt(current, version);
+  if (segmentLeft == segmentRight) {
+    values.push_back(SumAddPolicy::apply(inheritedLazy, state.sum, 1));
+    return;
+  }
+
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
+  const ValueType nextLazy = checkedAdd(inheritedLazy, state.lazy);
+  materialize(current.leftChild, version, segmentLeft, middle, nextLazy, values);
+  materialize(current.rightChild, version, middle + 1, segmentRight, nextLazy, values);
 }
 
 /*

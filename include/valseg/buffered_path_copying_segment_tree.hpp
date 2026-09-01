@@ -1,6 +1,8 @@
 #ifndef VALSEG_BUFFERED_PATH_COPYING_SEGMENT_TREE_HPP
 #define VALSEG_BUFFERED_PATH_COPYING_SEGMENT_TREE_HPP
 
+#include <valseg/detail/sum_add_domain.hpp>
+
 #include <array>
 #include <cstddef>
 #include <vector>
@@ -64,7 +66,10 @@ namespace valseg {
  * Numeric domain: every stored long long element, canonical segment sum,
  * buffered or base lazy tag and evaluated arithmetic intermediate must be
  * exactly representable. An out-of-domain initialization, update or query
- * throws std::overflow_error; failed writes are rolled back completely.
+ * throws std::overflow_error; failed writes are rolled back completely. The
+ * listed update bound applies when a constant-time magnitude envelope proves
+ * this domain. If that proof is inconclusive, an O(n) read-only exact
+ * preflight runs before the logarithmic update.
  */
 class BufferedPathCopyingSegmentTree {
 public:
@@ -234,6 +239,8 @@ private:
 
   std::size_t arraySize;
 
+  detail::SumAddDomainGuard numericDomain;
+
   /**
    * Nodes that absorbed an entry in place during the update in progress;
    * a failed update pops those entries again. Kept as a member so that,
@@ -272,6 +279,10 @@ private:
   ValueType query(std::size_t nodeIndex, std::size_t version, std::size_t segmentLeft,
                   std::size_t segmentRight, std::size_t queryLeft, std::size_t queryRight,
                   ValueType inheritedLazy) const;
+
+  void materialize(std::size_t nodeIndex, std::size_t version, std::size_t segmentLeft,
+                   std::size_t segmentRight, ValueType inheritedLazy,
+                   std::vector<ValueType>& values) const;
 
   static std::size_t segmentLength(std::size_t segmentLeft, std::size_t segmentRight);
 

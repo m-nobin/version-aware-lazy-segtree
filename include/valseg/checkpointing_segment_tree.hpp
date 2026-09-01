@@ -1,6 +1,8 @@
 #ifndef VALSEG_CHECKPOINTING_SEGMENT_TREE_HPP
 #define VALSEG_CHECKPOINTING_SEGMENT_TREE_HPP
 
+#include <valseg/detail/sum_add_domain.hpp>
+
 #include <cstddef>
 #include <vector>
 
@@ -51,7 +53,9 @@ namespace valseg {
  * retained lazy tag, replay contribution and evaluated arithmetic intermediate
  * must be exactly representable. An out-of-domain initialization, update or
  * query throws std::overflow_error; failed writes leave the live tree, log and
- * checkpoints unchanged.
+ * checkpoints unchanged. The listed update bound applies when a constant-time
+ * magnitude envelope proves this domain. If that proof is inconclusive, an
+ * O(n) read-only exact preflight runs before the normal update path.
  */
 class CheckpointingSegmentTree {
 public:
@@ -237,6 +241,7 @@ private:
 
   std::size_t interval;
   std::size_t arraySize;
+  detail::SumAddDomainGuard numericDomain;
 
   /*
   ============================================
@@ -270,6 +275,10 @@ private:
   static ValueType query(const std::vector<Node>& nodes, std::size_t nodeIndex,
                          std::size_t segmentLeft, std::size_t segmentRight, std::size_t queryLeft,
                          std::size_t queryRight, ValueType inheritedLazy);
+
+  static void materialize(const std::vector<Node>& nodes, std::size_t nodeIndex,
+                          std::size_t segmentLeft, std::size_t segmentRight,
+                          ValueType inheritedLazy, std::vector<ValueType>& values);
 
   void validateInitialized() const;
   void validateVersion(std::size_t version) const;

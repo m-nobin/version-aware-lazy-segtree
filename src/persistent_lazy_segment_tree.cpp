@@ -26,6 +26,7 @@ Initialization
 */
 
 void PersistentLazySegmentTree::initialize(const std::vector<ValueType>& values) {
+  const detail::SumAddDomainGuard newNumericDomain(values);
   // Build replacement state separately so a failed build leaves the
   // currently published versions unchanged.
   std::vector<Node> newNodes;
@@ -42,6 +43,7 @@ void PersistentLazySegmentTree::initialize(const std::vector<ValueType>& values)
   nodes.swap(newNodes);
   roots.swap(newRoots);
   arraySize = values.size();
+  numericDomain = newNumericDomain;
 }
 
 /*
@@ -62,6 +64,11 @@ std::size_t PersistentLazySegmentTree::rangeAdd(std::size_t left, std::size_t ri
     return roots.size() - 1;
   }
 
+  const auto nextMagnitudeBound = numericDomain.validateRangeAdd(
+      arraySize, left, right, value, [this](std::vector<ValueType>& values) {
+        materialize(roots.back(), 0, arraySize - 1, 0, values);
+      });
+
   // Publish the new root only after the complete update succeeds; on
   // failure, roll the arena back to the checkpoint so no partial state
   // remains observable.
@@ -74,6 +81,8 @@ std::size_t PersistentLazySegmentTree::rangeAdd(std::size_t left, std::size_t ri
     nodes.resize(checkpoint);
     throw;
   }
+
+  numericDomain.commit(nextMagnitudeBound);
 
   return roots.size() - 1;
 }
@@ -223,6 +232,21 @@ PersistentLazySegmentTree::query(std::size_t nodeIndex, std::size_t segmentLeft,
   return checkedAdd(
       query(current.leftChild, segmentLeft, middle, queryLeft, queryRight, nextLazy),
       query(current.rightChild, middle + 1, segmentRight, queryLeft, queryRight, nextLazy));
+}
+
+void PersistentLazySegmentTree::materialize(std::size_t nodeIndex, std::size_t segmentLeft,
+                                            std::size_t segmentRight, ValueType inheritedLazy,
+                                            std::vector<ValueType>& values) const {
+  const Node& current = nodes[nodeIndex];
+  if (segmentLeft == segmentRight) {
+    values.push_back(SumAddPolicy::apply(inheritedLazy, current.sum, 1));
+    return;
+  }
+
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
+  const ValueType nextLazy = checkedAdd(inheritedLazy, current.lazy);
+  materialize(current.leftChild, segmentLeft, middle, nextLazy, values);
+  materialize(current.rightChild, middle + 1, segmentRight, nextLazy, values);
 }
 
 /*

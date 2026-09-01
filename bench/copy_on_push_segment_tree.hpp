@@ -2,6 +2,7 @@
 #define VALSEG_BENCH_COPY_ON_PUSH_SEGMENT_TREE_HPP
 
 #include <valseg/detail/checked_size.hpp>
+#include <valseg/detail/sum_add_domain.hpp>
 #include <valseg/policy.hpp>
 
 #include <cstddef>
@@ -35,7 +36,9 @@ namespace valseg::bench {
  * Numeric domain: every stored long long element, canonical segment sum,
  * retained lazy tag and evaluated arithmetic intermediate must be exactly
  * representable. An out-of-domain initialization, update or query throws
- * std::overflow_error; failed writes publish no version or node.
+ * std::overflow_error; failed writes publish no version or node. Its O(log n)
+ * update bound applies when a constant-time magnitude envelope proves this
+ * domain; otherwise an O(n) read-only exact preflight runs first.
  */
 class CopyOnPushSegmentTree {
 public:
@@ -49,6 +52,7 @@ public:
    *                             the previous versions are left unchanged.
    */
   void initialize(const std::vector<ValueType>& values) {
+    const detail::SumAddDomainGuard newNumericDomain(values);
     std::vector<Node> newNodes;
     std::vector<std::size_t> newRoots;
     if (values.empty()) {
@@ -60,6 +64,7 @@ public:
     nodes.swap(newNodes);
     roots.swap(newRoots);
     arraySize = values.size();
+    numericDomain = newNumericDomain;
   }
 
   /**
@@ -81,6 +86,10 @@ public:
       roots.push_back(roots.back());
       return roots.size() - 1;
     }
+    const auto nextMagnitudeBound = numericDomain.validateRangeAdd(
+        arraySize, left, right, value, [this](std::vector<ValueType>& values) {
+          materialize(roots.back(), 0, arraySize - 1, 0, values);
+        });
     const std::size_t checkpoint = nodes.size();
     try {
       const std::size_t newRoot = update(roots.back(), 0, arraySize - 1, left, right, value);
@@ -89,6 +98,7 @@ public:
       nodes.resize(checkpoint);
       throw;
     }
+    numericDomain.commit(nextMagnitudeBound);
     return roots.size() - 1;
   }
 
@@ -154,6 +164,7 @@ private:
   std::vector<Node> nodes;
   std::vector<std::size_t> roots;
   std::size_t arraySize = 0;
+  detail::SumAddDomainGuard numericDomain;
 
   static std::size_t span(std::size_t left, std::size_t right) {
     return detail::inclusiveLength(left, right);
@@ -236,6 +247,19 @@ private:
     return checkedAdd(
         query(current.leftChild, segmentLeft, middle, queryLeft, queryRight, next),
         query(current.rightChild, middle + 1, segmentRight, queryLeft, queryRight, next));
+  }
+
+  void materialize(std::size_t nodeIndex, std::size_t segmentLeft, std::size_t segmentRight,
+                   ValueType inherited, std::vector<ValueType>& values) const {
+    const Node& current = nodes[nodeIndex];
+    if (segmentLeft == segmentRight) {
+      values.push_back(SumAddPolicy::apply(inherited, current.sum, 1));
+      return;
+    }
+    const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
+    const ValueType next = checkedAdd(inherited, current.lazy);
+    materialize(current.leftChild, segmentLeft, middle, next, values);
+    materialize(current.rightChild, middle + 1, segmentRight, next, values);
   }
 
   void validate(std::size_t left, std::size_t right) const {

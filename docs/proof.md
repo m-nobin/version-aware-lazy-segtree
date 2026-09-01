@@ -24,8 +24,12 @@ The two operations under proof are:
   version;
 - `rangeSum(v, l, r)` — returns `Σ_{i=l}^{r} Aᵛ[i]` for any published version `v`.
 
-All values, intermediate products, and sums are assumed representable in `ValueType`; overflow is
-outside the model, matching the contract.
+Every published value, canonical segment sum, retained tag and evaluated arithmetic intermediate
+is representable in `ValueType`. The implementation enforces that domain before publication. A
+constant-time magnitude envelope proves ordinary updates; when it is inconclusive near the
+representation boundary, the lazy-tag implementations materialize the latest logical array and
+validate the proposed leaves and canonical sums in `O(n)`. The proofs below describe the tree
+algorithm after that preflight succeeds.
 
 ## 2. Data-structure model
 
@@ -237,7 +241,7 @@ amortized because `nodes` and `roots` grow as `std::vector`s, query time is wors
 | Operation           |                 Time | Additional space                              |
 | ------------------- | -------------------: | --------------------------------------------- |
 | `initialize`        |               `O(n)` | `2n − 1` nodes                                |
-| `rangeAdd`, `δ ≠ 0` | `O(log n)` amortized | `≤ 4(h + 1)` copied nodes                     |
+| `rangeAdd`, `δ ≠ 0` | `O(log n)` amortized; `O(n)` exact numeric fallback | `≤ 4(h + 1)` copied nodes |
 | `rangeAdd`, `δ = 0` |     `O(1)` amortized | one root entry                                |
 | `rangeSum`          |           `O(log n)` | none (call stack `O(h)`)                      |
 | Total retained      |                    — | `O(n + U₊ log n)` nodes, `U + 1` root entries |
@@ -251,6 +255,9 @@ _Argument outline._
   nodes remain per level, each of which may visit two children, one of them fully covered and
   terminating), giving at most `4(h + 1)` invocations across levels `0 … h`; by Proposition 1 that
   is also the number of appended nodes.
+- **Numeric preflight** is constant time while the conservative magnitude envelope proves every
+  leaf and canonical segment sum representable. If the proof is inconclusive, a read-only traversal
+  materializes `n` leaves and validates the proposed canonical tree in `O(n)` before any append.
 - **Zero-delta fast path** performs validation and a single `roots.push_back`.
 - **Query** visits the same `O(log n)` frontier read-only and allocates nothing (Lemma 4).
 - **Space** is the build cost plus the per-update copies, giving `O(n + U₊ log n)` arena nodes.
@@ -258,7 +265,8 @@ _Argument outline._
   holds `U + 1` entries.
 - **Amortization** applies only to the update side: an individual `push_back` may trigger an
   `O(current size)` reallocation of the arena or root table, but the amortized cost per append is
-  `O(1)`, and nothing else in `rangeAdd` allocates.
+  `O(1)`. The constant-time numeric fast path allocates nothing; the exact boundary preflight owns
+  one temporary `O(n)` vector.
 
 The visited frontier for `rangeAdd(2, 6, δ)` on `n = 8` — seven copies, never more than four
 visited nodes on a level; dashed subtrees are skipped and shared unchanged:
@@ -321,6 +329,8 @@ number is measured: the runner should confirm these bounds, not discover them.
 `n` = array size, `h = ⌈log₂ n⌉`, `U` = successful updates, `U₊` = those with a non-zero delta,
 `V` = published versions. All structures share one operation model: range-add on the latest
 version, range-sum on any published version, identical validation order and exception types.
+The update column gives structural work after numeric validation. Lazy-tag structures add the
+same `O(n)` exact preflight only when their constant-time magnitude envelope is inconclusive.
 
 | Structure | Update, `δ ≠ 0` | Historical query | Retained nodes | Node bytes | Header |
 | --- | ---: | ---: | ---: | ---: | --- |

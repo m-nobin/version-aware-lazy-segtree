@@ -25,6 +25,7 @@ Initialization
 */
 
 void LazySegmentTree::initialize(const std::vector<ValueType>& values) {
+  const detail::SumAddDomainGuard newNumericDomain(values);
   const std::size_t storageCount = detail::lazyStorageCount(values.size());
   std::vector<ValueType> newTree(storageCount, 0);
   std::vector<ValueType> newLazy(storageCount, 0);
@@ -34,6 +35,7 @@ void LazySegmentTree::initialize(const std::vector<ValueType>& values) {
   tree.swap(newTree);
   lazy.swap(newLazy);
   arraySize = values.size();
+  numericDomain = newNumericDomain;
 }
 
 /*
@@ -47,8 +49,12 @@ void LazySegmentTree::rangeAdd(std::size_t left, std::size_t right, ValueType va
   if (value == 0) {
     return;
   }
+  const auto nextMagnitudeBound = numericDomain.validateRangeAdd(
+      arraySize, left, right, value,
+      [this](std::vector<ValueType>& values) { materialize(0, 0, arraySize - 1, 0, values); });
   static_cast<void>(validateUpdate(0, 0, arraySize - 1, left, right, value));
   update(0, 0, arraySize - 1, left, right, value);
+  numericDomain.commit(nextMagnitudeBound);
 }
 
 LazySegmentTree::ValueType LazySegmentTree::rangeSum(std::size_t left, std::size_t right) const {
@@ -164,6 +170,20 @@ LazySegmentTree::ValueType LazySegmentTree::query(std::size_t node, std::size_t 
 
   return checkedAdd(query(2 * node + 1, segmentLeft, middle, queryLeft, queryRight, nextLazy),
                     query(2 * node + 2, middle + 1, segmentRight, queryLeft, queryRight, nextLazy));
+}
+
+void LazySegmentTree::materialize(std::size_t node, std::size_t segmentLeft,
+                                  std::size_t segmentRight, ValueType inheritedLazy,
+                                  std::vector<ValueType>& values) const {
+  if (segmentLeft == segmentRight) {
+    values.push_back(SumAddPolicy::apply(inheritedLazy, tree[node], 1));
+    return;
+  }
+
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
+  const ValueType nextLazy = checkedAdd(inheritedLazy, lazy[node]);
+  materialize(2 * node + 1, segmentLeft, middle, nextLazy, values);
+  materialize(2 * node + 2, middle + 1, segmentRight, nextLazy, values);
 }
 
 /*

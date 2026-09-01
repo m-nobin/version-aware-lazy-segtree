@@ -1,6 +1,8 @@
 #ifndef VALSEG_PERSISTENT_LAZY_SEGMENT_TREE_HPP
 #define VALSEG_PERSISTENT_LAZY_SEGMENT_TREE_HPP
 
+#include <valseg/detail/sum_add_domain.hpp>
+
 #include <cstddef>
 #include <vector>
 
@@ -33,7 +35,10 @@ namespace valseg {
  * sum, retained lazy tag and evaluated arithmetic intermediate to be
  * representable. Queries require the same of the requested sum. Otherwise
  * std::overflow_error is thrown, and a failed initialization or update
- * publishes nothing and leaves every existing version unchanged.
+ * publishes nothing and leaves every existing version unchanged. The listed
+ * update bound applies when a constant-time magnitude envelope proves this
+ * domain. If that proof is inconclusive, an O(n) read-only exact preflight
+ * runs before the logarithmic update.
  */
 class PersistentLazySegmentTree {
 public:
@@ -174,6 +179,8 @@ private:
 
   std::size_t arraySize;
 
+  detail::SumAddDomainGuard numericDomain;
+
   /*
   ============================================
   Internal Functions
@@ -190,6 +197,9 @@ private:
 
   ValueType query(std::size_t nodeIndex, std::size_t segmentLeft, std::size_t segmentRight,
                   std::size_t queryLeft, std::size_t queryRight, ValueType inheritedLazy) const;
+
+  void materialize(std::size_t nodeIndex, std::size_t segmentLeft, std::size_t segmentRight,
+                   ValueType inheritedLazy, std::vector<ValueType>& values) const;
 
   void validateInitialized() const;
 

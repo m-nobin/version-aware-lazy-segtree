@@ -134,6 +134,38 @@ TYPED_TEST(NumericContractTest, DeltaTimesSegmentLengthOverflowPublishesNothing)
   EXPECT_EQ(structure.sum(0, 1), 0);
 }
 
+TYPED_TEST(NumericContractTest, FullCoverageCannotHideElementOverflow) {
+  const long long maximum = std::numeric_limits<long long>::max();
+  TypeParam structure({maximum, -maximum});
+  const auto before = structure.state();
+
+  EXPECT_THROW(structure.add(0, 1, 1), std::overflow_error);
+  EXPECT_EQ(structure.state(), before);
+  EXPECT_EQ(structure.sum(0, 0), maximum);
+  EXPECT_EQ(structure.sum(0, 1), 0);
+}
+
+TYPED_TEST(NumericContractTest, FullCoverageCannotHideDescendantSumOverflow) {
+  const long long maximum = std::numeric_limits<long long>::max();
+  TypeParam structure({maximum - 1, 1, -maximum, 0});
+  const auto before = structure.state();
+
+  EXPECT_THROW(structure.add(0, 3, 1), std::overflow_error);
+  EXPECT_EQ(structure.state(), before);
+  EXPECT_EQ(structure.sum(0, 1), maximum);
+  EXPECT_EQ(structure.sum(0, 3), 0);
+}
+
+TYPED_TEST(NumericContractTest, ExactBoundaryPreflightAcceptsRepresentableUpdate) {
+  const long long maximum = std::numeric_limits<long long>::max();
+  TypeParam structure({maximum, -maximum});
+
+  EXPECT_NO_THROW(structure.add(1, 1, 1));
+  EXPECT_EQ(structure.sum(0, 0), maximum);
+  EXPECT_EQ(structure.sum(1, 1), -maximum + 1);
+  EXPECT_EQ(structure.sum(0, 1), 1);
+}
+
 TYPED_TEST(NumericContractTest, AccumulatedValueOrLazyTagOverflowPublishesNothing) {
   const long long maximum = std::numeric_limits<long long>::max();
   TypeParam structure({0});

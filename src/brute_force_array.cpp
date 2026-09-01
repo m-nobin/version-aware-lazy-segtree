@@ -1,29 +1,9 @@
 #include <valseg/brute_force_array.hpp>
-#include <valseg/detail/checked_size.hpp>
+#include <valseg/detail/sum_add_domain.hpp>
 #include <valseg/policy.hpp>
 
 #include <stdexcept>
 #include <utility>
-
-namespace {
-
-long long validateCanonicalSums(const std::vector<long long>& values, std::size_t left,
-                                std::size_t right) {
-  if (left == right) {
-    return values[left];
-  }
-  const std::size_t middle = valseg::detail::midpoint(left, right);
-  return valseg::checkedAdd(validateCanonicalSums(values, left, middle),
-                            validateCanonicalSums(values, middle + 1, right));
-}
-
-void validateCanonicalSums(const std::vector<long long>& values) {
-  if (!values.empty()) {
-    static_cast<void>(validateCanonicalSums(values, 0, values.size() - 1));
-  }
-}
-
-} // namespace
 
 namespace valseg {
 
@@ -48,7 +28,7 @@ Initialization
 void BruteForceArray::initialize(const std::vector<ValueType>& initial) {
   std::vector<std::vector<ValueType>> replacement;
   replacement.push_back(initial);
-  validateCanonicalSums(replacement.front());
+  detail::validateCanonicalSums(replacement.front());
   versions.swap(replacement);
 }
 
@@ -67,7 +47,7 @@ std::size_t BruteForceArray::rangeAdd(std::size_t baseVersion, std::size_t left,
   for (std::size_t i = left; i <= right; ++i) {
     next[i] = checkedAdd(next[i], value);
   }
-  validateCanonicalSums(next);
+  detail::validateCanonicalSums(next);
   versions.push_back(std::move(next));
 
   return versions.size() - 1;

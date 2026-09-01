@@ -33,6 +33,8 @@ void CheckpointingSegmentTree::initialize(const std::vector<ValueType>& values,
     throw std::invalid_argument("Checkpoint interval must be positive.");
   }
 
+  const detail::SumAddDomainGuard newNumericDomain(values);
+
   std::vector<Node> newLive;
   if (!values.empty()) {
     newLive.resize(detail::canonicalNodeCount(values.size()));
@@ -49,6 +51,7 @@ void CheckpointingSegmentTree::initialize(const std::vector<ValueType>& values,
   events.clear();
   interval = checkpointInterval;
   arraySize = values.size();
+  numericDomain = newNumericDomain;
 }
 
 /*
@@ -64,8 +67,13 @@ std::size_t CheckpointingSegmentTree::rangeAdd(std::size_t left, std::size_t rig
 
   const std::size_t version = detail::checkedSizeAdd(events.size(), 1);
   const bool takeCheckpoint = version % interval == 0;
+  detail::SumAddDomainGuard::Bound nextMagnitudeBound = 0;
 
   if (value != 0) {
+    nextMagnitudeBound = numericDomain.validateRangeAdd(
+        arraySize, left, right, value, [this](std::vector<ValueType>& values) {
+          materialize(live, 0, 0, arraySize - 1, 0, values);
+        });
     static_cast<void>(validateUpdate(live, 0, 0, arraySize - 1, left, right, value));
   }
 
@@ -86,6 +94,7 @@ std::size_t CheckpointingSegmentTree::rangeAdd(std::size_t left, std::size_t rig
     if (takeCheckpoint) {
       update(checkpoints.back().nodes, 0, 0, arraySize - 1, left, right, value);
     }
+    numericDomain.commit(nextMagnitudeBound);
   }
 
   return version;
@@ -287,6 +296,23 @@ CheckpointingSegmentTree::query(const std::vector<Node>& nodes, std::size_t node
       query(nodes, nodeIndex + 1, segmentLeft, middle, queryLeft, queryRight, nextLazy),
       query(nodes, rightChild(nodeIndex, segmentLeft, middle), middle + 1, segmentRight, queryLeft,
             queryRight, nextLazy));
+}
+
+void CheckpointingSegmentTree::materialize(const std::vector<Node>& nodes, std::size_t nodeIndex,
+                                           std::size_t segmentLeft, std::size_t segmentRight,
+                                           ValueType inheritedLazy,
+                                           std::vector<ValueType>& values) {
+  const Node& current = nodes[nodeIndex];
+  if (segmentLeft == segmentRight) {
+    values.push_back(SumAddPolicy::apply(inheritedLazy, current.sum, 1));
+    return;
+  }
+
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
+  const ValueType nextLazy = checkedAdd(inheritedLazy, current.lazy);
+  materialize(nodes, nodeIndex + 1, segmentLeft, middle, nextLazy, values);
+  materialize(nodes, rightChild(nodeIndex, segmentLeft, middle), middle + 1, segmentRight, nextLazy,
+              values);
 }
 
 /*

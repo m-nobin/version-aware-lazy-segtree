@@ -72,7 +72,12 @@ intermediate, canonical segment sum and retained lazy tag is representable as `l
 Out-of-domain initialization, update, or query operations throw `std::overflow_error`; failed
 writes leave the prior state and published history unchanged. Persistent updates apply to the
 latest version only, while queries read any published version. Persistent update time is amortized
-over arena growth; the bounds are proved in [docs/proof.md](docs/proof.md).
+over arena growth; the bounds are proved in [docs/proof.md](docs/proof.md). The update bounds in
+the table describe the structural algorithm and the constant-time numeric fast path. Lazy-tag
+implementations use a conservative magnitude envelope to prove the full logical array remains in
+domain; when that proof is inconclusive near `long long` boundaries, they run an `O(n)` read-only
+exact preflight before the normal update. This fallback preserves exact acceptance and rejection
+without enlarging the benchmarked node layouts.
 
 ## Build and verify
 
