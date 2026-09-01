@@ -1,4 +1,6 @@
 #include <valseg/buffered_path_copying_segment_tree.hpp>
+#include <valseg/detail/checked_size.hpp>
+#include <valseg/policy.hpp>
 
 #include <algorithm>
 #include <stdexcept>
@@ -31,7 +33,7 @@ void BufferedPathCopyingSegmentTree::initialize(const std::vector<ValueType>& va
   if (values.empty()) {
     newRoots.push_back(noNode);
   } else {
-    newNodes.reserve(2 * values.size() - 1);
+    newNodes.reserve(detail::canonicalNodeCount(values.size()));
     newRoots.push_back(build(values, newNodes, 0, values.size() - 1));
   }
 
@@ -121,12 +123,16 @@ std::size_t BufferedPathCopyingSegmentTree::build(const std::vector<ValueType>& 
     return arena.size() - 1;
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
   std::size_t leftRoot = build(values, arena, segmentLeft, middle);
   std::size_t rightRoot = build(values, arena, middle + 1, segmentRight);
 
-  arena.push_back(
-      Node{leftRoot, rightRoot, arena[leftRoot].baseSum + arena[rightRoot].baseSum, 0, 0, {}});
+  arena.push_back(Node{leftRoot,
+                       rightRoot,
+                       checkedAdd(arena[leftRoot].baseSum, arena[rightRoot].baseSum),
+                       0,
+                       0,
+                       {}});
   return arena.size() - 1;
 }
 
@@ -136,9 +142,9 @@ Segment Arithmetic
 =========================================================
 */
 
-BufferedPathCopyingSegmentTree::ValueType
-BufferedPathCopyingSegmentTree::segmentLength(std::size_t segmentLeft, std::size_t segmentRight) {
-  return static_cast<ValueType>(segmentRight) - static_cast<ValueType>(segmentLeft) + 1;
+std::size_t BufferedPathCopyingSegmentTree::segmentLength(std::size_t segmentLeft,
+                                                          std::size_t segmentRight) {
+  return detail::inclusiveLength(segmentLeft, segmentRight);
 }
 
 /*
@@ -154,8 +160,8 @@ BufferedPathCopyingSegmentTree::snapshotAt(const Node& node, std::size_t version
   Snapshot snapshot{node.baseSum, node.baseLazy};
   for (std::size_t i = 0; i < node.bufferSize; ++i) {
     if (node.buffer[i].version <= version) {
-      snapshot.sum += node.buffer[i].deltaSum;
-      snapshot.lazy += node.buffer[i].deltaLazy;
+      snapshot.sum = checkedAdd(snapshot.sum, node.buffer[i].deltaSum);
+      snapshot.lazy = checkedAdd(snapshot.lazy, node.buffer[i].deltaLazy);
     }
   }
   return snapshot;
@@ -169,6 +175,9 @@ Buffered Modification
 
 std::size_t BufferedPathCopyingSegmentTree::modify(std::size_t nodeIndex, std::size_t version,
                                                    ValueType deltaSum, ValueType deltaLazy) {
+  const Snapshot latest = snapshotAt(nodes[nodeIndex], version);
+  const ValueType nextSum = checkedAdd(latest.sum, deltaSum);
+  const ValueType nextLazy = checkedAdd(latest.lazy, deltaLazy);
   if (nodes[nodeIndex].bufferSize < bufferCapacity) {
     // Record the node before touching it so a failed record leaves nothing
     // to undo; then append the entry in place, tagged with the new version.
@@ -183,13 +192,7 @@ std::size_t BufferedPathCopyingSegmentTree::modify(std::size_t nodeIndex, std::s
   // flush every entry into the copy's base fields and start it with an empty
   // buffer. The old node keeps its buffer for the versions that reach it.
   const Node current = nodes[nodeIndex];
-  const Snapshot latest = snapshotAt(current, version);
-  nodes.push_back(Node{current.leftChild,
-                       current.rightChild,
-                       latest.sum + deltaSum,
-                       latest.lazy + deltaLazy,
-                       0,
-                       {}});
+  nodes.push_back(Node{current.leftChild, current.rightChild, nextSum, nextLazy, 0, {}});
   return nodes.size() - 1;
 }
 
@@ -203,19 +206,19 @@ std::size_t BufferedPathCopyingSegmentTree::update(std::size_t nodeIndex, std::s
                                                    std::size_t segmentLeft,
                                                    std::size_t segmentRight, std::size_t queryLeft,
                                                    std::size_t queryRight, ValueType value) {
-  const ValueType length = segmentLength(segmentLeft, segmentRight);
+  const std::size_t length = segmentLength(segmentLeft, segmentRight);
 
   if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
     // Full coverage: the node's own sum absorbs the delta and the lazy tag
     // defers it for descendants, so both shared children stay untouched.
-    return modify(nodeIndex, version, value * length, value);
+    return modify(nodeIndex, version, checkedMultiply(value, checkedLength(length)), value);
   }
 
   // Copy the node by value: appending copies below may reallocate the
   // arena and invalidate references into it.
   const Node current = nodes[nodeIndex];
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
   std::size_t newLeft = current.leftChild;
   std::size_t newRight = current.rightChild;
@@ -231,9 +234,9 @@ std::size_t BufferedPathCopyingSegmentTree::update(std::size_t nodeIndex, std::s
 
   // Partial coverage adds value to every element of the overlap and nothing
   // to this node's lazy tag.
-  const ValueType overlap =
+  const std::size_t overlap =
       segmentLength(std::max(segmentLeft, queryLeft), std::min(segmentRight, queryRight));
-  const ValueType deltaSum = value * overlap;
+  const ValueType deltaSum = checkedMultiply(value, checkedLength(overlap));
 
   if (newLeft == current.leftChild && newRight == current.rightChild) {
     // Both children absorbed their share in place, so this node can try to
@@ -245,7 +248,7 @@ std::size_t BufferedPathCopyingSegmentTree::update(std::size_t nodeIndex, std::s
   // copied too, with every entry flushed (all of them predate this version)
   // and the delta applied; the copy keeps its own lazy tag.
   const Snapshot latest = snapshotAt(current, version);
-  nodes.push_back(Node{newLeft, newRight, latest.sum + deltaSum, latest.lazy, 0, {}});
+  nodes.push_back(Node{newLeft, newRight, checkedAdd(latest.sum, deltaSum), latest.lazy, 0, {}});
   return nodes.size() - 1;
 }
 
@@ -268,18 +271,19 @@ BufferedPathCopyingSegmentTree::ValueType BufferedPathCopyingSegmentTree::query(
   if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
     // The node's own lazy value is already included in its sum, so full
     // coverage adds only the lazy values inherited from ancestors.
-    return state.sum + inheritedLazy * segmentLength(segmentLeft, segmentRight);
+    return SumAddPolicy::apply(inheritedLazy, state.sum, segmentLength(segmentLeft, segmentRight));
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
   // Lazy values are accumulated on the way down instead of pushed into
   // children because children are shared with other versions.
-  const ValueType nextLazy = inheritedLazy + state.lazy;
+  const ValueType nextLazy = checkedAdd(inheritedLazy, state.lazy);
 
-  return query(current.leftChild, version, segmentLeft, middle, queryLeft, queryRight, nextLazy) +
-         query(current.rightChild, version, middle + 1, segmentRight, queryLeft, queryRight,
-               nextLazy);
+  return checkedAdd(
+      query(current.leftChild, version, segmentLeft, middle, queryLeft, queryRight, nextLazy),
+      query(current.rightChild, version, middle + 1, segmentRight, queryLeft, queryRight,
+            nextLazy));
 }
 
 /*

@@ -1,6 +1,9 @@
 #ifndef VALSEG_BENCH_COPY_ON_PUSH_SEGMENT_TREE_HPP
 #define VALSEG_BENCH_COPY_ON_PUSH_SEGMENT_TREE_HPP
 
+#include <valseg/detail/checked_size.hpp>
+#include <valseg/policy.hpp>
+
 #include <cstddef>
 #include <stdexcept>
 #include <vector>
@@ -28,6 +31,11 @@ namespace valseg::bench {
  * measurement subject, not part of the library. Every campaign replays it
  * against the same cross-structure checksum as the seven library structures,
  * and the CTest smoke run does the same at n = 256.
+ *
+ * Numeric domain: every stored long long element, canonical segment sum,
+ * retained lazy tag and evaluated arithmetic intermediate must be exactly
+ * representable. An out-of-domain initialization, update or query throws
+ * std::overflow_error; failed writes publish no version or node.
  */
 class CopyOnPushSegmentTree {
 public:
@@ -37,6 +45,8 @@ public:
    * @brief Build version 0 from an array.
    *
    * @param values Initial array; may be empty.
+   * @throws std::overflow_error A canonical segment sum is not representable;
+   *                             the previous versions are left unchanged.
    */
   void initialize(const std::vector<ValueType>& values) {
     std::vector<Node> newNodes;
@@ -44,7 +54,7 @@ public:
     if (values.empty()) {
       newRoots.push_back(noNode);
     } else {
-      newNodes.reserve(2 * values.size() - 1);
+      newNodes.reserve(detail::canonicalNodeCount(values.size()));
       newRoots.push_back(build(values, newNodes, 0, values.size() - 1));
     }
     nodes.swap(newNodes);
@@ -62,6 +72,8 @@ public:
    * @throws std::runtime_error   No version exists, or the structure is empty.
    * @throws std::invalid_argument left is greater than right.
    * @throws std::out_of_range     right is not smaller than size().
+   * @throws std::overflow_error   The update leaves the numeric domain; no
+   *                               version or node is published.
    */
   std::size_t rangeAdd(std::size_t left, std::size_t right, ValueType value) {
     validate(left, right);
@@ -88,6 +100,7 @@ public:
    * @param right   Right index, inclusive.
    * @return The historical sum.
    * @throws std::out_of_range version does not exist, or right is too large.
+   * @throws std::overflow_error The exact requested sum is not representable.
    */
   ValueType rangeSum(std::size_t version, std::size_t left, std::size_t right) const {
     if (version >= roots.size()) {
@@ -142,8 +155,8 @@ private:
   std::vector<std::size_t> roots;
   std::size_t arraySize = 0;
 
-  static ValueType span(std::size_t left, std::size_t right) {
-    return static_cast<ValueType>(right) - static_cast<ValueType>(left) + 1;
+  static std::size_t span(std::size_t left, std::size_t right) {
+    return detail::inclusiveLength(left, right);
   }
 
   static std::size_t build(const std::vector<ValueType>& values, std::vector<Node>& arena,
@@ -152,10 +165,11 @@ private:
       arena.push_back(Node{noNode, noNode, values[segmentLeft], 0});
       return arena.size() - 1;
     }
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
+    const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
     const std::size_t leftRoot = build(values, arena, segmentLeft, middle);
     const std::size_t rightRoot = build(values, arena, middle + 1, segmentRight);
-    arena.push_back(Node{leftRoot, rightRoot, arena[leftRoot].sum + arena[rightRoot].sum, 0});
+    arena.push_back(
+        Node{leftRoot, rightRoot, checkedAdd(arena[leftRoot].sum, arena[rightRoot].sum), 0});
     return arena.size() - 1;
   }
 
@@ -164,25 +178,26 @@ private:
    * tag so the copy's descendants still inherit it. This is the push: it
    * allocates a node the non-pushed policy does not.
    */
-  std::size_t pushInto(std::size_t source, ValueType tag, ValueType length) {
+  std::size_t pushInto(std::size_t source, ValueType tag, std::size_t length) {
     const Node child = nodes[source];
-    nodes.push_back(
-        Node{child.leftChild, child.rightChild, child.sum + tag * length, child.lazy + tag});
+    nodes.push_back(Node{child.leftChild, child.rightChild,
+                         SumAddPolicy::apply(tag, child.sum, length), checkedAdd(child.lazy, tag)});
     return nodes.size() - 1;
   }
 
   std::size_t update(std::size_t nodeIndex, std::size_t segmentLeft, std::size_t segmentRight,
                      std::size_t queryLeft, std::size_t queryRight, ValueType value) {
     const Node current = nodes[nodeIndex];
-    const ValueType length = span(segmentLeft, segmentRight);
+    const std::size_t length = span(segmentLeft, segmentRight);
 
     if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
-      nodes.push_back(Node{current.leftChild, current.rightChild, current.sum + value * length,
-                           current.lazy + value});
+      nodes.push_back(Node{current.leftChild, current.rightChild,
+                           SumAddPolicy::apply(value, current.sum, length),
+                           checkedAdd(current.lazy, value)});
       return nodes.size() - 1;
     }
 
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
+    const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
     std::size_t leftChild = current.leftChild;
     std::size_t rightChild = current.rightChild;
@@ -202,7 +217,8 @@ private:
 
     // The tag was pushed, so the copied parent carries none and its sum is
     // exactly the two child sums.
-    nodes.push_back(Node{newLeft, newRight, nodes[newLeft].sum + nodes[newRight].sum, 0});
+    nodes.push_back(
+        Node{newLeft, newRight, checkedAdd(nodes[newLeft].sum, nodes[newRight].sum), 0});
     return nodes.size() - 1;
   }
 
@@ -213,12 +229,13 @@ private:
     }
     const Node& current = nodes[nodeIndex];
     if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
-      return current.sum + inherited * span(segmentLeft, segmentRight);
+      return SumAddPolicy::apply(inherited, current.sum, span(segmentLeft, segmentRight));
     }
-    const std::size_t middle = (segmentLeft + segmentRight) / 2;
-    const ValueType next = inherited + current.lazy;
-    return query(current.leftChild, segmentLeft, middle, queryLeft, queryRight, next) +
-           query(current.rightChild, middle + 1, segmentRight, queryLeft, queryRight, next);
+    const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
+    const ValueType next = checkedAdd(inherited, current.lazy);
+    return checkedAdd(
+        query(current.leftChild, segmentLeft, middle, queryLeft, queryRight, next),
+        query(current.rightChild, middle + 1, segmentRight, queryLeft, queryRight, next));
   }
 
   void validate(std::size_t left, std::size_t right) const {

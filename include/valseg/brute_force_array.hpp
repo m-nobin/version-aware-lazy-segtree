@@ -15,6 +15,13 @@ namespace valseg {
  * This implementation prioritizes correctness over performance
  * and serves as the correctness oracle for validating the
  * partially persistent segment tree.
+ *
+ * Numeric domain: values model mathematical signed integers in a long long
+ * representation. Initialization and updates are accepted only when every
+ * element, canonical segment sum and evaluated arithmetic intermediate is
+ * representable. Queries apply the same rule to the requested sum. An
+ * unrepresentable operation throws std::overflow_error before changing the
+ * stored history.
  */
 class BruteForceArray {
 public:
@@ -34,6 +41,7 @@ public:
    * @param initial Initial array.
    *
    * @throws std::bad_alloc Allocation of the initial version failed.
+   * @throws std::overflow_error A canonical segment sum is not representable.
    */
   explicit BruteForceArray(const std::vector<ValueType>& initial);
 
@@ -46,14 +54,16 @@ public:
    *
    * @throws std::bad_alloc Allocation of the replacement version failed; the
    *                        previous history is left unchanged.
+   * @throws std::overflow_error A canonical segment sum is not representable;
+   *                             the previous history is left unchanged.
    */
   void initialize(const std::vector<ValueType>& initial);
 
   /**
    * @brief Perform a range addition on a copied version.
    *
-   * A new version is first created from baseVersion,
-   * then value is added to every element in [left, right].
+   * A replacement version is copied from baseVersion, updated and validated
+   * before it is published.
    *
    * @param baseVersion Version to copy.
    * @param left Left index (inclusive).
@@ -65,6 +75,8 @@ public:
    * @throws std::out_of_range      baseVersion is not a stored version, or
    *                                right is not smaller than size().
    * @throws std::invalid_argument  left is greater than right.
+   * @throws std::overflow_error    An updated value or canonical segment sum
+   *                                is not representable; no version is added.
    */
   std::size_t rangeAdd(std::size_t baseVersion, std::size_t left, std::size_t right,
                        ValueType value);
@@ -81,6 +93,7 @@ public:
    * @throws std::out_of_range      version is not a stored version, or right
    *                                is not smaller than size().
    * @throws std::invalid_argument  left is greater than right.
+   * @throws std::overflow_error    The exact requested sum is not representable.
    */
   ValueType rangeSum(std::size_t version, std::size_t left, std::size_t right) const;
 
@@ -110,18 +123,6 @@ public:
   std::size_t size() const;
 
 private:
-  /**
-   * @brief Create a new version by copying an existing version.
-   *
-   * Used internally by rangeAdd(). This function is kept private
-   * to prevent callers from creating duplicate versions without
-   * applying any update.
-   *
-   * @param baseVersion Version to copy.
-   * @return Index of the newly created version.
-   */
-  std::size_t createVersion(std::size_t baseVersion);
-
   /**
    * Each entry stores one complete array version.
    */

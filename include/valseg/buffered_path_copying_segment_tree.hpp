@@ -60,6 +60,11 @@ namespace valseg {
  *
  * Retained space after U non-zero updates: 2n - 1 + sum of c_i nodes with
  * 0 <= c_i <= |P_i|, i.e. O(n + U log n) worst case, at 88 bytes per node.
+ *
+ * Numeric domain: every stored long long element, canonical segment sum,
+ * buffered or base lazy tag and evaluated arithmetic intermediate must be
+ * exactly representable. An out-of-domain initialization, update or query
+ * throws std::overflow_error; failed writes are rolled back completely.
  */
 class BufferedPathCopyingSegmentTree {
 public:
@@ -77,6 +82,8 @@ public:
    * @brief Construct version 0 from an initial array.
    *
    * @param values Initial array; may be empty.
+   *
+   * @throws std::overflow_error A canonical segment sum is not representable.
    */
   explicit BufferedPathCopyingSegmentTree(const std::vector<ValueType>& values);
 
@@ -87,6 +94,9 @@ public:
    * succeeds, so a failed initialization leaves the tree unchanged.
    *
    * @param values Initial array; may be empty.
+   *
+   * @throws std::overflow_error A canonical segment sum is not representable;
+   *                             the previous versions are left unchanged.
    */
   void initialize(const std::vector<ValueType>& values);
 
@@ -109,6 +119,8 @@ public:
    * @throws std::runtime_error     No initialized version or empty structure.
    * @throws std::invalid_argument  left is greater than right.
    * @throws std::out_of_range      right is not smaller than size().
+   * @throws std::overflow_error    The update leaves the numeric domain; no
+   *                                version, node or buffer entry is published.
    */
   std::size_t rangeAdd(std::size_t left, std::size_t right, ValueType value);
 
@@ -127,6 +139,7 @@ public:
    * @throws std::out_of_range      Invalid version number.
    * @throws std::invalid_argument  left is greater than right.
    * @throws std::out_of_range      right is not smaller than size().
+   * @throws std::overflow_error    The exact requested sum is not representable.
    */
   ValueType rangeSum(std::size_t version, std::size_t left, std::size_t right) const;
 
@@ -260,7 +273,7 @@ private:
                   std::size_t segmentRight, std::size_t queryLeft, std::size_t queryRight,
                   ValueType inheritedLazy) const;
 
-  static ValueType segmentLength(std::size_t segmentLeft, std::size_t segmentRight);
+  static std::size_t segmentLength(std::size_t segmentLeft, std::size_t segmentRight);
 
   void validateInitialized() const;
   void validateVersion(std::size_t version) const;

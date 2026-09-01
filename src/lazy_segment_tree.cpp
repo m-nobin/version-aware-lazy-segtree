@@ -1,4 +1,6 @@
+#include <valseg/detail/checked_size.hpp>
 #include <valseg/lazy_segment_tree.hpp>
+#include <valseg/policy.hpp>
 
 #include <stdexcept>
 
@@ -23,14 +25,15 @@ Initialization
 */
 
 void LazySegmentTree::initialize(const std::vector<ValueType>& values) {
-  arraySize = values.size();
-
-  tree.assign(4 * arraySize, 0);
-  lazy.assign(4 * arraySize, 0);
-
-  if (arraySize > 0) {
-    build(values, 0, 0, arraySize - 1);
+  const std::size_t storageCount = detail::lazyStorageCount(values.size());
+  std::vector<ValueType> newTree(storageCount, 0);
+  std::vector<ValueType> newLazy(storageCount, 0);
+  if (!values.empty()) {
+    build(values, newTree, 0, 0, values.size() - 1);
   }
+  tree.swap(newTree);
+  lazy.swap(newLazy);
+  arraySize = values.size();
 }
 
 /*
@@ -41,14 +44,17 @@ Public Operations
 
 void LazySegmentTree::rangeAdd(std::size_t left, std::size_t right, ValueType value) {
   validateRange(left, right);
-
+  if (value == 0) {
+    return;
+  }
+  static_cast<void>(validateUpdate(0, 0, arraySize - 1, left, right, value));
   update(0, 0, arraySize - 1, left, right, value);
 }
 
-LazySegmentTree::ValueType LazySegmentTree::rangeSum(std::size_t left, std::size_t right) {
+LazySegmentTree::ValueType LazySegmentTree::rangeSum(std::size_t left, std::size_t right) const {
   validateRange(left, right);
 
-  return query(0, 0, arraySize - 1, left, right);
+  return query(0, 0, arraySize - 1, left, right, 0);
 }
 
 std::size_t LazySegmentTree::size() const {
@@ -61,42 +67,48 @@ Build
 =========================================================
 */
 
-void LazySegmentTree::build(const std::vector<ValueType>& values, std::size_t node,
-                            std::size_t segmentLeft, std::size_t segmentRight) {
+void LazySegmentTree::build(const std::vector<ValueType>& values, std::vector<ValueType>& sums,
+                            std::size_t node, std::size_t segmentLeft, std::size_t segmentRight) {
   if (segmentLeft == segmentRight) {
-    tree[node] = values[segmentLeft];
+    sums[node] = values[segmentLeft];
     return;
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
-  build(values, 2 * node + 1, segmentLeft, middle);
+  build(values, sums, 2 * node + 1, segmentLeft, middle);
 
-  build(values, 2 * node + 2, middle + 1, segmentRight);
+  build(values, sums, 2 * node + 2, middle + 1, segmentRight);
 
-  tree[node] = tree[2 * node + 1] + tree[2 * node + 2];
+  sums[node] = checkedAdd(sums[2 * node + 1], sums[2 * node + 2]);
 }
 
 /*
 =========================================================
-Lazy Push
+Update Preflight
 =========================================================
 */
 
-void LazySegmentTree::push(std::size_t node, std::size_t segmentLeft, std::size_t segmentRight) {
-  if (lazy[node] == 0)
-    return;
-
-  // Explicit conversion: segment length is always positive and fits in
-  // ValueType (long long), so static_cast<ValueType> is safe here.
-  tree[node] += static_cast<ValueType>(segmentRight - segmentLeft + 1) * lazy[node];
-
-  if (segmentLeft != segmentRight) {
-    lazy[2 * node + 1] += lazy[node];
-    lazy[2 * node + 2] += lazy[node];
+LazySegmentTree::ValueType
+LazySegmentTree::validateUpdate(std::size_t node, std::size_t segmentLeft, std::size_t segmentRight,
+                                std::size_t queryLeft, std::size_t queryRight,
+                                ValueType value) const {
+  const std::size_t length = detail::inclusiveLength(segmentLeft, segmentRight);
+  if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
+    static_cast<void>(checkedAdd(lazy[node], value));
+    return SumAddPolicy::apply(value, tree[node], length);
   }
 
-  lazy[node] = 0;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
+  ValueType leftSum = tree[2 * node + 1];
+  ValueType rightSum = tree[2 * node + 2];
+  if (queryLeft <= middle) {
+    leftSum = validateUpdate(2 * node + 1, segmentLeft, middle, queryLeft, queryRight, value);
+  }
+  if (queryRight > middle) {
+    rightSum = validateUpdate(2 * node + 2, middle + 1, segmentRight, queryLeft, queryRight, value);
+  }
+  return SumAddPolicy::apply(lazy[node], checkedAdd(leftSum, rightSum), length);
 }
 
 /*
@@ -107,27 +119,25 @@ Range Update
 
 void LazySegmentTree::update(std::size_t node, std::size_t segmentLeft, std::size_t segmentRight,
                              std::size_t queryLeft, std::size_t queryRight, ValueType value) {
-  push(node, segmentLeft, segmentRight);
-
-  if (segmentRight < queryLeft || segmentLeft > queryRight) {
-    return;
-  }
-
+  const std::size_t length = detail::inclusiveLength(segmentLeft, segmentRight);
   if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
-    lazy[node] += value;
-
-    push(node, segmentLeft, segmentRight);
-
+    tree[node] = SumAddPolicy::apply(value, tree[node], length);
+    lazy[node] = checkedAdd(lazy[node], value);
     return;
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
-  update(2 * node + 1, segmentLeft, middle, queryLeft, queryRight, value);
+  if (queryLeft <= middle) {
+    update(2 * node + 1, segmentLeft, middle, queryLeft, queryRight, value);
+  }
 
-  update(2 * node + 2, middle + 1, segmentRight, queryLeft, queryRight, value);
+  if (queryRight > middle) {
+    update(2 * node + 2, middle + 1, segmentRight, queryLeft, queryRight, value);
+  }
 
-  tree[node] = tree[2 * node + 1] + tree[2 * node + 2];
+  tree[node] =
+      SumAddPolicy::apply(lazy[node], checkedAdd(tree[2 * node + 1], tree[2 * node + 2]), length);
 }
 
 /*
@@ -138,21 +148,22 @@ Range Query
 
 LazySegmentTree::ValueType LazySegmentTree::query(std::size_t node, std::size_t segmentLeft,
                                                   std::size_t segmentRight, std::size_t queryLeft,
-                                                  std::size_t queryRight) {
-  push(node, segmentLeft, segmentRight);
-
+                                                  std::size_t queryRight,
+                                                  ValueType inheritedLazy) const {
   if (segmentRight < queryLeft || segmentLeft > queryRight) {
     return 0;
   }
 
   if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
-    return tree[node];
+    return SumAddPolicy::apply(inheritedLazy, tree[node],
+                               detail::inclusiveLength(segmentLeft, segmentRight));
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
+  const ValueType nextLazy = checkedAdd(inheritedLazy, lazy[node]);
 
-  return query(2 * node + 1, segmentLeft, middle, queryLeft, queryRight) +
-         query(2 * node + 2, middle + 1, segmentRight, queryLeft, queryRight);
+  return checkedAdd(query(2 * node + 1, segmentLeft, middle, queryLeft, queryRight, nextLazy),
+                    query(2 * node + 2, middle + 1, segmentRight, queryLeft, queryRight, nextLazy));
 }
 
 /*

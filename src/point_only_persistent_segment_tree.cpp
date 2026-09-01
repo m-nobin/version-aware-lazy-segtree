@@ -1,4 +1,6 @@
+#include <valseg/detail/checked_size.hpp>
 #include <valseg/point_only_persistent_segment_tree.hpp>
+#include <valseg/policy.hpp>
 
 #include <stdexcept>
 
@@ -30,7 +32,7 @@ void PointOnlyPersistentSegmentTree::initialize(const std::vector<ValueType>& va
   if (values.empty()) {
     newRoots.push_back(noNode);
   } else {
-    newNodes.reserve(2 * values.size() - 1);
+    newNodes.reserve(detail::canonicalNodeCount(values.size()));
     newRoots.push_back(build(values, newNodes, 0, values.size() - 1));
   }
 
@@ -111,11 +113,11 @@ std::size_t PointOnlyPersistentSegmentTree::build(const std::vector<ValueType>& 
     return arena.size() - 1;
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
   std::size_t leftRoot = build(values, arena, segmentLeft, middle);
   std::size_t rightRoot = build(values, arena, middle + 1, segmentRight);
 
-  arena.push_back(Node{leftRoot, rightRoot, arena[leftRoot].sum + arena[rightRoot].sum});
+  arena.push_back(Node{leftRoot, rightRoot, checkedAdd(arena[leftRoot].sum, arena[rightRoot].sum)});
   return arena.size() - 1;
 }
 
@@ -137,11 +139,11 @@ PointOnlyPersistentSegmentTree::pointOnlyUpdate(std::size_t nodeIndex, std::size
     // Leaf: the recursion guards below only descend into segments that
     // intersect [queryLeft, queryRight], so this leaf is inside the range.
     // Copy it with the delta applied.
-    nodes.push_back(Node{noNode, noNode, current.sum + value});
+    nodes.push_back(Node{noNode, noNode, checkedAdd(current.sum, value)});
     return nodes.size() - 1;
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
   std::size_t newLeft = current.leftChild;
   std::size_t newRight = current.rightChild;
@@ -160,7 +162,7 @@ PointOnlyPersistentSegmentTree::pointOnlyUpdate(std::size_t nodeIndex, std::size
   }
 
   // The sum of the new node is the sum of its (new or shared) children.
-  nodes.push_back(Node{newLeft, newRight, nodes[newLeft].sum + nodes[newRight].sum});
+  nodes.push_back(Node{newLeft, newRight, checkedAdd(nodes[newLeft].sum, nodes[newRight].sum)});
   return nodes.size() - 1;
 }
 
@@ -184,10 +186,10 @@ PointOnlyPersistentSegmentTree::query(std::size_t nodeIndex, std::size_t segment
     return current.sum;
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
-  return query(current.leftChild, segmentLeft, middle, queryLeft, queryRight) +
-         query(current.rightChild, middle + 1, segmentRight, queryLeft, queryRight);
+  return checkedAdd(query(current.leftChild, segmentLeft, middle, queryLeft, queryRight),
+                    query(current.rightChild, middle + 1, segmentRight, queryLeft, queryRight));
 }
 
 /*

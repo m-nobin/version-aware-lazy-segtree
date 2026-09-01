@@ -141,9 +141,9 @@ inline long long checkedLength(std::size_t length) {
  *
  * The abstract policy uses mathematical integers. This C++ witness stores them
  * as long long and throws std::overflow_error if an exact result is not
- * representable. Existing production structures have the same representability
- * precondition on their public operations; this policy makes failure explicit
- * without changing their valid-input behavior.
+ * representable. The production SumAdd structures use the same checked
+ * operations and reject an out-of-domain initialization, update or query with
+ * std::overflow_error before publishing a changed state.
  *
  * Induced action transformations x -> x + d * len commute, so the
  * tag-retaining persistent tree supports this policy. A logged range-add's

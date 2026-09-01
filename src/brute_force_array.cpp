@@ -1,6 +1,29 @@
 #include <valseg/brute_force_array.hpp>
+#include <valseg/detail/checked_size.hpp>
+#include <valseg/policy.hpp>
 
 #include <stdexcept>
+#include <utility>
+
+namespace {
+
+long long validateCanonicalSums(const std::vector<long long>& values, std::size_t left,
+                                std::size_t right) {
+  if (left == right) {
+    return values[left];
+  }
+  const std::size_t middle = valseg::detail::midpoint(left, right);
+  return valseg::checkedAdd(validateCanonicalSums(values, left, middle),
+                            validateCanonicalSums(values, middle + 1, right));
+}
+
+void validateCanonicalSums(const std::vector<long long>& values) {
+  if (!values.empty()) {
+    static_cast<void>(validateCanonicalSums(values, 0, values.size() - 1));
+  }
+}
+
+} // namespace
 
 namespace valseg {
 
@@ -23,22 +46,10 @@ Initialization
 */
 
 void BruteForceArray::initialize(const std::vector<ValueType>& initial) {
-  versions.clear();
-  versions.push_back(initial);
-}
-
-/*
-=========================================================
-Version Management
-=========================================================
-*/
-
-std::size_t BruteForceArray::createVersion(std::size_t baseVersion) {
-  validateVersion(baseVersion);
-
-  versions.push_back(versions[baseVersion]);
-
-  return versions.size() - 1;
+  std::vector<std::vector<ValueType>> replacement;
+  replacement.push_back(initial);
+  validateCanonicalSums(replacement.front());
+  versions.swap(replacement);
 }
 
 /*
@@ -52,13 +63,14 @@ std::size_t BruteForceArray::rangeAdd(std::size_t baseVersion, std::size_t left,
   validateVersion(baseVersion);
   validateRange(baseVersion, left, right);
 
-  std::size_t newVersion = createVersion(baseVersion);
-
+  std::vector<ValueType> next = versions[baseVersion];
   for (std::size_t i = left; i <= right; ++i) {
-    versions[newVersion][i] += value;
+    next[i] = checkedAdd(next[i], value);
   }
+  validateCanonicalSums(next);
+  versions.push_back(std::move(next));
 
-  return newVersion;
+  return versions.size() - 1;
 }
 
 /*
@@ -75,7 +87,7 @@ BruteForceArray::ValueType BruteForceArray::rangeSum(std::size_t version, std::s
   ValueType sum = 0;
 
   for (std::size_t i = left; i <= right; ++i) {
-    sum += versions[version][i];
+    sum = checkedAdd(sum, versions[version][i]);
   }
 
   return sum;

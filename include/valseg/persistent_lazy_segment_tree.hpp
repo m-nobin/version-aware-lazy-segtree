@@ -27,6 +27,13 @@ namespace valseg {
  *  Range Add:        O(log n), appending O(log n) copied nodes
  *  Zero-delta Add:   O(1), reusing the latest root
  *  Historical Sum:   O(log n), allocation-free
+ *
+ * Numeric domain: values model mathematical signed integers in a long long
+ * representation. Initialization and updates require every canonical segment
+ * sum, retained lazy tag and evaluated arithmetic intermediate to be
+ * representable. Queries require the same of the requested sum. Otherwise
+ * std::overflow_error is thrown, and a failed initialization or update
+ * publishes nothing and leaves every existing version unchanged.
  */
 class PersistentLazySegmentTree {
 public:
@@ -44,6 +51,8 @@ public:
    * @brief Construct version 0 from an initial array.
    *
    * @param values Initial array; an empty array publishes an empty version 0.
+   *
+   * @throws std::overflow_error A canonical segment sum is not representable.
    */
   explicit PersistentLazySegmentTree(const std::vector<ValueType>& values);
 
@@ -54,6 +63,9 @@ public:
    * succeeds, so a failed initialization leaves the tree unchanged.
    *
    * @param values Initial array; an empty array publishes an empty version 0.
+   *
+   * @throws std::overflow_error A canonical segment sum is not representable;
+   *                             the previous versions are left unchanged.
    */
   void initialize(const std::vector<ValueType>& values);
 
@@ -73,6 +85,8 @@ public:
    * @throws std::runtime_error     No initialized version or empty structure.
    * @throws std::invalid_argument  left is greater than right.
    * @throws std::out_of_range      right is not smaller than size().
+   * @throws std::overflow_error    The update leaves the numeric domain; no
+   *                                version or node is published.
    */
   std::size_t rangeAdd(std::size_t left, std::size_t right, ValueType value);
 
@@ -91,6 +105,7 @@ public:
    * @throws std::out_of_range      Invalid version number.
    * @throws std::invalid_argument  left is greater than right.
    * @throws std::out_of_range      right is not smaller than size().
+   * @throws std::overflow_error    The exact requested sum is not representable.
    */
   ValueType rangeSum(std::size_t version, std::size_t left, std::size_t right) const;
 
@@ -168,7 +183,7 @@ private:
   static std::size_t build(const std::vector<ValueType>& values, std::vector<Node>& arena,
                            std::size_t segmentLeft, std::size_t segmentRight);
 
-  static ValueType segmentLength(std::size_t segmentLeft, std::size_t segmentRight);
+  static std::size_t segmentLength(std::size_t segmentLeft, std::size_t segmentRight);
 
   std::size_t update(std::size_t nodeIndex, std::size_t segmentLeft, std::size_t segmentRight,
                      std::size_t queryLeft, std::size_t queryRight, ValueType value);

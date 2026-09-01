@@ -1,4 +1,6 @@
 #include <valseg/checkpointing_segment_tree.hpp>
+#include <valseg/detail/checked_size.hpp>
+#include <valseg/policy.hpp>
 
 #include <algorithm>
 #include <stdexcept>
@@ -33,7 +35,7 @@ void CheckpointingSegmentTree::initialize(const std::vector<ValueType>& values,
 
   std::vector<Node> newLive;
   if (!values.empty()) {
-    newLive.resize(2 * values.size() - 1);
+    newLive.resize(detail::canonicalNodeCount(values.size()));
     build(values, newLive, 0, 0, values.size() - 1);
   }
 
@@ -60,8 +62,12 @@ std::size_t CheckpointingSegmentTree::rangeAdd(std::size_t left, std::size_t rig
   validateInitialized();
   validateRange(left, right);
 
-  const std::size_t version = events.size() + 1;
+  const std::size_t version = detail::checkedSizeAdd(events.size(), 1);
   const bool takeCheckpoint = version % interval == 0;
+
+  if (value != 0) {
+    static_cast<void>(validateUpdate(live, 0, 0, arraySize - 1, left, right, value));
+  }
 
   // Allocate first and mutate last, so a failed update publishes nothing:
   // the checkpoint is copied before the update and receives it below.
@@ -109,7 +115,7 @@ CheckpointingSegmentTree::rangeSum(std::size_t version, std::size_t left, std::s
     const std::size_t overlapLeft = std::max(left, event.left);
     const std::size_t overlapRight = std::min(right, event.right);
     if (overlapLeft <= overlapRight) {
-      sum += event.value * segmentLength(overlapLeft, overlapRight);
+      sum = SumAddPolicy::apply(event.value, sum, segmentLength(overlapLeft, overlapRight));
     }
   }
 
@@ -123,7 +129,7 @@ Accessors
 */
 
 std::size_t CheckpointingSegmentTree::versionCount() const {
-  return checkpoints.empty() ? 0 : events.size() + 1;
+  return checkpoints.empty() ? 0 : detail::checkedSizeAdd(events.size(), 1);
 }
 
 std::size_t CheckpointingSegmentTree::size() const {
@@ -131,7 +137,10 @@ std::size_t CheckpointingSegmentTree::size() const {
 }
 
 std::size_t CheckpointingSegmentTree::nodeCount() const {
-  return live.size() + checkpoints.size() * live.size() + events.size();
+  return detail::checkedSizeAdd(
+      detail::checkedSizeAdd(live.size(),
+                             detail::checkedSizeMultiply(checkpoints.size(), live.size())),
+      events.size());
 }
 
 std::size_t CheckpointingSegmentTree::checkpointCount() const {
@@ -144,10 +153,9 @@ Layout Helpers
 =========================================================
 */
 
-CheckpointingSegmentTree::ValueType
-CheckpointingSegmentTree::segmentLength(std::size_t segmentLeft, std::size_t segmentRight) {
-  // Indices always fit in ValueType, so the arithmetic stays in the signed type.
-  return static_cast<ValueType>(segmentRight) - static_cast<ValueType>(segmentLeft) + 1;
+std::size_t CheckpointingSegmentTree::segmentLength(std::size_t segmentLeft,
+                                                    std::size_t segmentRight) {
+  return detail::inclusiveLength(segmentLeft, segmentRight);
 }
 
 std::size_t CheckpointingSegmentTree::rightChild(std::size_t nodeIndex, std::size_t segmentLeft,
@@ -155,7 +163,8 @@ std::size_t CheckpointingSegmentTree::rightChild(std::size_t nodeIndex, std::siz
   // The left subtree over [segmentLeft, middle] occupies the
   // 2(middle - segmentLeft + 1) - 1 slots directly after nodeIndex, so the
   // right child comes right after them.
-  return nodeIndex + 2 * (middle - segmentLeft + 1);
+  return detail::checkedSizeAdd(
+      nodeIndex, detail::checkedSizeMultiply(2, detail::inclusiveLength(segmentLeft, middle)));
 }
 
 /*
@@ -172,14 +181,14 @@ void CheckpointingSegmentTree::build(const std::vector<ValueType>& values, std::
     return;
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
   const std::size_t leftIndex = nodeIndex + 1;
   const std::size_t rightIndex = rightChild(nodeIndex, segmentLeft, middle);
 
   build(values, nodes, leftIndex, segmentLeft, middle);
   build(values, nodes, rightIndex, middle + 1, segmentRight);
 
-  nodes[nodeIndex] = Node{nodes[leftIndex].sum + nodes[rightIndex].sum, 0};
+  nodes[nodeIndex] = Node{checkedAdd(nodes[leftIndex].sum, nodes[rightIndex].sum), 0};
 }
 
 /*
@@ -201,12 +210,12 @@ void CheckpointingSegmentTree::update(std::vector<Node>& nodes, std::size_t node
   if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
     // Full coverage: the node's own sum absorbs the delta and the lazy tag
     // records it for the children, which are never pushed to.
-    current.sum += value * segmentLength(segmentLeft, segmentRight);
-    current.lazy += value;
+    current.sum = SumAddPolicy::apply(value, current.sum, segmentLength(segmentLeft, segmentRight));
+    current.lazy = checkedAdd(current.lazy, value);
     return;
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
   const std::size_t leftIndex = nodeIndex + 1;
   const std::size_t rightIndex = rightChild(nodeIndex, segmentLeft, middle);
 
@@ -214,8 +223,34 @@ void CheckpointingSegmentTree::update(std::vector<Node>& nodes, std::size_t node
   update(nodes, rightIndex, middle + 1, segmentRight, queryLeft, queryRight, value);
 
   // Child sums exclude this node's tag, so sum = left.sum + right.sum + lazy * length.
-  current.sum = nodes[leftIndex].sum + nodes[rightIndex].sum +
-                current.lazy * segmentLength(segmentLeft, segmentRight);
+  current.sum =
+      SumAddPolicy::apply(current.lazy, checkedAdd(nodes[leftIndex].sum, nodes[rightIndex].sum),
+                          segmentLength(segmentLeft, segmentRight));
+}
+
+CheckpointingSegmentTree::ValueType CheckpointingSegmentTree::validateUpdate(
+    const std::vector<Node>& nodes, std::size_t nodeIndex, std::size_t segmentLeft,
+    std::size_t segmentRight, std::size_t queryLeft, std::size_t queryRight, ValueType value) {
+  const Node& current = nodes[nodeIndex];
+  if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
+    static_cast<void>(checkedAdd(current.lazy, value));
+    return SumAddPolicy::apply(value, current.sum, segmentLength(segmentLeft, segmentRight));
+  }
+
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
+  const std::size_t leftIndex = nodeIndex + 1;
+  const std::size_t rightIndex = rightChild(nodeIndex, segmentLeft, middle);
+  ValueType leftSum = nodes[leftIndex].sum;
+  ValueType rightSum = nodes[rightIndex].sum;
+  if (queryLeft <= middle) {
+    leftSum = validateUpdate(nodes, leftIndex, segmentLeft, middle, queryLeft, queryRight, value);
+  }
+  if (queryRight > middle) {
+    rightSum =
+        validateUpdate(nodes, rightIndex, middle + 1, segmentRight, queryLeft, queryRight, value);
+  }
+  return SumAddPolicy::apply(current.lazy, checkedAdd(leftSum, rightSum),
+                             segmentLength(segmentLeft, segmentRight));
 }
 
 /*
@@ -238,18 +273,20 @@ CheckpointingSegmentTree::query(const std::vector<Node>& nodes, std::size_t node
   if (queryLeft <= segmentLeft && segmentRight <= queryRight) {
     // The node's own lazy value is already included in its sum, so full
     // coverage adds only the lazy values inherited from ancestors.
-    return current.sum + inheritedLazy * segmentLength(segmentLeft, segmentRight);
+    return SumAddPolicy::apply(inheritedLazy, current.sum,
+                               segmentLength(segmentLeft, segmentRight));
   }
 
-  std::size_t middle = (segmentLeft + segmentRight) / 2;
+  const std::size_t middle = detail::midpoint(segmentLeft, segmentRight);
 
   // Lazy values are accumulated on the way down instead of pushed into
   // children, so queries never write to the tree.
-  const ValueType nextLazy = inheritedLazy + current.lazy;
+  const ValueType nextLazy = checkedAdd(inheritedLazy, current.lazy);
 
-  return query(nodes, nodeIndex + 1, segmentLeft, middle, queryLeft, queryRight, nextLazy) +
-         query(nodes, rightChild(nodeIndex, segmentLeft, middle), middle + 1, segmentRight,
-               queryLeft, queryRight, nextLazy);
+  return checkedAdd(
+      query(nodes, nodeIndex + 1, segmentLeft, middle, queryLeft, queryRight, nextLazy),
+      query(nodes, rightChild(nodeIndex, segmentLeft, middle), middle + 1, segmentRight, queryLeft,
+            queryRight, nextLazy));
 }
 
 /*
