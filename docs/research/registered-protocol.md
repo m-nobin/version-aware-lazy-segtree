@@ -19,7 +19,7 @@ nothing and no confirmatory measurement may run.
 | Immutable DOI / URL | Pending OSF or Zenodo deposit |
 | Deposit UTC timestamp | Pending |
 | Statistical reviewer / approval record | Approved at round 3 on 1 September 2026 by the automated reviewer acting for Sunjare Zulfiker; record in `docs/research/statistical-review.md` |
-| Blinding custodian / controlled location | Pending assignment in the deposit access log |
+| Blinding custodian / controlled location | Sunjare Zulfiker, custody material held on his own machine/account outside the primary analyst's routine access; assigned 2 September 2026 |
 
 Pilot-informed choices are marked *(pilot)* throughout and their basis is
 section 11. The exploratory pilot of 21 August 2026 is never pooled with

@@ -36,8 +36,9 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 > statistics, fail-closed H3/H4/H5 decisions, custody-separated blinding, sensitivity paths and
 > an external implementation in place, and the statistical machinery approved by an independent
 > review ([docs/research/statistical-review.md](docs/research/statistical-review.md)). The
-> custodian assignment, final PR7 dry runs and the immutable registration deposit remain open.
-> No confirmatory measurement runs before that deposit.
+> The blinding custodian is assigned (Sunjare Zulfiker); the final PR7 dry runs and the
+> immutable registration deposit remain open. No confirmatory measurement runs before that
+> deposit.
 
 ## Implemented components
 
