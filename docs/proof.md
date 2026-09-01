@@ -709,16 +709,13 @@ node keeps its tag.
 Tests validate these implementations on the tested domains and seeds. The theorems are the
 argument; the tests are the check that the argument is about the code that runs.
 
-### 9.10 Review record
+### 9.10 Automated independent review record
 
-To be completed by a reader who did not implement `policy_trees.hpp` or this section. A
-repository author may prepare the record but may not self-attest it.
-
-Adversarial pre-review, 30 August 2026, by an automated reviewer that did not write the code or
-this section: no blocking finding; three should-fix items (execute the witness trace on the subject
-itself, correct the full-copy source description, replace "record for record" by the agreement
-actually tested) and ten wording or precision items, all applied in this revision. This pre-review
-does not satisfy the independence requirement below.
+The Gate G2 audit below was performed by an automated reviewer that did not implement
+`policy_trees.hpp` or this section. The 31 August 2026 governance amendment in the public execution
+plan permits this reproducible automated audit for the internal G2 gate when its method and every
+disposition are recorded. It is not a human review and cannot satisfy the named human theory review
+required before G4 submission.
 
 | Field | Review record |
 | --- | --- |
@@ -739,8 +736,8 @@ exhaustively over every range for small `n` and on seeded histories for larger `
 reports the outcome of the lower-bound attempt in representation model `R`: it fails, and the
 failure is documented with an executable counterexample rather than argued around.
 
-**Status.** Drafted for PR4. Not cited as a result until the review record in section 10.8 is
-complete.
+**Status.** Merged after the automated independent audit in section 10.8 under the public G2
+governance amendment. That audit is not a human theory review.
 
 ### 10.1 Definitions
 
@@ -768,6 +765,14 @@ action is not the identity: an identity action shares the latest root and alloca
 SumAdd `value == 0` fast path), so every per-update identity below is stated for `U₊`. Roots,
 tree records, log entries, checkpoints and modification records are separate units and are never
 added together.
+
+All formulas in section 10 are exact identities over natural-number counts. Their executable
+`std::size_t` forms have the explicit representability domain `n >= 1`, valid inclusive ranges,
+valid family counts, and every returned total fitting in `std::size_t`; otherwise they reject with
+`std::invalid_argument`, `std::out_of_range` or `std::overflow_error` instead of wrapping. In
+particular, `treeHeight` does not double a capacity, `allRangesCounter` checks `n(n + 1)/2`, and
+the heap-indexed push model checks `4n` before allocation. The mathematical identities are not
+limited by the machine representation; the executable witnesses are.
 
 ### 10.2 The visited frontier
 
@@ -1024,7 +1029,9 @@ differential suite predates this section.
 | Proposition 10.8, point materialization | `PointOnlyAppendsExactlyTheIntersectingNodesOnEveryRange` |
 | Proposition 10.9, counterexample | `EdgeTagModelAgreesWithTheOracleAndAllocatesThePartialCount` |
 
-To be completed by a reader who did not implement `frontier.hpp` or this section.
+This Gate G2 record is an automated independent audit under the 31 August 2026 public governance
+amendment. It is not a human review and does not replace the named human theory review required
+before G4 submission.
 
 | Field | Review record |
 | --- | --- |
