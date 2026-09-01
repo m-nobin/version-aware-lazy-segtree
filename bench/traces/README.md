@@ -18,10 +18,14 @@ finding.
 
 ## The registered distribution
 
-`make_external_distribution.py` derives the stream from the MVSB-tree
+`make_external_distribution.py` derives each stream from the MVSB-tree
 experimental criteria (Zhang et al., TODS 2008): ordered uniformly-keyed
 interval insertions with additive values, and key-range/time-range SUM
 queries over the accumulated history. The module docstring records which
 parameters come from the paper's description and which mapping choices are
-this repository's. `bench/run_confirmatory.sh <id> trace` generates the file
-deterministically and replays it under the fresh-process protocol.
+this repository's. `bench/h5_trace_draws.csv` registers twelve deterministic
+draws (`WT01`–`WT12`); H5 evaluates both operation responses for all 24
+draw-operation cells after twenty complete trials per draw, and fails closed
+if any cell or trial is absent. PR7 must make
+`bench/run_confirmatory.sh <id> trace` generate and replay every registered
+draw under the fresh-process protocol.

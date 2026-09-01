@@ -207,6 +207,14 @@ def errors(actual: np.ndarray, predicted: np.ndarray) -> dict[str, float]:
     a miss, not a missing value: it counts with its full error, and the
     number of such rows is reported beside the quantiles. The log ratio is
     over the rows where it is defined."""
+    actual = np.asarray(actual, dtype=float)
+    predicted = np.asarray(predicted, dtype=float)
+    if actual.shape != predicted.shape or actual.ndim != 1:
+        raise ValueError("actual and predicted responses must be aligned one-dimensional arrays")
+    if not np.isfinite(actual).all() or not np.isfinite(predicted).all():
+        raise ValueError("model evaluation contains a non-finite response or prediction")
+    if (actual <= 0).any():
+        raise ValueError("model evaluation requires strictly positive responses")
     ape = np.abs(predicted - actual) / actual * 100
     positive = predicted > 0
     log_ratio = np.abs(np.log(predicted[positive] / actual[positive]))
@@ -214,7 +222,7 @@ def errors(actual: np.ndarray, predicted: np.ndarray) -> dict[str, float]:
         "rows": int(len(actual)),
         "nonpositive_predictions": int((~positive).sum()),
         "mape_median": float(np.median(ape)),
-        "mape_p90": float(np.percentile(ape, 90)),
+        "mape_p90": float(np.percentile(ape, 90, method="linear")),
         "log_ratio_median": float(np.median(log_ratio)) if positive.any() else np.nan,
     }
 
@@ -333,13 +341,24 @@ def read_artifact(path: pathlib.Path) -> tuple[dict, str]:
     return value, digest
 
 
-def evaluate(rows: pd.DataFrame, model_artifact: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Evaluate a previously fixed artifact; this function never refits it."""
+def evaluate(
+    rows: pd.DataFrame, model_artifact: dict
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Evaluate a previously fixed artifact; this function never refits it.
+
+    H3's registered unit is one equally weighted measurement cell, not one
+    trial. The third returned table therefore reduces the possibly different
+    trial counts to one actual/predicted pair per
+    (workload, n, axis, variant, structure, operation). Both median and mean
+    reductions are retained so the registered aggregation sensitivity does
+    not need to reopen holdout responses.
+    """
     if "partition" not in rows or set(rows["partition"].unique()) != {"holdout"}:
         raise ValueError("evaluation accepts holdout responses only")
     cache_bytes = int(model_artifact["cache_bytes"])
     records = []
     residuals = []
+    cell_predictions = []
     for model in model_artifact["models"]:
         op = model["op"]
         structure = model["structure"]
@@ -351,15 +370,42 @@ def evaluate(rows: pd.DataFrame, model_artifact: dict) -> tuple[pd.DataFrame, pd
         if part.empty:
             continue
         predicted = predict(part, coefficients, kept)
-        summary = errors(part["response"].to_numpy(float), predicted)
+        if not np.isfinite(predicted).all():
+            raise ValueError(f"{structure} {op} produced a non-finite holdout prediction")
+        scored = part.assign(predicted=predicted)
+        cell_keys = ["workload", "n", "axis", "variant"]
+        cells = (
+            scored.groupby(cell_keys, as_index=False, dropna=False)
+            .agg(
+                trials=("trial", "nunique"),
+                actual_median=("response", "median"),
+                predicted_median=("predicted", "median"),
+                actual_mean=("response", "mean"),
+                predicted_mean=("predicted", "mean"),
+            )
+            .assign(op=op, structure=structure, partition="holdout")
+        )
+        for aggregation in ("median", "mean"):
+            cells[f"ape_{aggregation}"] = (
+                np.abs(
+                    cells[f"predicted_{aggregation}"] - cells[f"actual_{aggregation}"]
+                )
+                / cells[f"actual_{aggregation}"]
+                * 100
+            )
+        summary = errors(
+            cells["actual_median"].to_numpy(float),
+            cells["predicted_median"].to_numpy(float),
+        )
         records.append(
             {
                 "op": op,
                 "structure": structure,
                 "partition": "holdout",
                 "cells": int(
-                    part.drop_duplicates(["workload", "n", "axis", "variant"]).shape[0]
+                    cells[cell_keys].drop_duplicates().shape[0]
                 ),
+                "trials": int(cells["trials"].sum()),
                 **summary,
                 "form": "alpha" + "".join(f" + {column}" for column in kept),
                 **{
@@ -368,12 +414,9 @@ def evaluate(rows: pd.DataFrame, model_artifact: dict) -> tuple[pd.DataFrame, pd
                 },
             }
         )
-        scored = part.assign(
-            predicted=predicted,
-            ape=np.abs(predicted - part["response"]) / part["response"] * 100,
-        )
+        cell_predictions.append(cells)
         residuals.append(
-            scored.groupby("workload")["ape"]
+            cells.groupby("workload")["ape_median"]
             .median()
             .rename("mape_median")
             .reset_index()
@@ -381,7 +424,94 @@ def evaluate(rows: pd.DataFrame, model_artifact: dict) -> tuple[pd.DataFrame, pd
         )
     table = pd.DataFrame(records)
     diagnostics = pd.concat(residuals, ignore_index=True) if residuals else pd.DataFrame()
-    return table, diagnostics
+    cell_table = (
+        pd.concat(cell_predictions, ignore_index=True) if cell_predictions else pd.DataFrame()
+    )
+    return table, diagnostics, cell_table
+
+
+def transfer_external(
+    rows: pd.DataFrame,
+    model_artifact: dict,
+    source_structure: str = "copy-on-push",
+    target_structure: str = "external",
+) -> pd.DataFrame:
+    """Apply the in-house copy-on-push model to external WT draws without refitting."""
+    rows = rows.copy()
+    trace_columns = [
+        "trace_seed",
+        "trace_operations",
+        "trace_update_share",
+        "trace_interval_share",
+    ]
+    required_external_columns = {*trace_columns, "status"}
+    missing_trace_columns = sorted(required_external_columns.difference(rows.columns))
+    if missing_trace_columns:
+        raise ValueError(
+            "external transfer is missing registered trace/status metadata: "
+            + ", ".join(missing_trace_columns)
+        )
+    if "partition" not in rows:
+        rows["partition"] = "external"
+    if "stream_group" not in rows:
+        rows["stream_group"] = rows["workload"].astype(str)
+    target = rows[rows["structure"] == target_structure]
+    if target.empty:
+        raise ValueError(f"external transfer has no {target_structure} response rows")
+    if (target["status"] != "ok").any():
+        raise ValueError("external transfer requires complete status=ok trials")
+    if target.duplicated(["workload", "trial"]).any():
+        raise ValueError("external transfer contains duplicate draw/trial responses")
+    models = [
+        model for model in model_artifact["models"] if model["structure"] == source_structure
+    ]
+    if {model["op"] for model in models} != {"update", "query"}:
+        raise ValueError(f"artifact lacks both {source_structure} operation models")
+
+    records = []
+    for model in models:
+        op = model["op"]
+        frame = model_frame(target, op, int(model_artifact["cache_bytes"]))
+        predicted = predict(
+            frame,
+            np.asarray(model["coefficients"], dtype=float),
+            list(model["columns"]),
+        )
+        if not np.isfinite(predicted).all():
+            raise ValueError(f"external {op} transfer produced a non-finite prediction")
+        scored = frame.assign(predicted=predicted)
+        for draw_id, group in scored.groupby("workload", sort=False):
+            actual = group["response"].to_numpy(float)
+            prediction = group["predicted"].to_numpy(float)
+            errors(actual, prediction)
+            actual_cell = float(np.median(actual))
+            predicted_cell = float(np.median(prediction))
+            source_rows = target[target["workload"] == draw_id]
+            metadata = source_rows[["n", *trace_columns]].drop_duplicates()
+            if len(metadata) != 1:
+                raise ValueError(f"external draw {draw_id} has inconsistent trace metadata")
+            trace = metadata.iloc[0]
+            records.append(
+                {
+                    "draw_id": str(draw_id),
+                    "seed": int(trace["trace_seed"]),
+                    "n": int(trace["n"]),
+                    "operations": int(trace["trace_operations"]),
+                    "update_share": float(trace["trace_update_share"]),
+                    "interval_share": float(trace["trace_interval_share"]),
+                    "op": op,
+                    "trials": int(group["trial"].nunique()),
+                    "actual": actual_cell,
+                    "predicted": predicted_cell,
+                    "ape": abs(predicted_cell - actual_cell) / actual_cell * 100,
+                    "source_model": source_structure,
+                    "target_structure": target_structure,
+                }
+            )
+    result = pd.DataFrame(records)
+    if result.duplicated(["draw_id", "op"]).any():
+        raise ValueError("external transfer produced duplicate draw/operation cells")
+    return result
 
 
 def sha256_file(path: pathlib.Path) -> str:
@@ -390,6 +520,14 @@ def sha256_file(path: pathlib.Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def write_csv_artifact(frame: pd.DataFrame, path: pathlib.Path) -> str:
+    """Write a generated CSV and a checksum sidecar consumed by decisions."""
+    frame.to_csv(path, index=False)
+    digest = sha256_file(path)
+    path.with_suffix(path.suffix + ".sha256").write_text(f"{digest}  {path.name}\n")
+    return digest
 
 
 def prepare_membership(
@@ -470,14 +608,23 @@ def prepare_response_partitions(
             ),
         }
 
+    expected_holdout = (
+        structural[structural["partition"] == "holdout"]
+        [["workload", "n", "axis", "variant"]]
+        .drop_duplicates()
+        .sort_values(["workload", "n", "axis", "variant"])
+    )
+    expected_holdout["n"] = expected_holdout["n"].astype(int)
+    expected_holdout["variant"] = expected_holdout["variant"].astype(float)
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "cache_bytes": int(cache_bytes),
         "split": {
             "salt": split_salt,
             "hold_out_share": hold_out_share,
             "unit": "stream-equivalence group of measurement cells",
         },
+        "expected_holdout_cells": expected_holdout.to_dict("records"),
         "responses": files,
     }
     manifest_path = output_directory / PARTITION_MANIFEST_NAME
@@ -488,13 +635,19 @@ def prepare_response_partitions(
 def read_partition_manifest(path: pathlib.Path) -> tuple[dict, str]:
     encoded = path.read_bytes()
     value = json.loads(encoded)
-    if value.get("schema_version") != 1:
+    if value.get("schema_version") != 2:
         raise SystemExit(f"unsupported response-partition manifest schema in {path}")
     if int(value.get("cache_bytes", 0)) <= 0:
         raise SystemExit(f"invalid cache size in {path}")
     split_spec = value.get("split", {})
     if not split_spec.get("salt") or not 0.0 < float(split_spec.get("hold_out_share", 0)) < 1.0:
         raise SystemExit(f"invalid split specification in {path}")
+    expected = pd.DataFrame(value.get("expected_holdout_cells", []))
+    expected_columns = ["workload", "n", "axis", "variant"]
+    if expected.empty or set(expected.columns) != set(expected_columns):
+        raise SystemExit(f"expected holdout-cell inventory is missing from {path}")
+    if expected.duplicated(expected_columns).any():
+        raise SystemExit(f"expected holdout-cell inventory contains duplicates in {path}")
     responses = value.get("responses", {})
     for partition in ("training", "holdout"):
         entry = responses.get(partition, {})
@@ -544,7 +697,7 @@ def fit_from_manifest(manifest_path: pathlib.Path, model_path: pathlib.Path) -> 
 
 def evaluate_from_manifest(
     manifest_path: pathlib.Path, model_path: pathlib.Path
-) -> tuple[pd.DataFrame, pd.DataFrame, str, int]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, str, int]:
     # Verify and hash the fitted artifact before any holdout-response path is
     # resolved. This is the one holdout-opening point in the analysis.
     model_artifact, model_hash = read_artifact(model_path)
@@ -561,10 +714,21 @@ def evaluate_from_manifest(
     ):
         raise SystemExit("model artifact training-response hash does not match the manifest")
     holdout_rows, _ = load_prepared_responses(manifest_path, manifest, "holdout")
-    table, diagnostics = evaluate(holdout_rows, model_artifact)
+    table, diagnostics, cells = evaluate(holdout_rows, model_artifact)
     if table.empty:
         raise SystemExit("holdout responses produced no model-evaluation rows")
-    return table, diagnostics, model_hash, int(model_artifact["cache_bytes"])
+    expected = pd.DataFrame(manifest["expected_holdout_cells"])
+    cell_keys = ["workload", "n", "axis", "variant"]
+    observed_keys = cells[cell_keys].drop_duplicates()
+    unexpected = observed_keys.merge(expected, on=cell_keys, how="left", indicator=True)
+    if (unexpected["_merge"] != "both").any():
+        raise SystemExit("model evaluation produced a cell outside the registered holdout")
+    inventory_hash = hashlib.sha256(
+        artifact_bytes(manifest["expected_holdout_cells"])
+    ).hexdigest()
+    cells["expected_cell_count"] = int(len(expected))
+    cells["expected_inventory_sha256"] = inventory_hash
+    return table, diagnostics, cells, model_hash, int(model_artifact["cache_bytes"])
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -589,9 +753,12 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--stage",
-        choices=("prepare", "fit", "evaluate", "pilot"),
+        choices=("prepare", "fit", "evaluate", "transfer", "pilot"),
         required=True,
-        help="prepare disjoint responses, fit training only, evaluate holdout, or run all for a pilot",
+        help=(
+            "prepare disjoint responses, fit training only, evaluate holdout, transfer the fixed "
+            "model, or run all three H3 stages for a pilot"
+        ),
     )
     parser.add_argument(
         "--model-artifact",
@@ -632,6 +799,11 @@ def main(argv: list[str] | None = None) -> None:
         default="fixed model holdout evaluation",
         help="context printed with the evaluation (for example, exploratory pilot)",
     )
+    parser.add_argument(
+        "--transfer-responses",
+        type=pathlib.Path,
+        help="PR7-produced external response/predictor rows required by transfer",
+    )
     args = parser.parse_args(argv)
     if not 0.0 < args.hold_out_share < 1.0:
         parser.error("--hold-out-share must be strictly between zero and one")
@@ -639,6 +811,23 @@ def main(argv: list[str] | None = None) -> None:
     partition_directory = args.partition_directory or args.summary / "cost_model_inputs"
     manifest_path = args.partition_manifest or partition_directory / PARTITION_MANIFEST_NAME
     model_path = args.model_artifact or args.summary / "cost_model_fit.json"
+
+    if args.stage == "transfer":
+        if args.transfer_responses is None:
+            parser.error("--stage transfer requires --transfer-responses")
+        model_artifact, model_hash = read_artifact(model_path)
+        cells = transfer_external(pd.read_csv(args.transfer_responses), model_artifact)
+        cells["model_artifact_sha256"] = model_hash
+        cells["transfer_responses_sha256"] = sha256_file(args.transfer_responses)
+        args.summary.mkdir(parents=True, exist_ok=True)
+        destination = args.summary / f"{args.output_stem}_external_cells.csv"
+        output_hash = write_csv_artifact(cells, destination)
+        print(f"fixed model artifact sha256: {model_hash}")
+        print(
+            f"{len(cells)} external draw-operation cells -> {destination} "
+            f"(sha256 {output_hash})"
+        )
+        return
 
     if args.stage in ("prepare", "pilot"):
         cache_bytes = args.cache_bytes or captured_cache_bytes(args.raw)
@@ -662,14 +851,20 @@ def main(argv: list[str] | None = None) -> None:
         if args.stage == "fit":
             return
 
-    table, diagnostics, model_hash, cache_bytes = evaluate_from_manifest(manifest_path, model_path)
+    table, diagnostics, cells, model_hash, cache_bytes = evaluate_from_manifest(
+        manifest_path, model_path
+    )
+    cells["model_artifact_sha256"] = model_hash
     args.summary.mkdir(parents=True, exist_ok=True)
     table.to_csv(args.summary / f"{args.output_stem}_evaluation.csv", index=False)
     diagnostics.to_csv(args.summary / f"{args.output_stem}_residuals.csv", index=False)
+    cells_path = args.summary / f"{args.output_stem}_cells.csv"
+    cells_hash = write_csv_artifact(cells, cells_path)
 
     pd.set_option("display.width", 200)
     print(args.analysis_label)
     print(f"fixed model artifact sha256: {model_hash}")
+    print(f"cell predictions sha256: {cells_hash}")
     print(f"cache bytes for the working-set transition: {cache_bytes}\n")
     shown = [
         "op",

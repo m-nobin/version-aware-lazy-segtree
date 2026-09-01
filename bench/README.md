@@ -114,16 +114,24 @@ The differences that matter:
   dry-run seeds.
 - **Sensitivity paths.** The `release-verify-gcc` and `release-verify-clang`
   presets build the second-compiler binaries; `bench/run_sensitivity.sh`
-  reruns the registered subset under a preloaded second allocator.
+  reruns the sixteen cells and twenty trials fixed in
+  `bench/sensitivity_cells.csv` under a preloaded second allocator.
   `bench/env/pin_linux.sh` and `bench/env/pin_macos.sh` put each machine
   into, and record, the registered measurement state.
 - **Confirmatory statistics live in `bench/analysis/confirm.py`** — paired
   log-ratio intervals, the four-state classification against `delta = 1.05`,
   the Holm-controlled primary family, the BH-flagged exploratory regime map,
-  the mixed-effects pooled view, exact H1 identity checks, cross-process
-  checksum verification and censored feasibility. `bench/analysis/blind.py`
-  seals the structure labels per campaign before measurement and the primary
-  analysis runs blinded.
+  the mixed-effects pooled view with convergence/covariance diagnostics,
+  explicit H3/H4/H5 commands, exact H1 identity checks, cross-process checksum
+  verification, censored feasibility, and registered mean/order/influence,
+  compiler and allocator sensitivities. `bench/analysis/blind.py` keeps the
+  key, named input and label map under separate custody; primary analysis reads
+  only opaque analyst copies. `bench/run_registered_analysis.sh` fixes the
+  stage order and hashes every machine's required outputs before one
+  study-wide unblinding operation opens the custody map, then verifies the
+  reopened named inputs against their custody-held source manifests. Its two
+  contrast labels must be opaque and lexically ordered; both possible regime
+  subjects are computed before identities are disclosed.
 - **Registration is a file list with hashes.** `bench/make_registration.sh`
   writes `docs/research/registration-manifest.txt` over every frozen file;
   the deposit of that manifest with the protocol is the registration
@@ -390,7 +398,9 @@ from structural predictors before loading response data and writes disjoint,
 checksummed training and holdout files. `--stage fit` can open only the
 training file and writes a canonical model plus a SHA-256 sidecar;
 `--stage evaluate` verifies that artifact before opening and scoring the
-holdout file, without refitting. Synthetic fixtures exercise grouping,
+holdout file, without refitting, and writes one median/mean pair per cell for
+the equal-cell-weight H3 decision. The cell file records the model hash and
+has a checksum sidecar that H3 verifies. Synthetic fixtures exercise grouping,
 rank-deficient fitting, non-positive-error treatment, missing inputs, artifact
 stability and the fit process's inability to open the holdout response.
 

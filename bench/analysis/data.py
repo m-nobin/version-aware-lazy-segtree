@@ -41,6 +41,7 @@ def load_runs(raw: pathlib.Path, mode: str = "timing") -> pd.DataFrame:
     data point, so incomplete rows are dropped rather than repaired.
     """
     frames = []
+    incomplete_rows = 0
     for path in sorted(raw.glob(f"runs_{mode}-W*.csv")):
         try:
             frame = pd.read_csv(path)
@@ -48,7 +49,9 @@ def load_runs(raw: pathlib.Path, mode: str = "timing") -> pd.DataFrame:
             # A campaign still in progress has opened its next file but not yet
             # written the header. An empty file is not a result.
             continue
-        frames.append(frame.dropna())
+        incomplete = frame.isna().any(axis=1)
+        incomplete_rows += int(incomplete.sum())
+        frames.append(frame.loc[~incomplete])
     if not frames:
         raise SystemExit(f"no {mode} results under {raw}")
     runs = pd.concat(frames, ignore_index=True)
@@ -67,6 +70,7 @@ def load_runs(raw: pathlib.Path, mode: str = "timing") -> pd.DataFrame:
     )
     runs["build_ns_per_element"] = runs["build_ns"] / runs["n"]
     runs["complete"] = runs["status"] == "ok"
+    runs.attrs["incomplete_rows"] = incomplete_rows
     return runs
 
 
@@ -194,7 +198,11 @@ def summarise(runs: pd.DataFrame) -> pd.DataFrame:
             row[f"{metric}_min"] = float(values.min())
             row[f"{metric}_max"] = float(values.max())
             centre = float(np.mean(values))
-            row[f"{metric}_cv"] = float(np.std(values, ddof=1) / centre) if len(values) > 1 and centre else 0.0
+            row[f"{metric}_cv"] = (
+                float(np.std(values, ddof=1) / centre)
+                if len(values) > 1 and centre
+                else 0.0
+            )
             low, high = _bootstrap_median(values, rng)
             row[f"{metric}_lo"] = low
             row[f"{metric}_hi"] = high

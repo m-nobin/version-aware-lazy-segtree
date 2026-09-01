@@ -110,6 +110,65 @@ class CostModelTests(unittest.TestCase):
         self.assertEqual(result["nonpositive_predictions"], 2)
         self.assertGreaterEqual(result["mape_p90"], 100.0)
 
+    def test_evaluation_emits_one_median_and_mean_prediction_per_cell(self) -> None:
+        rows = self.model_rows()
+        training = rows[rows["partition"] == "training"]
+        holdout = rows[rows["partition"] == "holdout"]
+        model = cost_model.artifact(
+            4096,
+            cost_model.fit_models(training, 4096),
+            "test-salt",
+            0.25,
+            "a" * 64,
+            "b" * 64,
+        )
+        table, _, cells = cost_model.evaluate(holdout, model)
+        self.assertFalse(table.empty)
+        self.assertFalse(cells.empty)
+        keys = ["workload", "n", "axis", "variant", "structure", "op"]
+        self.assertFalse(cells.duplicated(keys).any())
+        self.assertTrue(
+            {
+                "actual_median",
+                "predicted_median",
+                "actual_mean",
+                "predicted_mean",
+                "ape_median",
+                "ape_mean",
+            }.issubset(cells.columns)
+        )
+
+    def test_external_transfer_uses_copy_on_push_artifact_without_refitting(self) -> None:
+        rows = self.model_rows()
+        training = rows[rows["partition"] == "training"].copy()
+        training["structure"] = "copy-on-push"
+        model = cost_model.artifact(
+            4096,
+            cost_model.fit_models(training, 4096),
+            "test-salt",
+            0.25,
+            "a" * 64,
+            "b" * 64,
+        )
+        external = rows[rows["partition"] == "holdout"].copy()
+        external["structure"] = "external"
+        external["partition"] = "external"
+        external["workload"] = "WT01"
+        external["n"] = 100000
+        external["trace_seed"] = 20270214
+        external["trace_operations"] = 200000
+        external["trace_update_share"] = 0.5
+        external["trace_interval_share"] = 0.01
+        external["status"] = "ok"
+        cells = cost_model.transfer_external(external, model)
+        self.assertEqual(set(cells["op"]), {"update", "query"})
+        self.assertEqual(set(cells["draw_id"]), {"WT01"})
+        self.assertEqual(set(cells["source_model"]), {"copy-on-push"})
+        incomplete = external.copy()
+        incomplete.loc[incomplete.index[0], "status"] = "memory_cap"
+        with self.assertRaisesRegex(ValueError, "complete status=ok"):
+            cost_model.transfer_external(incomplete, model)
+
     def test_model_artifact_round_trips_with_stable_hash(self) -> None:
         value = cost_model.artifact(
             4096,
@@ -153,13 +212,16 @@ class CostModelTests(unittest.TestCase):
             # response is never opened or deserialized.
             holdout_path.write_bytes(b"this file must remain unread\x00\xff")
             manifest = {
-                "schema_version": 1,
+                "schema_version": 2,
                 "cache_bytes": 4096,
                 "split": {
                     "salt": "test-salt",
                     "hold_out_share": 0.25,
                     "unit": "stream-equivalence group of measurement cells",
                 },
+                "expected_holdout_cells": [
+                    {"workload": "W1", "n": 1000, "axis": "none", "variant": 0.0}
+                ],
                 "responses": {
                     "training": {
                         "file": training_path.name,
@@ -204,13 +266,16 @@ class CostModelTests(unittest.TestCase):
             training.to_csv(training_path, index=False)
             holdout.to_csv(holdout_path, index=False)
             manifest = {
-                "schema_version": 1,
+                "schema_version": 2,
                 "cache_bytes": 4096,
                 "split": {
                     "salt": "test-salt",
                     "hold_out_share": 0.25,
                     "unit": "stream-equivalence group of measurement cells",
                 },
+                "expected_holdout_cells": [
+                    {"workload": "W1", "n": 1000, "axis": "none", "variant": 0.0}
+                ],
                 "responses": {
                     "training": {
                         "file": training_path.name,
