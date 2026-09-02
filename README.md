@@ -30,11 +30,15 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 > Gate G1 evidence assessment is section 9 of the claim-evidence matrix. Phase charters and exit
 > reviews are version-controlled records in `docs/research/`.
 >
-> Phase 3 (registered confirmatory evaluation) is prepared: the analysis protocol is written in
+> Phase 3 (registered confirmatory evaluation) is being hardened: the prospective analysis
+> protocol is written in
 > [docs/research/registered-protocol.md](docs/research/registered-protocol.md) with its
-> statistics, blinding, fresh-process orchestration, sensitivity paths and an external
-> implementation in place, and awaits its immutable registration deposit. No confirmatory
-> measurement runs before that deposit.
+> statistics, fail-closed H3/H4/H5 decisions, custody-separated blinding, sensitivity paths and
+> an external implementation in place, and the statistical machinery approved by an independent
+> review ([docs/research/statistical-review.md](docs/research/statistical-review.md)). The
+> The blinding custodian is assigned (Sunjare Zulfiker); the final PR7 dry runs and the
+> immutable registration deposit remain open. No confirmatory measurement runs before that
+> deposit.
 
 ## Implemented components
 
@@ -171,8 +175,8 @@ registered protocol). With the preserved local data present,
 The confirmatory campaign runs under the registered protocol instead:
 batch-mode primary timing, fresh-process orchestration
 (`bench/run_confirmatory.sh`), blinded confirmatory statistics
-(`bench/analysis/confirm.py`) and second-compiler/second-allocator
-sensitivity paths.
+(`bench/analysis/confirm.py`), one locked decision pipeline
+(`bench/run_registered_analysis.sh`) and second-compiler/second-allocator sensitivity paths.
 
 ## Documentation
 

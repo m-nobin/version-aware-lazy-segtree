@@ -125,7 +125,28 @@ explicit stages:
    resolves or opens the holdout response file.
 3. `--stage evaluate` verifies the artifact and sidecar first, checks their
    training-input provenance against the partition manifest, and only then
-   verifies and opens the holdout response file. It never refits.
+   verifies and opens the holdout response file. It never refits. It writes
+   one median-aggregated and one mean-sensitivity actual/predicted response per
+   `(workload, n, axis, variant, structure, operation)` cell. That cell CSV
+   carries the verified model-artifact hash and has its own `.sha256` sidecar;
+   H3 verifies both and weights the cells equally, so a 40-trial primary cell
+   cannot outweigh a 20-trial cell.
+   The predictor-only manifest also stores and hashes the complete expected
+   holdout-cell inventory together with the registered pilot-capped
+   structure-cells (`bench/capped_cells.csv`) that fall inside it. Each
+   structure's H3 inventory is the holdout cells minus its own registered
+   caps, fixed before any response is read; a registered-capped structure-cell
+   is excluded from evaluation whether or not it completed. H3 requires that
+   exact per-structure count for every registered structure/operation before
+   it computes either threshold.
+
+Phase 3's H5 transfer is a fourth, post-fit application rather than another
+fit: `--stage transfer` verifies the same artifact, selects its copy-on-push
+update/query forms, and applies those coefficients unchanged to PR7's joined
+external-adapter response/predictor rows. It emits one median response and
+prediction for both operations of every registered trace draw after the exact
+registered complete-trial count is verified. Its cell output records the model
+and response-input hashes and is protected by a `.sha256` sidecar.
 
 The synthetic integration fixture makes the holdout file deliberately invalid,
 installs a guard that fails on any attempt to open it, and proves the actual fit

@@ -110,6 +110,65 @@ class CostModelTests(unittest.TestCase):
         self.assertEqual(result["nonpositive_predictions"], 2)
         self.assertGreaterEqual(result["mape_p90"], 100.0)
 
+    def test_evaluation_emits_one_median_and_mean_prediction_per_cell(self) -> None:
+        rows = self.model_rows()
+        training = rows[rows["partition"] == "training"]
+        holdout = rows[rows["partition"] == "holdout"]
+        model = cost_model.artifact(
+            4096,
+            cost_model.fit_models(training, 4096),
+            "test-salt",
+            0.25,
+            "a" * 64,
+            "b" * 64,
+        )
+        table, _, cells = cost_model.evaluate(holdout, model)
+        self.assertFalse(table.empty)
+        self.assertFalse(cells.empty)
+        keys = ["workload", "n", "axis", "variant", "structure", "op"]
+        self.assertFalse(cells.duplicated(keys).any())
+        self.assertTrue(
+            {
+                "actual_median",
+                "predicted_median",
+                "actual_mean",
+                "predicted_mean",
+                "ape_median",
+                "ape_mean",
+            }.issubset(cells.columns)
+        )
+
+    def test_external_transfer_uses_copy_on_push_artifact_without_refitting(self) -> None:
+        rows = self.model_rows()
+        training = rows[rows["partition"] == "training"].copy()
+        training["structure"] = "copy-on-push"
+        model = cost_model.artifact(
+            4096,
+            cost_model.fit_models(training, 4096),
+            "test-salt",
+            0.25,
+            "a" * 64,
+            "b" * 64,
+        )
+        external = rows[rows["partition"] == "holdout"].copy()
+        external["structure"] = "external"
+        external["partition"] = "external"
+        external["workload"] = "WT01"
+        external["n"] = 100000
+        external["trace_seed"] = 20270214
+        external["trace_operations"] = 200000
+        external["trace_update_share"] = 0.5
+        external["trace_interval_share"] = 0.01
+        external["status"] = "ok"
+        cells = cost_model.transfer_external(external, model)
+        self.assertEqual(set(cells["op"]), {"update", "query"})
+        self.assertEqual(set(cells["draw_id"]), {"WT01"})
+        self.assertEqual(set(cells["source_model"]), {"copy-on-push"})
+        incomplete = external.copy()
+        incomplete.loc[incomplete.index[0], "status"] = "memory_cap"
+        with self.assertRaisesRegex(ValueError, "complete status=ok"):
+            cost_model.transfer_external(incomplete, model)
+
     def test_model_artifact_round_trips_with_stable_hash(self) -> None:
         value = cost_model.artifact(
             4096,
@@ -153,13 +212,17 @@ class CostModelTests(unittest.TestCase):
             # response is never opened or deserialized.
             holdout_path.write_bytes(b"this file must remain unread\x00\xff")
             manifest = {
-                "schema_version": 1,
+                "schema_version": 3,
                 "cache_bytes": 4096,
                 "split": {
                     "salt": "test-salt",
                     "hold_out_share": 0.25,
                     "unit": "stream-equivalence group of measurement cells",
                 },
+                "expected_holdout_cells": [
+                    {"workload": "W1", "n": 1000, "axis": "none", "variant": 0.0}
+                ],
+                "registered_capped_holdout_cells": [],
                 "responses": {
                     "training": {
                         "file": training_path.name,
@@ -204,13 +267,17 @@ class CostModelTests(unittest.TestCase):
             training.to_csv(training_path, index=False)
             holdout.to_csv(holdout_path, index=False)
             manifest = {
-                "schema_version": 1,
+                "schema_version": 3,
                 "cache_bytes": 4096,
                 "split": {
                     "salt": "test-salt",
                     "hold_out_share": 0.25,
                     "unit": "stream-equivalence group of measurement cells",
                 },
+                "expected_holdout_cells": [
+                    {"workload": "W1", "n": 1000, "axis": "none", "variant": 0.0}
+                ],
+                "registered_capped_holdout_cells": [],
                 "responses": {
                     "training": {
                         "file": training_path.name,
@@ -242,6 +309,115 @@ class CostModelTests(unittest.TestCase):
             with mock.patch.object(pathlib.Path, "open", reject_holdout_open):
                 with self.assertRaisesRegex(SystemExit, "checksum"):
                     cost_model.evaluate_from_manifest(manifest_path, model_path)
+
+    def holdout_manifest(self, root: pathlib.Path, capped: list[dict]) -> pathlib.Path:
+        rows = self.model_rows()
+        training = rows[rows["partition"] == "training"]
+        holdout = rows[rows["partition"] == "holdout"]
+        training_path = root / cost_model.TRAINING_RESPONSES_NAME
+        holdout_path = root / cost_model.HOLDOUT_RESPONSES_NAME
+        training.to_csv(training_path, index=False)
+        holdout.to_csv(holdout_path, index=False)
+        expected = (
+            holdout[["workload", "n", "axis", "variant"]]
+            .drop_duplicates()
+            .sort_values(["workload", "n", "axis", "variant"])
+        )
+        manifest = {
+            "schema_version": 3,
+            "cache_bytes": 4096,
+            "split": {
+                "salt": "test-salt",
+                "hold_out_share": 0.25,
+                "unit": "stream-equivalence group of measurement cells",
+            },
+            "expected_holdout_cells": expected.to_dict("records"),
+            "registered_capped_holdout_cells": capped,
+            "responses": {
+                "training": {
+                    "file": training_path.name,
+                    "sha256": cost_model.sha256_file(training_path),
+                    "rows": len(training),
+                    "cells": 8,
+                },
+                "holdout": {
+                    "file": holdout_path.name,
+                    "sha256": cost_model.sha256_file(holdout_path),
+                    "rows": len(holdout),
+                    "cells": len(expected),
+                },
+            },
+        }
+        manifest_path = root / cost_model.PARTITION_MANIFEST_NAME
+        cost_model.write_partition_manifest(manifest_path, manifest)
+        return manifest_path
+
+    def test_registered_capped_cells_fix_each_structure_inventory(self) -> None:
+        capped = [{"workload": "W1", "n": 2000, "variant": 0.0, "structure": "persistent"}]
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            manifest_path = self.holdout_manifest(root, capped)
+            model_path = root / "model.json"
+            cost_model.fit_from_manifest(manifest_path, model_path)
+            _, _, cells, _, _ = cost_model.evaluate_from_manifest(manifest_path, model_path)
+            self.assertEqual(set(cells["expected_cell_count"]), {7})
+            per_op = cells.groupby("op").size()
+            self.assertEqual(set(per_op), {7})
+            excluded = (cells["workload"] == "W1") & (cells["n"] == 2000)
+            self.assertFalse((excluded & (cells["variant"] == 0.0)).any())
+            (root / "plain").mkdir()
+            plain_manifest = self.holdout_manifest(root / "plain", [])
+            plain_model = root / "plain-model.json"
+            cost_model.fit_from_manifest(plain_manifest, plain_model)
+            plain_cells = cost_model.evaluate_from_manifest(plain_manifest, plain_model)[2]
+            self.assertEqual(set(plain_cells["expected_cell_count"]), {8})
+            self.assertNotEqual(
+                cells["expected_inventory_sha256"].iloc[0],
+                plain_cells["expected_inventory_sha256"].iloc[0],
+            )
+
+    def test_ambiguous_holdout_cell_key_is_rejected(self) -> None:
+        structural = pd.DataFrame(
+            [
+                ("W1", 1000, "none", 0.0, 11, "holdout", 0.1),
+                ("W1", 1000, "width", 0.0, 12, "holdout", 0.2),
+                ("W2", 1000, "none", 0.0, 13, "training", 0.9),
+            ],
+            columns=["workload", "n", "axis", "variant", "seed", "partition", "k"],
+        )
+        runs = pd.DataFrame(
+            {
+                "workload": ["W1", "W1", "W2"],
+                "n": 1000,
+                "axis": ["none", "width", "none"],
+                "variant": 0.0,
+                "seed": [11, 12, 13],
+                "structure": "persistent",
+                "complete": True,
+                "trial": [0, 1, 2],
+            }
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            with mock.patch.object(cost_model, "prepare_membership", return_value=structural):
+                with mock.patch.object(cost_model.data, "load_runs", return_value=runs):
+                    with self.assertRaisesRegex(SystemExit, "not identified"):
+                        cost_model.prepare_response_partitions(
+                            root, root, root / "out", "salt", 0.3, 4096, pd.DataFrame(
+                                columns=cost_model.CAPPED_COLUMNS
+                            )
+                        )
+
+    def test_capped_cell_outside_holdout_is_rejected(self) -> None:
+        capped = [{"workload": "W9", "n": 2000, "variant": 0.0, "structure": "persistent"}]
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            manifest_path = self.holdout_manifest(root, capped)
+            with self.assertRaisesRegex(SystemExit, "outside the holdout"):
+                cost_model.read_partition_manifest(manifest_path)
+        registry = pd.DataFrame(capped + capped)
+        with self.assertRaisesRegex(SystemExit, "duplicate"):
+            cost_model.registered_capped_cells(registry)
 
     def test_missing_structural_directory_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
