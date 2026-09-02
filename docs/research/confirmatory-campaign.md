@@ -73,16 +73,25 @@ half never receives its path.
 
 ## 5. Measure, per machine
 
-Campaign ids: `macos-a`, `linux-b`, then `macos-a-gcc`, `linux-b-clang`,
-`macos-a-alloc`, `linux-b-alloc`. None contains `dryrun` or `pilot`.
+Campaign ids: `macos-a`, `linux-b`, then `macos-a-gcc` and `macos-a-alloc`.
+None contains `dryrun` or `pilot`. The registered compiler and allocator stages
+compare machine A against its own alternate arms, so the two sensitivity
+campaigns are machine A's; running them on machine B produces output no
+registered decision reads.
 
 ```sh
+# both machines
 for phase in structural timing alloc latency trace; do
   VALSEG_PIN=1 bench/run_confirmatory.sh <id> $phase
 done
-bench/run_sensitivity.sh <id>-<compiler> build/release-verify-<second compiler>
-VALSEG_ALT_ALLOC=<allocator library> bench/run_sensitivity.sh <id>-alloc
+# machine A only
+bench/run_sensitivity.sh macos-a-gcc build/release-verify-gcc
+VALSEG_ALT_ALLOC=$(brew --prefix mimalloc)/lib/libmimalloc.dylib \
+  bench/run_sensitivity.sh macos-a-alloc
 ```
+
+On macOS the run refuses to start on battery power, so the machine stays on AC
+for the whole campaign.
 
 Both sensitivity arms go through `run_sensitivity.sh`, which runs the sixteen
 registered cells at twenty trials each. The primary schedule gives forty
