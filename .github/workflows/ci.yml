@@ -90,7 +90,7 @@ jobs:
       - name: Check formatting
         shell: bash
         run: |
-          find include src tests -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0 \
+          find include src tests bench -type f \( -name '*.cpp' -o -name '*.hpp' \) -not -path 'bench/external/*' -print0 \
             | xargs -0 clang-format-18 --dry-run --Werror
 
   analysis-tests:

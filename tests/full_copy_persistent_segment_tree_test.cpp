@@ -12,9 +12,7 @@ using valseg::FullCopyPersistentSegmentTree;
 // The version numbers returned by rangeAdd, versionCount(), and nodeCount()
 // serve as evidence of full duplication (as opposed to structural sharing).
 
-// ---------------------------------------------------------------------------
 // Initialization
-// ---------------------------------------------------------------------------
 
 TEST(FullCopyPersistentSegmentTreeTest, InitializationPublishesVersionZero) {
   FullCopyPersistentSegmentTree tree({1, 2, 3, 4, 5});
@@ -79,9 +77,7 @@ TEST(FullCopyPersistentSegmentTreeTest, SingleElementTree) {
   EXPECT_EQ(tree.rangeSum(v1, 0, 0), 10);
 }
 
-// ---------------------------------------------------------------------------
 // Copying validation (Evidence that it does NOT structurally share)
-// ---------------------------------------------------------------------------
 
 TEST(FullCopyPersistentSegmentTreeTest, RangeUpdateCopiesWholeTree) {
   FullCopyPersistentSegmentTree tree({1, 2, 3, 4});
@@ -136,9 +132,7 @@ TEST(FullCopyPersistentSegmentTreeTest, NodeCountGrowsByFullTreePerUpdate) {
   EXPECT_EQ(tree.rangeSum(0, 0, 15), 16); // version 0 still isolated
 }
 
-// ---------------------------------------------------------------------------
 // Cumulative updates
-// ---------------------------------------------------------------------------
 
 TEST(FullCopyPersistentSegmentTreeTest, OverlappingUpdatesAccumulateCorrectly) {
   FullCopyPersistentSegmentTree tree({1, 2, 3, 4, 5});
@@ -186,9 +180,7 @@ TEST(FullCopyPersistentSegmentTreeTest, RepeatedFullCoverageUpdatesAccumulate) {
   EXPECT_EQ(tree.rangeSum(v3, 0, 3), 12);
 }
 
-// ---------------------------------------------------------------------------
 // Zero-delta updates
-// ---------------------------------------------------------------------------
 
 TEST(FullCopyPersistentSegmentTreeTest, ZeroDeltaUpdatePublishesVersionWithoutNodes) {
   FullCopyPersistentSegmentTree tree({1, 2, 3});
@@ -204,9 +196,7 @@ TEST(FullCopyPersistentSegmentTreeTest, ZeroDeltaUpdatePublishesVersionWithoutNo
   EXPECT_EQ(tree.rangeSum(v1, 0, 2), 6);
 }
 
-// ---------------------------------------------------------------------------
 // Negative values and deltas
-// ---------------------------------------------------------------------------
 
 TEST(FullCopyPersistentSegmentTreeTest, NegativeInitialValues) {
   FullCopyPersistentSegmentTree tree({-3, -1, -4, -1});
@@ -258,9 +248,7 @@ TEST(FullCopyPersistentSegmentTreeTest, MixedPositiveAndNegativeDeltas) {
   EXPECT_EQ(tree.rangeSum(v2, 3, 3), 10);
 }
 
-// ---------------------------------------------------------------------------
 // Historical isolation
-// ---------------------------------------------------------------------------
 
 TEST(FullCopyPersistentSegmentTreeTest, VersionZeroIsolatedAfterManyUpdates) {
   FullCopyPersistentSegmentTree tree({1, 2, 3, 4, 5, 6, 7, 8});
@@ -308,9 +296,7 @@ TEST(FullCopyPersistentSegmentTreeTest, InterleavedPartialUpdateIsolation) {
   EXPECT_EQ(tree.rangeSum(0, 0, 3), 4); // version 0 still isolated
 }
 
-// ---------------------------------------------------------------------------
 // Failed-operation isolation
-// ---------------------------------------------------------------------------
 
 TEST(FullCopyPersistentSegmentTreeTest, FailedUpdatePublishesNothing) {
   FullCopyPersistentSegmentTree tree({1, 2, 3});
@@ -344,9 +330,7 @@ TEST(FullCopyPersistentSegmentTreeTest, FailedQueryThrowsAndLeavesStateIntact) {
   EXPECT_EQ(tree.rangeSum(1, 0, 3), 30);
 }
 
-// ---------------------------------------------------------------------------
 // Validation contracts
-// ---------------------------------------------------------------------------
 
 TEST(FullCopyPersistentSegmentTreeTest, DefaultTreeHasNoVersions) {
   FullCopyPersistentSegmentTree tree;
@@ -380,9 +364,7 @@ TEST(FullCopyPersistentSegmentTreeTest, InvalidRangeOnQueryThrows) {
   EXPECT_THROW(tree.rangeSum(0, 0, 5), std::out_of_range);     // right >= size
 }
 
-// ---------------------------------------------------------------------------
 // Large 64-bit values
-// ---------------------------------------------------------------------------
 
 TEST(FullCopyPersistentSegmentTreeTest, LargeValuesSumAndUpdateCorrectly) {
   const long long base = 1'000'000'000'000'000LL;

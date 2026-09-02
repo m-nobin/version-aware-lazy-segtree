@@ -8,9 +8,7 @@
 
 using valseg::LazySegmentTree;
 
-// ---------------------------------------------------------------------------
 // Core operation tests
-// ---------------------------------------------------------------------------
 
 TEST(LazySegmentTreeTest, Initialization) {
   LazySegmentTree tree({1, 2, 3, 4, 5});
@@ -84,9 +82,7 @@ TEST(LazySegmentTreeTest, MultipleQueries) {
   EXPECT_EQ(tree.rangeSum(1, 3), 21);
 }
 
-// ---------------------------------------------------------------------------
 // Edge case tests
-// ---------------------------------------------------------------------------
 
 TEST(LazySegmentTreeTest, ZeroDeltaUpdate) {
   LazySegmentTree tree({1, 2, 3, 4, 5});

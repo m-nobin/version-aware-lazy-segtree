@@ -169,9 +169,7 @@ private:
   }
 };
 
-// ---------------------------------------------------------------------------
 // Agreement with the production SumAdd structures
-// ---------------------------------------------------------------------------
 
 template <class Generic, class Production>
 void checkArenaAndAnswers(Generic& generic, Production& production, std::size_t n,
@@ -211,9 +209,7 @@ TEST(PolicyTrees, CopyOnPushSumAddMatchesBenchAblationArenaAndAnswers) {
   checkArenaAndAnswers(generic, production, 64, rng);
 }
 
-// ---------------------------------------------------------------------------
 // Seeded differential validation against the element-wise oracle
-// ---------------------------------------------------------------------------
 
 template <class P, template <class> class T> struct Case {
   using Policy = P;
@@ -324,9 +320,7 @@ TEST(PolicyTrees, PushedLazyTreeAgreesWithOracleForEveryPolicy) {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Tree order versus chronological order
-// ---------------------------------------------------------------------------
 
 template <class Policy> void checkTreeOrderMatchesChronology(std::size_t n, std::uint64_t seed) {
   std::mt19937_64 rng(seed);
@@ -453,9 +447,7 @@ TEST(PolicyTrees, RetainedTagMinAddHandTrace) {
   EXPECT_EQ(tree.rangeAggregate(2, 1, 1), 11);
 }
 
-// ---------------------------------------------------------------------------
 // Shared validation contract, identity fast path and failed-update isolation
-// ---------------------------------------------------------------------------
 
 TEST(PolicyTrees, GenericTypesKeepTheSharedValidationContract) {
   RetainedTagPersistentTree<MinAddPolicy> minTree;

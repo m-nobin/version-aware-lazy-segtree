@@ -12,9 +12,7 @@ using valseg::PersistentLazySegmentTree;
 // The version numbers returned by rangeAdd, versionCount(), and nodeCount()
 // serve as evidence of publication and structural sharing.
 
-// ---------------------------------------------------------------------------
 // Initialization
-// ---------------------------------------------------------------------------
 
 TEST(PersistentLazySegmentTreeTest, InitializationPublishesVersionZero) {
   PersistentLazySegmentTree tree({1, 2, 3, 4, 5});
@@ -79,9 +77,7 @@ TEST(PersistentLazySegmentTreeTest, SingleElementTree) {
   EXPECT_EQ(tree.rangeSum(v1, 0, 0), 10);
 }
 
-// ---------------------------------------------------------------------------
 // Hand-traced design example
-// ---------------------------------------------------------------------------
 
 // Reference example from the design document:
 //   version 0: [1, 2, 3, 4]        sum = 10
@@ -117,9 +113,7 @@ TEST(PersistentLazySegmentTreeTest, HandTracedHistoricalResults) {
   EXPECT_EQ(tree.rangeSum(v2, 1, 2), 19);
 }
 
-// ---------------------------------------------------------------------------
 // Full, partial, and overlapping updates
-// ---------------------------------------------------------------------------
 
 TEST(PersistentLazySegmentTreeTest, FullCoverageUpdateCopiesOnlyTheRoot) {
   PersistentLazySegmentTree tree({1, 2, 3, 4});
@@ -235,9 +229,7 @@ TEST(PersistentLazySegmentTreeTest, SingleLeafUpdateCreatesExactPathLength) {
   EXPECT_EQ(tree.rangeSum(v1, 4, 7), 26); // untouched right segment
 }
 
-// ---------------------------------------------------------------------------
 // Negative values and deltas
-// ---------------------------------------------------------------------------
 
 TEST(PersistentLazySegmentTreeTest, NegativeInitialValues) {
   PersistentLazySegmentTree tree({-3, -1, -4, -1});
@@ -289,9 +281,7 @@ TEST(PersistentLazySegmentTreeTest, MixedPositiveAndNegativeDeltas) {
   EXPECT_EQ(tree.rangeSum(v2, 3, 3), 10);
 }
 
-// ---------------------------------------------------------------------------
 // Zero-delta updates
-// ---------------------------------------------------------------------------
 
 TEST(PersistentLazySegmentTreeTest, ZeroDeltaUpdatePublishesVersionWithoutNodes) {
   PersistentLazySegmentTree tree({1, 2, 3});
@@ -351,9 +341,7 @@ TEST(PersistentLazySegmentTreeTest, UpdateAfterZeroDeltaLeavesSharedVersionIntac
   EXPECT_EQ(tree.rangeSum(v2, 0, 3), 30);
 }
 
-// ---------------------------------------------------------------------------
 // Historical isolation
-// ---------------------------------------------------------------------------
 
 TEST(PersistentLazySegmentTreeTest, VersionZeroIsolatedAfterManyUpdates) {
   PersistentLazySegmentTree tree({1, 2, 3, 4, 5, 6, 7, 8});
@@ -424,9 +412,7 @@ TEST(PersistentLazySegmentTreeTest, InterleavedPartialUpdateIsolation) {
   EXPECT_EQ(tree.rangeSum(0, 0, 3), 4); // version 0 still isolated
 }
 
-// ---------------------------------------------------------------------------
 // Failed-operation isolation
-// ---------------------------------------------------------------------------
 
 TEST(PersistentLazySegmentTreeTest, FailedUpdatePublishesNothing) {
   PersistentLazySegmentTree tree({1, 2, 3});
@@ -460,9 +446,7 @@ TEST(PersistentLazySegmentTreeTest, FailedQueryThrowsAndLeavesStateIntact) {
   EXPECT_EQ(tree.rangeSum(1, 0, 3), 30);
 }
 
-// ---------------------------------------------------------------------------
 // Validation contracts
-// ---------------------------------------------------------------------------
 
 TEST(PersistentLazySegmentTreeTest, DefaultTreeHasNoVersions) {
   PersistentLazySegmentTree tree;
@@ -496,9 +480,7 @@ TEST(PersistentLazySegmentTreeTest, InvalidRangeOnQueryThrows) {
   EXPECT_THROW(tree.rangeSum(0, 0, 5), std::out_of_range);     // right >= size
 }
 
-// ---------------------------------------------------------------------------
 // Large 64-bit values
-// ---------------------------------------------------------------------------
 
 TEST(PersistentLazySegmentTreeTest, LargeValuesSumAndUpdateCorrectly) {
   const long long base = 1'000'000'000'000'000LL;

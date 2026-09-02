@@ -1,4 +1,4 @@
-# CMakeLists.txt — version-aware-lazy-segtree
+# CMakeLists.txt: version-aware-lazy-segtree
 #
 # Supported platforms : Linux, Windows, macOS
 # Supported toolchains: GCC, Clang, Apple Clang, MSVC
@@ -11,13 +11,11 @@ cmake_minimum_required(VERSION 3.25)
 project(
   valseg
   VERSION 0.1.0
-  DESCRIPTION "Version-aware lazy segment tree — correctness and baseline components"
+  DESCRIPTION "Version-aware lazy segment tree: correctness and baseline components"
   LANGUAGES CXX
 )
 
-# ---------------------------------------------------------------------------
 # Optional developer tooling
-# ---------------------------------------------------------------------------
 
 option(VALSEG_ENABLE_CLANG_TIDY "Run Clang-Tidy while compiling project targets" OFF)
 
@@ -40,9 +38,7 @@ if(VALSEG_ENABLE_CLANG_TIDY)
   )
 endif()
 
-# ---------------------------------------------------------------------------
 # Library target
-# ---------------------------------------------------------------------------
 
 add_library(valseg
   src/brute_force_array.cpp
@@ -67,15 +63,41 @@ target_compile_features(valseg PUBLIC cxx_std_17)
 
 # Include directories: build-tree paths for in-source builds, install-tree
 # paths for installed usage.  Generator expressions keep this portable.
+include(GNUInstallDirs)
 target_include_directories(valseg
   PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-# ---------------------------------------------------------------------------
-# Compiler warnings (private — not inherited by downstream consumers)
-# ---------------------------------------------------------------------------
+# Install and export
+#
+# Consumers use either add_subdirectory() with the valseg::valseg alias or an
+# installed tree with find_package(valseg CONFIG). The library has no
+# dependencies, so the exported targets file doubles as the package config.
+include(CMakePackageConfigHelpers)
+
+install(TARGETS valseg EXPORT valsegTargets
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+  FILES_MATCHING PATTERN "*.hpp")
+install(EXPORT valsegTargets
+  NAMESPACE valseg::
+  FILE valsegConfig.cmake
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/valseg
+)
+write_basic_package_version_file(
+  ${PROJECT_BINARY_DIR}/valsegConfigVersion.cmake
+  COMPATIBILITY SameMinorVersion
+)
+install(FILES ${PROJECT_BINARY_DIR}/valsegConfigVersion.cmake
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/valseg
+)
+
+# Compiler warnings, private so downstream consumers do not inherit them
 
 if(MSVC)
   target_compile_options(valseg PRIVATE /W4 /permissive-)
@@ -96,23 +118,22 @@ if(VALSEG_WARNINGS_AS_ERRORS)
   endif()
 endif()
 
-# ---------------------------------------------------------------------------
 # Tests
-# ---------------------------------------------------------------------------
 
-# BUILD_TESTING is a standard CMake cache variable (ON by default).
-# Downstream consumers who add_subdirectory this project can set it OFF.
-include(CTest)
-
-if(BUILD_TESTING)
-  add_subdirectory(tests)
+# CTest, the tests and the benchmarks exist only when this is the top-level
+# project, so a consumer that add_subdirectory()s the library gets the library
+# alone. BUILD_TESTING is the standard CTest cache variable; VALSEG_BUILD_BENCH
+# can be set ON explicitly from a parent project.
+if(PROJECT_IS_TOP_LEVEL)
+  include(CTest)
+  if(BUILD_TESTING)
+    add_subdirectory(tests)
+  endif()
 endif()
 
-# ---------------------------------------------------------------------------
 # Benchmarks
-# ---------------------------------------------------------------------------
 
-option(VALSEG_BUILD_BENCH "Build the benchmark runner" ON)
+option(VALSEG_BUILD_BENCH "Build the benchmark runner" ${PROJECT_IS_TOP_LEVEL})
 
 if(VALSEG_BUILD_BENCH)
   add_subdirectory(bench)

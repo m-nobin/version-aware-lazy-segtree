@@ -2,6 +2,7 @@
 #define VALSEG_POLICY_TREES_HPP
 
 #include <valseg/detail/checked_size.hpp>
+#include <valseg/detail/validation.hpp>
 
 #include <cstddef>
 #include <iterator>
@@ -55,56 +56,6 @@ namespace valseg {
  */
 
 namespace detail {
-
-/**
- * @brief Reject an operation on a tree that has published no version.
- *
- * @param versionCount Number of published versions.
- *
- * @throws std::runtime_error if no version exists.
- */
-inline void requireVersions(std::size_t versionCount) {
-  if (versionCount == 0) {
-    throw std::runtime_error("Tree has no versions.");
-  }
-}
-
-/**
- * @brief Validate a version identifier.
- *
- * @param versionCount Number of published versions.
- * @param version      Version to read.
- *
- * @throws std::out_of_range if version is not published.
- */
-inline void requireVersion(std::size_t versionCount, std::size_t version) {
-  if (version >= versionCount) {
-    throw std::out_of_range("Invalid version number.");
-  }
-}
-
-/**
- * @brief Validate an inclusive index range in the shared contract order.
- *
- * @param arraySize Number of elements.
- * @param left      Left index (inclusive).
- * @param right     Right index (inclusive).
- *
- * @throws std::runtime_error     The array is empty.
- * @throws std::invalid_argument  left is greater than right.
- * @throws std::out_of_range      right is not smaller than arraySize.
- */
-inline void requireRange(std::size_t arraySize, std::size_t left, std::size_t right) {
-  if (arraySize == 0) {
-    throw std::runtime_error("Tree is empty.");
-  }
-  if (left > right) {
-    throw std::invalid_argument("Left index is greater than right index.");
-  }
-  if (right >= arraySize) {
-    throw std::out_of_range("Range exceeds array size.");
-  }
-}
 
 /**
  * @brief Truncate an append-only arena back to a checkpoint after a failed
@@ -207,8 +158,9 @@ public:
    * rolled back; no version is published.
    */
   std::size_t rangeApply(std::size_t left, std::size_t right, const Action& action) {
-    detail::requireVersions(roots.size());
-    detail::requireRange(arraySize, left, right);
+    detail::validateInitialized(roots.size());
+    detail::validateNonEmpty(arraySize);
+    detail::validateRange(arraySize, left, right);
     if (action == Policy::actionIdentity()) {
       roots.push_back(roots.back());
       return roots.size() - 1;
@@ -238,9 +190,10 @@ public:
    * @throws std::out_of_range      right is not smaller than size().
    */
   Aggregate rangeAggregate(std::size_t version, std::size_t left, std::size_t right) const {
-    detail::requireVersions(roots.size());
-    detail::requireVersion(roots.size(), version);
-    detail::requireRange(arraySize, left, right);
+    detail::validateInitialized(roots.size());
+    detail::validateVersion(version, roots.size());
+    detail::validateNonEmpty(arraySize);
+    detail::validateRange(arraySize, left, right);
     return query(roots[version], 0, arraySize - 1, left, right, Policy::actionIdentity());
   }
 
@@ -465,8 +418,9 @@ public:
    * @throws std::out_of_range      right is not smaller than size().
    */
   std::size_t rangeApply(std::size_t left, std::size_t right, const Action& action) {
-    detail::requireVersions(roots.size());
-    detail::requireRange(arraySize, left, right);
+    detail::validateInitialized(roots.size());
+    detail::validateNonEmpty(arraySize);
+    detail::validateRange(arraySize, left, right);
     if (action == Policy::actionIdentity()) {
       roots.push_back(roots.back());
       return roots.size() - 1;
@@ -496,9 +450,10 @@ public:
    * @throws std::out_of_range      right is not smaller than size().
    */
   Aggregate rangeAggregate(std::size_t version, std::size_t left, std::size_t right) const {
-    detail::requireVersions(roots.size());
-    detail::requireVersion(roots.size(), version);
-    detail::requireRange(arraySize, left, right);
+    detail::validateInitialized(roots.size());
+    detail::validateVersion(version, roots.size());
+    detail::validateNonEmpty(arraySize);
+    detail::validateRange(arraySize, left, right);
     return query(roots[version], 0, arraySize - 1, left, right);
   }
 
@@ -668,7 +623,8 @@ public:
    * @throws std::out_of_range      right is not smaller than size().
    */
   void rangeApply(std::size_t left, std::size_t right, const Action& action) {
-    detail::requireRange(arraySize, left, right);
+    detail::validateNonEmpty(arraySize);
+    detail::validateRange(arraySize, left, right);
     update(0, 0, arraySize - 1, left, right, action);
   }
 
@@ -687,7 +643,8 @@ public:
    * @throws std::out_of_range      right is not smaller than size().
    */
   Aggregate rangeAggregate(std::size_t left, std::size_t right) {
-    detail::requireRange(arraySize, left, right);
+    detail::validateNonEmpty(arraySize);
+    detail::validateRange(arraySize, left, right);
     return query(0, 0, arraySize - 1, left, right);
   }
 

@@ -1,5 +1,6 @@
 #include <valseg/brute_force_array.hpp>
 #include <valseg/detail/sum_add_domain.hpp>
+#include <valseg/detail/validation.hpp>
 #include <valseg/policy.hpp>
 
 #include <stdexcept>
@@ -133,26 +134,13 @@ Validation
 */
 
 void BruteForceArray::validateVersion(std::size_t version) const {
-  if (version >= versions.size()) {
-    throw std::out_of_range("Invalid version number.");
-  }
+  detail::validateVersion(version, versions.size());
 }
 
 void BruteForceArray::validateRange(std::size_t version, std::size_t left,
                                     std::size_t right) const {
-  // Precondition:
-  // validateVersion(version) has already been called,
-  // so versions[version] is guaranteed to exist.
-
-  const std::size_t n = versions[version].size();
-
-  if (left > right) {
-    throw std::invalid_argument("Left index is greater than right index.");
-  }
-
-  if (right >= n) {
-    throw std::out_of_range("Range exceeds array size.");
-  }
+  // validateVersion(version) has already run, so versions[version] exists.
+  detail::validateRange(versions[version].size(), left, right);
 }
 
 } // namespace valseg

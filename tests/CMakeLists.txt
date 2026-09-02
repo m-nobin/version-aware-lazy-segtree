@@ -7,10 +7,8 @@
 
 include(FetchContent)
 
-# ---------------------------------------------------------------------------
-# GoogleTest — pinned to a stable release tag.
+# GoogleTest, pinned to a stable release tag.
 # Set FETCHCONTENT_UPDATES_DISCONNECTED=ON in CI for repeatability.
-# ---------------------------------------------------------------------------
 
 FetchContent_Declare(
   googletest
@@ -30,9 +28,7 @@ endif()
 FetchContent_MakeAvailable(googletest)
 include(GoogleTest)
 
-# ---------------------------------------------------------------------------
-# Helper function — avoids repeating the same boilerplate for every target.
-# ---------------------------------------------------------------------------
+# Helpers shared by every test target.
 
 function(configure_valseg_test target)
   target_compile_features(${target} PRIVATE cxx_std_17)
@@ -67,9 +63,7 @@ function(add_valseg_test target source)
   configure_valseg_test(${target})
 endfunction()
 
-# ---------------------------------------------------------------------------
 # Test targets
-# ---------------------------------------------------------------------------
 
 add_valseg_test(brute_force_array_test brute_force_array_test.cpp)
 add_valseg_test(lazy_segment_tree_test lazy_segment_tree_test.cpp)
@@ -103,12 +97,30 @@ target_compile_definitions(brute_force_allocation_failure_test PRIVATE
 target_link_libraries(brute_force_allocation_failure_test PRIVATE GTest::gtest_main)
 configure_valseg_test(brute_force_allocation_failure_test)
 
-# ---------------------------------------------------------------------------
+# Consumer checks: the installed package and add_subdirectory() must both
+# build and run a downstream project; see tests/consumer/CMakeLists.txt.
+foreach(mode find_package add_subdirectory)
+  add_test(NAME consumer_${mode}
+           COMMAND ${CMAKE_COMMAND}
+                   -DMODE=${mode}
+                   -DSOURCE_DIR=${PROJECT_SOURCE_DIR}
+                   -DBINARY_DIR=${CMAKE_BINARY_DIR}
+                   -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/consumer_${mode}
+                   -DCONFIG=$<CONFIG>
+                   "-DGENERATOR=${CMAKE_GENERATOR}"
+                   "-DPLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+                   -DCXX_COMPILER=${CMAKE_CXX_COMPILER}
+                   "-DCXX_FLAGS=${CMAKE_CXX_FLAGS}"
+                   "-DLINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
+                   -DEXE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
+                   -P ${CMAKE_CURRENT_SOURCE_DIR}/consumer_check.cmake)
+  set_tests_properties(consumer_${mode} PROPERTIES LABELS "consumer")
+endforeach()
+
 # Compile-fail test: the tag-retaining subject must reject a policy whose
 # induced actions do not commute. The target is excluded from the default
 # build; the CTest case builds it on demand and passes only when the compiler
 # output names the static_assert, so an accidental successful build fails.
-# ---------------------------------------------------------------------------
 
 add_executable(retained_tag_rejects_affine EXCLUDE_FROM_ALL
   compile_fail/retained_tag_rejects_affine.cpp)

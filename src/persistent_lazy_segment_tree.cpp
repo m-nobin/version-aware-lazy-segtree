@@ -1,4 +1,5 @@
 #include <valseg/detail/checked_size.hpp>
+#include <valseg/detail/validation.hpp>
 #include <valseg/persistent_lazy_segment_tree.hpp>
 #include <valseg/policy.hpp>
 
@@ -256,29 +257,16 @@ Validation
 */
 
 void PersistentLazySegmentTree::validateInitialized() const {
-  if (roots.empty()) {
-    throw std::runtime_error("Tree has no versions.");
-  }
+  detail::validateInitialized(roots.size());
 }
 
 void PersistentLazySegmentTree::validateVersion(std::size_t version) const {
-  if (version >= roots.size()) {
-    throw std::out_of_range("Invalid version number.");
-  }
+  detail::validateVersion(version, roots.size());
 }
 
 void PersistentLazySegmentTree::validateRange(std::size_t left, std::size_t right) const {
-  if (arraySize == 0) {
-    throw std::runtime_error("Tree is empty.");
-  }
-
-  if (left > right) {
-    throw std::invalid_argument("Left index is greater than right index.");
-  }
-
-  if (right >= arraySize) {
-    throw std::out_of_range("Range exceeds array size.");
-  }
+  detail::validateNonEmpty(arraySize);
+  detail::validateRange(arraySize, left, right);
 }
 
 } // namespace valseg

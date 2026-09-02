@@ -1,4 +1,5 @@
 #include <valseg/detail/checked_size.hpp>
+#include <valseg/detail/validation.hpp>
 #include <valseg/lazy_segment_tree.hpp>
 #include <valseg/policy.hpp>
 
@@ -193,17 +194,8 @@ Validation
 */
 
 void LazySegmentTree::validateRange(std::size_t left, std::size_t right) const {
-  if (arraySize == 0) {
-    throw std::runtime_error("Tree is empty.");
-  }
-
-  if (left > right) {
-    throw std::invalid_argument("Left index is greater than right index.");
-  }
-
-  if (right >= arraySize) {
-    throw std::out_of_range("Range exceeds array size.");
-  }
+  detail::validateNonEmpty(arraySize);
+  detail::validateRange(arraySize, left, right);
 }
 
 } // namespace valseg

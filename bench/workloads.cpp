@@ -48,8 +48,8 @@ double unitDouble(std::mt19937_64& rng) {
  * The version a query reads, given how many versions exist.
  */
 std::size_t pickVersion(std::mt19937_64& rng, const Workload& workload,
-                        const std::vector<double>& harmonic, double ageShare,
-                        std::size_t published, std::size_t queryIndex) {
+                        const std::vector<double>& harmonic, double ageShare, std::size_t published,
+                        std::size_t queryIndex) {
   const std::size_t latest = published - 1;
   switch (workload.versions) {
   case VersionPick::Latest:
