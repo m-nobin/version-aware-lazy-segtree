@@ -120,7 +120,14 @@ The differences that matter:
   only once every file its schedule promised is present. The `trace` phase
   collects all twelve registered external draws
   (`bench/h5_trace_draws.csv`), not one distribution replayed under twelve
-  labels. Trial counts per cell class live in `bench/primary_cells.csv`
+  labels, and writes each draw's structural counts
+  (`valseg_bench --structural --trace`) beside its runs so
+  `cost_model.py --stage external` can build the H5 transfer input. A real
+  (non-dry-run) campaign id may not contain `dryrun` or `pilot`, and a real
+  phase starts only from a clean commit that descends from the registered one,
+  with every frozen file verifying against the manifest and
+  `docs/research/registration-record.md` recording the deposit. Trial counts
+  per cell class live in `bench/primary_cells.csv`
   (registered H2 cells, 40 trials) and `bench/capped_cells.csv` (pilot-known
   cap cells, 2 trials); everything else runs 20. `VALSEG_DRY_RUN=1` switches
   to the excluded dry-run seeds. CLI and trace-file numeric fields are
@@ -159,7 +166,10 @@ The differences that matter:
 - **Registration is a file list with hashes.** `bench/make_registration.sh`
   writes `docs/research/registration-manifest.txt` over every frozen file;
   the deposit of that manifest with the protocol is the registration
-  timestamp.
+  timestamp, and `docs/research/registration-record.md` (outside the frozen
+  list) records the commit, tag, DOI and timestamp afterwards.
+  `docs/research/confirmatory-campaign.md` is the one-shot runbook from
+  registration to Gate G3.
 
 ## The external structure
 

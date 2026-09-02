@@ -12,10 +12,12 @@
 #
 # VALSEG_DRY_RUN=1 switches to the dry-run seeds (excluded from confirmation),
 # two trials per cell and no warm-up load; the campaign id must then contain
-# "dryrun" so dry-run data can never be mistaken for confirmatory data. A dry
-# run may start from any commit. A real run refuses a dirty worktree, a
-# commit other than the one the registration manifest names, and a manifest
-# that fails checksum verification -- so no real phase runs before deposit.
+# "dryrun" so dry-run data can never be mistaken for confirmatory data, and a
+# real campaign id must contain neither "dryrun" nor "pilot". A dry run may
+# start from any commit. A real run refuses a dirty worktree, a commit that
+# does not descend from the registered commit, a frozen file whose checksum
+# no longer matches the manifest, and a registration record without a
+# deposited DOI/URL -- so no real phase runs before deposit.
 # VALSEG_PIN=1 wraps every process in bench/env/pin_<os>.sh run --.
 # VALSEG_BUILD_DIR overrides the default release-verify build directory.
 set -euo pipefail
@@ -68,6 +70,9 @@ if [[ "${VALSEG_DRY_RUN:-0}" == "1" ]]; then
   seed="$dryrun_seed"
   warmup_seconds=0
   dry="yes"
+elif [[ "$campaign" == *dryrun* || "$campaign" == *pilot* ]]; then
+  echo "confirmatory campaign ids must not contain 'dryrun' or 'pilot' (set VALSEG_DRY_RUN=1 for a dry run)" >&2
+  exit 2
 fi
 
 raw="$root/bench/results/campaigns/$campaign/raw"
@@ -110,7 +115,7 @@ hash_or_verify_artifact() {
 }
 
 record_meta() {
-  local commit dirty
+  local commit dirty registered_commit=none
   commit="$(git -C "$root" rev-parse HEAD 2>/dev/null || echo untracked)"
   dirty="$(test -n "$(git -C "$root" status --porcelain 2>/dev/null)" && echo yes || echo no)"
 
@@ -119,20 +124,25 @@ record_meta() {
       echo "refusing: worktree is dirty; a confirmatory campaign must start from a clean, registered commit" >&2
       exit 2
     fi
-    local manifest="$root/docs/research/registration-manifest.txt" registered_commit
+    # The manifest names the commit it was generated from, and committing the
+    # manifest itself moves HEAD past that commit. What is frozen is the file
+    # set: the campaign commit must descend from the registered one and every
+    # frozen file must still hash exactly as the manifest recorded.
+    local manifest="$root/docs/research/registration-manifest.txt"
     registered_commit="$(awk -F= '/^# git_commit=/{print $2}' "$manifest" 2>/dev/null || true)"
-    if [[ -z "$registered_commit" || "$registered_commit" != "$commit" ]]; then
-      echo "refusing: commit $commit is not the registered commit ($manifest)" >&2
+    if [[ -z "$registered_commit" ]] ||
+      ! git -C "$root" merge-base --is-ancestor "$registered_commit" "$commit" 2>/dev/null; then
+      echo "refusing: commit $commit does not descend from the registered commit ($manifest)" >&2
       exit 2
     fi
     "$root/bench/make_registration.sh" --verify "$manifest" >/dev/null || {
       echo "refusing: registration manifest failed checksum verification" >&2
       exit 2
     }
-    local doi_line
-    doi_line="$(grep -F '| Immutable DOI / URL |' "$root/docs/research/registered-protocol.md" || true)"
+    local record="$root/docs/research/registration-record.md" doi_line
+    doi_line="$(grep -F '| Immutable DOI / URL |' "$record" 2>/dev/null || true)"
     if [[ -z "$doi_line" || "$doi_line" == *Pending* ]]; then
-      echo "refusing: registered-protocol.md does not record a deposited DOI/URL" >&2
+      echo "refusing: $record does not record a deposited DOI/URL" >&2
       exit 2
     fi
   fi
@@ -145,6 +155,7 @@ record_meta() {
     printf 'schedule_seed=%s\n' "$schedule_seed"
     printf 'git_commit=%s\n' "$commit"
     printf 'git_dirty=%s\n' "$dirty"
+    printf 'registered_commit=%s\n' "$registered_commit"
     printf 'build_dir=%s\n' "$build"
     printf 'timing_binary_sha256=%s\n' "$(hash_or "$timing_binary" missing)"
     printf 'alloc_binary_sha256=%s\n' "$(hash_or "$alloc_binary" not_built)"
@@ -266,6 +277,13 @@ trace)
     hash_or_verify_artifact "$trace_file"
     trials="$draw_trials"
     [[ -n "$dry" ]] && trials=2
+    # The draw's machine-independent counts, one row per recorded seed, are
+    # what the H5 transfer joins to the external adapter's responses.
+    if [[ ! -e "$raw/structural_trace-$draw_id-$draw_id.csv" ]]; then
+      "$timing_binary" --structural --trace "$trace_file" --trace-id "$draw_id" --workload WT \
+        --out-dir "$raw" --tag "trace-$draw_id" --seed "$seed" --trials "$trials" \
+        --warmup "$warmup_trials"
+    fi
     for structure in lazy persistent copy-on-push full-copy point-only checkpointing buffered fat-node external; do
       for ((trial = 0; trial < trials; ++trial)); do
         expected_trace_files=$((expected_trace_files + 1))

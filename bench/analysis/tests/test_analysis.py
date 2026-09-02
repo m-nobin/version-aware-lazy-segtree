@@ -169,6 +169,106 @@ class CostModelTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "complete status=ok"):
             cost_model.transfer_external(incomplete, model)
 
+    def external_inputs(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        draws = pd.DataFrame(
+            {
+                "draw_id": ["WT01", "WT02"],
+                "seed": [20270214, 20270215],
+                "n": [100000, 100000],
+                "operations": [200000, 200000],
+                "update_share": [0.5, 0.5],
+                "interval_share": [0.01, 0.01],
+                "trials": [20, 20],
+            }
+        )
+        runs = pd.DataFrame(
+            [
+                {
+                    "workload": draw,
+                    "structure": structure,
+                    "n": 100000,
+                    "axis": "none",
+                    "variant": 0.0,
+                    "seed": 20260902 + trial,
+                    "trial": trial,
+                    "status": "ok",
+                    "nodes_per_update": 3.0,
+                    "bytes": 1 << 20,
+                    "update_ns_per_op": 100.0,
+                    "query_ns_per_op": 50.0,
+                }
+                for draw in ("WT01", "WT02")
+                for structure in ("external", "persistent")
+                for trial in (0, 1)
+            ]
+        )
+        structural = pd.DataFrame(
+            [
+                {
+                    "workload": draw,
+                    "n": 100000,
+                    "axis": "none",
+                    "variant": 0.0,
+                    "seed": 20260902 + trial,
+                    "k": 316,
+                    "stream_fingerprint": f"{draw}-fp",
+                    "updates": 100,
+                    "nonzero_updates": 100,
+                    "queries": 100,
+                    "sum_update_visits": 1000,
+                    "sum_checkpoint_update_visits": 0,
+                    "sum_pushes": 0,
+                    "sum_intersecting": 2000,
+                    "sum_query_visits": 1000,
+                    "sum_replay_entries": 0,
+                    "sum_query_version_distance": 500,
+                    "full_coverage_updates": 1,
+                    "full_coverage_queries": 1,
+                    "latest_version_queries": 2,
+                }
+                for draw in ("WT01", "WT02")
+                for trial in (0, 1)
+            ]
+        )
+        return runs, structural, draws
+
+    def test_external_responses_join_trials_counts_and_registry(self) -> None:
+        runs, structural, draws = self.external_inputs()
+        rows = cost_model.external_responses(runs, structural, draws)
+        self.assertEqual(len(rows), 4)
+        self.assertEqual(set(rows["structure"]), {"external"})
+        self.assertEqual(set(rows["partition"]), {"external"})
+        self.assertEqual(set(rows["trace_operations"]), {200000})
+        self.assertEqual(
+            set(rows.loc[rows["workload"] == "WT02", "trace_seed"]), {20270215}
+        )
+        self.assertIn("sum_update_visits", rows.columns)
+
+    def test_external_responses_fail_closed(self) -> None:
+        runs, structural, draws = self.external_inputs()
+        with self.assertRaisesRegex(ValueError, "without external trials: WT02"):
+            cost_model.external_responses(runs[runs["workload"] == "WT01"], structural, draws)
+        with self.assertRaisesRegex(ValueError, "unregistered draws: WT02"):
+            cost_model.external_responses(runs, structural, draws[draws["draw_id"] == "WT01"])
+        with self.assertRaisesRegex(ValueError, "without structural counts"):
+            cost_model.external_responses(runs, structural[structural["seed"] != 20260903], draws)
+        wrong_n = draws.assign(n=[100000, 50000])
+        with self.assertRaisesRegex(ValueError, "domain size disagrees"):
+            cost_model.external_responses(runs, structural, wrong_n)
+        with self.assertRaisesRegex(ValueError, "no external-adapter trials"):
+            cost_model.external_responses(runs[runs["structure"] != "external"], structural, draws)
+
+    def test_load_structural_default_pattern_excludes_trace_counts(self) -> None:
+        _, structural, _ = self.external_inputs()
+        synthetic = structural[structural["workload"] == "WT01"].assign(workload="W1")
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory)
+            synthetic.to_csv(path / "structural_timing-W1-W1.csv", index=False)
+            structural.to_csv(path / "structural_trace-WT01-WT01.csv", index=False)
+            self.assertEqual(set(cost_model.load_structural(path)["workload"]), {"W1"})
+            trace = cost_model.load_structural(path, "structural*-WT*.csv")
+        self.assertEqual(set(trace["workload"]), {"WT01", "WT02"})
+
     def test_model_artifact_round_trips_with_stable_hash(self) -> None:
         value = cost_model.artifact(
             4096,

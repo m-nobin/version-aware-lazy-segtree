@@ -123,6 +123,17 @@ if(BUILD_TESTING)
              COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/trace_replay_test.sh
                      $<TARGET_FILE:valseg_bench> ${CMAKE_CURRENT_SOURCE_DIR}/testdata/valid_small.trace)
     set_tests_properties(bench_trace_replay PROPERTIES LABELS "bench")
+
+    add_test(NAME bench_structural_trace
+             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/structural_trace_test.sh
+                     $<TARGET_FILE:valseg_bench> ${CMAKE_CURRENT_SOURCE_DIR}/testdata/valid_small.trace)
+    set_tests_properties(bench_structural_trace PROPERTIES LABELS "bench")
+
+    add_test(NAME confirmatory_registration_gate
+             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/confirmatory_registration_gate_test.sh
+                     ${CMAKE_CURRENT_SOURCE_DIR}/run_confirmatory.sh
+                     ${CMAKE_CURRENT_SOURCE_DIR}/make_registration.sh)
+    set_tests_properties(confirmatory_registration_gate PROPERTIES LABELS "bench")
   endif()
 
   # Malformed CLI input: checked parsing (bench_main.cpp) must fail the
