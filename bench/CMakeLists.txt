@@ -62,7 +62,7 @@ endforeach()
 # n = 256 against all eight structures and fails if the seven persistent ones
 # disagree on any answer. It runs in about a second, so it belongs in the same
 # CTest invocation as everything else rather than in a job of its own.
-if(BUILD_TESTING)
+if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
   # No warm-up: the smoke run checks that the structures agree, not how fast
   # they are, and a duration-based warm-up would add fifteen seconds to CI for
   # a property it does not measure.

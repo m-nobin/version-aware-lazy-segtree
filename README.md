@@ -140,7 +140,7 @@ ctest --preset analyze
 Install the library and use it from another project:
 
 ```bash
-cmake --preset release
+cmake --preset release -DVALSEG_BUILD_BENCH=OFF
 cmake --build --preset release
 cmake --install build/release --prefix /path/to/prefix
 ```
@@ -150,9 +150,10 @@ find_package(valseg 0.1 CONFIG REQUIRED)
 target_link_libraries(app PRIVATE valseg::valseg)
 ```
 
-`add_subdirectory` exposes the same `valseg::valseg` target. The tests and the benchmark runner
-build only when this repository is the top-level project; a parent project can set
-`VALSEG_BUILD_BENCH=ON` to opt in.
+`add_subdirectory` exposes the same `valseg::valseg` target. CTest, the tests and the benchmark
+runner exist only when this repository is the top-level project; a parent project can set
+`VALSEG_BUILD_BENCH=ON` to opt in to the runner. Both consumer paths are built and run by the
+`consumer_find_package` and `consumer_add_subdirectory` CTest cases.
 
 ## Verification matrix
 
@@ -173,6 +174,7 @@ include/valseg/detail/      Shared checked arithmetic, numeric-domain and valida
 src/                        Library implementations
 tests/                      Deterministic and randomized differential GoogleTest suites
 tests/compile_fail/         Sources that must fail to compile, run as CTest cases
+tests/consumer/             Downstream project built by CTest through find_package and add_subdirectory
 bench/                      Benchmark harness and workloads
 bench/analysis/             Locked pilot analysis and figure/table generation
 .github/workflows/ci.yml    Cross-platform CI

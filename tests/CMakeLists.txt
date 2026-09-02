@@ -97,6 +97,26 @@ target_compile_definitions(brute_force_allocation_failure_test PRIVATE
 target_link_libraries(brute_force_allocation_failure_test PRIVATE GTest::gtest_main)
 configure_valseg_test(brute_force_allocation_failure_test)
 
+# Consumer checks: the installed package and add_subdirectory() must both
+# build and run a downstream project; see tests/consumer/CMakeLists.txt.
+foreach(mode find_package add_subdirectory)
+  add_test(NAME consumer_${mode}
+           COMMAND ${CMAKE_COMMAND}
+                   -DMODE=${mode}
+                   -DSOURCE_DIR=${PROJECT_SOURCE_DIR}
+                   -DBINARY_DIR=${CMAKE_BINARY_DIR}
+                   -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/consumer_${mode}
+                   -DCONFIG=$<CONFIG>
+                   "-DGENERATOR=${CMAKE_GENERATOR}"
+                   "-DPLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+                   -DCXX_COMPILER=${CMAKE_CXX_COMPILER}
+                   "-DCXX_FLAGS=${CMAKE_CXX_FLAGS}"
+                   "-DLINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
+                   -DEXE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
+                   -P ${CMAKE_CURRENT_SOURCE_DIR}/consumer_check.cmake)
+  set_tests_properties(consumer_${mode} PROPERTIES LABELS "consumer")
+endforeach()
+
 # Compile-fail test: the tag-retaining subject must reject a policy whose
 # induced actions do not commute. The target is excluded from the default
 # build; the CTest case builds it on demand and passes only when the compiler

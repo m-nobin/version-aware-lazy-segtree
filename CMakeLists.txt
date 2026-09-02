@@ -82,7 +82,8 @@ install(TARGETS valseg EXPORT valsegTargets
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+  FILES_MATCHING PATTERN "*.hpp")
 install(EXPORT valsegTargets
   NAMESPACE valseg::
   FILE valsegConfig.cmake
@@ -90,7 +91,7 @@ install(EXPORT valsegTargets
 )
 write_basic_package_version_file(
   ${PROJECT_BINARY_DIR}/valsegConfigVersion.cmake
-  COMPATIBILITY SameMajorVersion
+  COMPATIBILITY SameMinorVersion
 )
 install(FILES ${PROJECT_BINARY_DIR}/valsegConfigVersion.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/valseg
@@ -119,14 +120,15 @@ endif()
 
 # Tests
 
-# Tests and benchmarks build only when this is the top-level project, so a
-# consumer that add_subdirectory()s the library gets the library alone.
-# BUILD_TESTING is the standard CTest cache variable; VALSEG_BUILD_BENCH can be
-# set ON explicitly from a parent project.
-include(CTest)
-
-if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
-  add_subdirectory(tests)
+# CTest, the tests and the benchmarks exist only when this is the top-level
+# project, so a consumer that add_subdirectory()s the library gets the library
+# alone. BUILD_TESTING is the standard CTest cache variable; VALSEG_BUILD_BENCH
+# can be set ON explicitly from a parent project.
+if(PROJECT_IS_TOP_LEVEL)
+  include(CTest)
+  if(BUILD_TESTING)
+    add_subdirectory(tests)
+  endif()
 endif()
 
 # Benchmarks

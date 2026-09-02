@@ -327,7 +327,8 @@ void CheckpointingSegmentTree::validateInitialized() const {
 }
 
 void CheckpointingSegmentTree::validateVersion(std::size_t version) const {
-  detail::validateVersion(version, versionCount());
+  // validateInitialized() has already run, so the log holds events.size() + 1 versions.
+  detail::validateVersion(version, events.size() + 1);
 }
 
 void CheckpointingSegmentTree::validateRange(std::size_t left, std::size_t right) const {
