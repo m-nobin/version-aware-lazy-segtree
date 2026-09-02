@@ -139,6 +139,38 @@ VALSEG_ALT_ALLOC=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2 \
 the campaign, because the allocator stage refuses a campaign whose recorded
 `malloc_provider` matches the primary one's.
 
+## 6a. Surviving a power cut
+
+A campaign runs for about a day, and mains power is not guaranteed for a day.
+Nothing about that needs new machinery in the harness: every phase is
+resumable, a cell counts as done only when its runs file holds data, and the
+resume guard refuses a changed binary, script, schedule, seed or commit. What
+is needed is something to start the resume.
+
+Drive the campaign from a supervisor script rather than a bare loop, and give
+it a `@reboot` crontab entry:
+
+```sh
+@reboot /bin/bash $HOME/valseg-supervisor.sh >> $HOME/campaign-supervisor.log 2>&1
+```
+
+The supervisor loops the five phases and the sensitivity arms, skipping what is
+already complete, and holds two guards against a second measurement process: an
+atomic lock directory reclaimed if the pid in it is gone, and a refusal when any
+`run_confirmatory.sh`, `run_sensitivity.sh` or `valseg_bench` process is alive.
+Two measured processes on one pinned core contaminate whatever the first one is
+timing, and a power cut leaves exactly the kind of stale lock that would
+otherwise block every later start.
+
+Set the machine's firmware to power on when mains returns (`Restore on AC Power
+Loss` on most boards). Without it the box stays off and nothing resumes.
+
+On macOS the supervisor waits for AC rather than measuring on battery, because
+the harness refuses on battery by design: DVFS and thermal behaviour differ
+there, and a campaign measured half on each is not one campaign. It also holds
+`caffeinate -dims` across the whole run, since `VALSEG_PIN` caffeinates only
+each measured process and leaves the gaps between them uncovered.
+
 ## 7. Verify the pin actually held
 
 Pinning is verified from the data, not assumed: every environment file
