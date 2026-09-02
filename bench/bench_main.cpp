@@ -15,9 +15,11 @@
 #include <vector>
 
 #if defined(__APPLE__)
+#include <dlfcn.h>
 #include <pthread.h>
 #include <sys/qos.h>
 #elif defined(__linux__)
+#include <dlfcn.h>
 #include <sched.h>
 #endif
 
@@ -870,6 +872,27 @@ std::size_t balancedInterval(std::size_t size) {
       1, static_cast<std::size_t>(std::llround(std::sqrt(static_cast<double>(size)))));
 }
 
+/**
+ * The library that actually provides `malloc` in this process.
+ *
+ * A preloaded allocator is a registered sensitivity dimension, so recording
+ * the request (`LD_PRELOAD` / `DYLD_INSERT_LIBRARIES`) is not evidence: an
+ * ignored preload would measure the default allocator twice and read as
+ * insensitivity to the allocator. The registered analysis compares this value
+ * across the two campaigns, so it must describe the resolved provider rather
+ * than the intent. Returns `unknown` where the platform cannot report it.
+ */
+std::string mallocProvider() {
+#if defined(__APPLE__) || defined(__linux__)
+  void* symbol = dlsym(RTLD_DEFAULT, "malloc");
+  Dl_info info{};
+  if (symbol != nullptr && dladdr(symbol, &info) != 0 && info.dli_fname != nullptr) {
+    return info.dli_fname;
+  }
+#endif
+  return "unknown";
+}
+
 void writeEnvironment(const std::string& path, const Options& options,
                       const ClockCalibration& calibration, const std::string& placement, int argc,
                       char** argv) {
@@ -884,6 +907,7 @@ void writeEnvironment(const std::string& path, const Options& options,
   out << "compile_flags=" << VALSEG_BENCH_FLAGS << "\n";
   out << "cpp_standard=" << __cplusplus << "\n";
   out << "pointer_bits=" << sizeof(void*) * 8 << "\n";
+  out << "malloc_provider=" << mallocProvider() << "\n";
   out << "base_seed=" << options.seed << "\n";
   out << "trials=" << options.trials << "\n";
   out << "warmup_trials=" << options.warmup << "\n";

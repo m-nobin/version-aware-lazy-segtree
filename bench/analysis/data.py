@@ -115,6 +115,23 @@ def load_environment(raw: pathlib.Path, mode: str = "timing") -> dict:
     return facts
 
 
+def environment_values(raw: pathlib.Path, key: str, mode: str = "timing") -> set:
+    """Every distinct value a campaign recorded for one environment field.
+
+    `load_environment` reads the first file only, which is enough to describe a
+    campaign but not to prove one. A guard that must hold for every measured
+    process reads all of them, so a build or preload that changed partway
+    through is visible as more than one value.
+    """
+    values = set()
+    for path in sorted(raw.glob(f"environment_{mode}-*.txt")):
+        for line in path.read_text().splitlines():
+            name, separator, value = line.partition("=")
+            if separator and name == key:
+                values.add(value)
+    return values
+
+
 def power_states(raw: pathlib.Path) -> pd.DataFrame:
     """Which power source and load each workload was measured under."""
     rows = []

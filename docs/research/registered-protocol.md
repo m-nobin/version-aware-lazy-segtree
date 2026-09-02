@@ -80,9 +80,17 @@ runs; it is never inferred from the primary batch replays.
   references) before a process times anything.
 - **Sensitivity:** W1, W5 and W11 rerun under (a) the platform's second
   compiler (`release-verify-gcc` / `release-verify-clang` presets) and (b) a
-  second allocator via preload (`bench/run_sensitivity.sh`), each as its own
-  campaign. The exact sixteen cells and twenty alternate-campaign trials per
-  cell are versioned in `bench/sensitivity_cells.csv`.
+  second allocator preloaded into the registered build, each as its own
+  campaign and both through `bench/run_sensitivity.sh`. The exact sixteen
+  cells and twenty alternate-campaign trials per cell are versioned in
+  `bench/sensitivity_cells.csv`; the primary schedule gives forty trials to
+  the two W11 cells it shares with the primary family, which is why the
+  alternate arms do not run through `run_confirmatory.sh`. A second compiler
+  and a preloaded allocator are claims until the data shows them: every
+  environment file records the compiler that built the binary and, through
+  `dladdr`, the library that actually answered `malloc`, and the registered
+  compiler and allocator stages refuse a campaign whose value matches the
+  primary campaign's.
 - **Memory:** allocation metrics come only from `valseg_bench_alloc`
   (interleaved mode, 3 trials); RSS is per-trial because one process runs one
   cell. Nothing memory-related is read from a timing binary's replay loop

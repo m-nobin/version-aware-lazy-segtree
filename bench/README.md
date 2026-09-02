@@ -143,7 +143,16 @@ The differences that matter:
   presets build the second-compiler binaries; `bench/run_sensitivity.sh`
   reruns the sixteen cells fixed in `bench/sensitivity_cells.csv` through the
   same balanced schedule generator, registered seed and registered warm-up as
-  the primary campaign, under a preloaded second allocator.
+  the primary campaign. Both arms run through that script: the compiler arm
+  takes the second build directory as its second argument, the allocator arm
+  preloads a library through `VALSEG_ALT_ALLOC`. The primary schedule gives
+  forty trials to the two W11 cells it shares with the primary family, so a
+  compiler arm run through `run_confirmatory.sh` could not satisfy the
+  registered twenty-paired-trial check. Every process records the compiler
+  that built it and the library that answered `malloc`, and the registered
+  compiler and allocator stages reject a campaign that matches the primary
+  one on either, so a preset that quietly resolved to the default compiler,
+  or a preload the loader ignored, cannot read as insensitivity.
   `bench/env/pin_linux.sh` and `bench/env/pin_macos.sh` put each machine
   into, and record, the registered measurement state;
   [bench/env/README.md](env/README.md) is the step-by-step for driving the

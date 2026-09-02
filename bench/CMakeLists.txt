@@ -22,7 +22,9 @@ add_executable(valseg_bench ${VALSEG_BENCH_SOURCES} allocation_counter_off.cpp)
 add_executable(valseg_bench_alloc ${VALSEG_BENCH_SOURCES} allocation_counter_on.cpp)
 
 foreach(target valseg_bench valseg_bench_alloc)
-  target_link_libraries(${target} PRIVATE valseg::valseg)
+  # ${CMAKE_DL_LIBS} is for dladdr: the environment file records which library
+  # actually provides malloc, so a preloaded allocator is evidence, not intent.
+  target_link_libraries(${target} PRIVATE valseg::valseg ${CMAKE_DL_LIBS})
   target_compile_features(${target} PRIVATE cxx_std_17)
 endforeach()
 
@@ -133,6 +135,12 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
              COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/structural_trace_test.sh
                      $<TARGET_FILE:valseg_bench> ${CMAKE_CURRENT_SOURCE_DIR}/testdata/valid_small.trace)
     set_tests_properties(bench_structural_trace PROPERTIES LABELS "bench")
+
+    add_test(NAME bench_sensitivity_arms
+             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/sensitivity_arms_test.sh
+                     ${CMAKE_CURRENT_SOURCE_DIR}/run_sensitivity.sh
+                     $<TARGET_FILE:valseg_bench>)
+    set_tests_properties(bench_sensitivity_arms PROPERTIES LABELS "bench")
 
     add_test(NAME confirmatory_registration_gate
              COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/confirmatory_registration_gate_test.sh

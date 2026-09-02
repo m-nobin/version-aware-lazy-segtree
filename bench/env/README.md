@@ -123,9 +123,21 @@ ssh bench-linux 'tail -3 version-aware-lazy-segtree/dryrun.log'   # progress
 
 The real campaign is the same loop without `VALSEG_DRY_RUN=1` and with a
 campaign id that does not contain `dryrun`; the script refuses to start it
-before the protocol's registration is recorded. Sensitivity campaigns follow the
-same pattern with `VALSEG_BUILD_DIR=build/release-verify-clang` and
-`VALSEG_ALT_ALLOC=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2`.
+before the protocol's registration is recorded.
+
+Both sensitivity arms are separate campaigns run through
+`bench/run_sensitivity.sh`, which measures the sixteen registered cells at
+twenty trials each:
+
+```sh
+bash bench/run_sensitivity.sh linux-b-clang build/release-verify-clang
+VALSEG_ALT_ALLOC=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2 \
+  bash bench/run_sensitivity.sh linux-b-alloc
+```
+
+`libmimalloc.so.2` comes from the `libmimalloc2.0` package; install it before
+the campaign, because the allocator stage refuses a campaign whose recorded
+`malloc_provider` matches the primary one's.
 
 ## 7. Verify the pin actually held
 

@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# The two registered sensitivity arms differ only in what they vary: the
+# compiler arm points at a second build directory and leaves the allocator
+# alone, the allocator arm preloads a library into the registered build. Both
+# run the same sixteen-cell schedule, so run_sensitivity.sh has to accept an
+# absent VALSEG_ALT_ALLOC. Before this was true the compiler arm was
+# documented to run through run_confirmatory.sh, whose forty-trial primary
+# cells the registered twenty-paired-trial check rejects.
+#
+# A stub binary stands in for valseg_bench: what is under test is the
+# script's wiring, not a measurement.
+set -euo pipefail
+
+script="${1:?usage: $0 /path/to/run_sensitivity.sh /path/to/valseg_bench}"
+real_binary="${2:?usage: $0 /path/to/run_sensitivity.sh /path/to/valseg_bench}"
+scratch="$(mktemp -d -t valseg-sensitivity-arms.XXXXXX)"
+trap 'rm -rf -- "$scratch"' EXIT
+
+stub="$scratch/build/bench"
+mkdir -p "$stub"
+export VALSEG_TEST_REAL_BINARY="$real_binary"
+cat > "$stub/valseg_bench" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+# The cell list comes from the real binary, so the stub runs the registered
+# schedule rather than one invented here.
+if [[ "${1:-}" == "--list-cells" ]]; then exec "$VALSEG_TEST_REAL_BINARY" --list-cells; fi
+out=""; tag=""
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --out-dir) out="$2"; shift 2 ;;
+    --tag) tag="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf 'workload\n' > "$out/runs_$tag.csv"
+STUB
+chmod +x "$stub/valseg_bench"
+
+fake_allocator="$scratch/libfake.so"
+printf 'not a real allocator\n' > "$fake_allocator"
+
+run_arm() {
+  local campaign="$1"
+  shift
+  # run_sensitivity.sh writes under the repository it lives in, so the
+  # campaign ids are scratch-only and removed at the end.
+  (cd "$scratch" && env "$@" bash "$script" "$campaign" "$scratch/build" >/dev/null)
+}
+
+root="$(cd "$(dirname "$script")/.." && pwd)"
+compiler_campaign="sensitivity-arms-test-compiler-$$"
+allocator_campaign="sensitivity-arms-test-allocator-$$"
+compiler_raw="$root/bench/results/campaigns/$compiler_campaign/raw"
+allocator_raw="$root/bench/results/campaigns/$allocator_campaign/raw"
+trap 'rm -rf -- "$scratch" "$root/bench/results/campaigns/$compiler_campaign" \
+      "$root/bench/results/campaigns/$allocator_campaign"' EXIT
+
+run_arm "$compiler_campaign" VALSEG_SENSITIVITY_TRIALS=1
+run_arm "$allocator_campaign" VALSEG_SENSITIVITY_TRIALS=1 "VALSEG_ALT_ALLOC=$fake_allocator"
+
+expected=16
+for raw in "$compiler_raw" "$allocator_raw"; do
+  count="$(find "$raw" -name 'runs_*.csv' | wc -l | tr -d ' ')"
+  if [[ "$count" -ne $((expected * 2)) ]]; then
+    echo "expected $((expected * 2)) sensitivity processes, found $count in $raw" >&2
+    exit 1
+  fi
+done
+
+# What each arm preloaded is not asserted here: macOS strips DYLD_* before a
+# protected interpreter, so a shell stub cannot see it. The library that
+# actually answered malloc is recorded per process as malloc_provider, and the
+# registered compiler and allocator stages refuse a campaign that matches the
+# primary one on it.
+if ! grep -qx 'alt_allocator=none' "$(find "$compiler_raw" -name 'system_*.txt' | head -1)"; then
+  echo "the compiler arm did not record that it left the allocator alone" >&2
+  exit 1
+fi
+system_file="$(find "$allocator_raw" -name 'system_*.txt' | head -1)"
+if ! grep -q "^alt_allocator=$fake_allocator$" "$system_file" \
+   || ! grep -qE '^preload_variable=(DYLD_INSERT_LIBRARIES|LD_PRELOAD)$' "$system_file"; then
+  echo "the allocator arm did not record the preloaded library" >&2
+  exit 1
+fi
+
+if (cd "$scratch" && VALSEG_ALT_ALLOC="$scratch/absent.so" bash "$script" \
+      "sensitivity-arms-test-missing-$$" "$scratch/build" >/dev/null 2>&1); then
+  echo "an unreadable VALSEG_ALT_ALLOC was accepted" >&2
+  exit 1
+fi
+
+echo "both sensitivity arms run the registered schedule"

@@ -536,6 +536,49 @@ class SensitivityTests(unittest.TestCase):
                 registry,
             )
 
+    @staticmethod
+    def environments(directory: pathlib.Path, compiler: str, provider: str) -> pathlib.Path:
+        raw = directory / "raw"
+        raw.mkdir(parents=True, exist_ok=True)
+        for workload in ("W1", "W5"):
+            (raw / f"environment_timing-{workload}.txt").write_text(
+                f"compiler={compiler}\nmalloc_provider={provider}\n"
+            )
+        return raw
+
+    def test_sensitivity_requires_the_dimension_to_have_changed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            primary = self.environments(root / "a", "AppleClang 21.0.0", "/usr/lib/libsystem.dylib")
+            same = self.environments(root / "b", "AppleClang 21.0.0", "/usr/lib/libsystem.dylib")
+            other_compiler = self.environments(
+                root / "c", "GNU 16.1.0", "/usr/lib/libsystem.dylib"
+            )
+            other_alloc = self.environments(
+                root / "d", "AppleClang 21.0.0", "/opt/lib/libmimalloc.dylib"
+            )
+            unknown = self.environments(root / "e", "AppleClang 21.0.0", "unknown")
+            missing = (root / "f" / "raw")
+            missing.mkdir(parents=True)
+
+            confirm.assert_dimension_changed(primary, other_compiler, "compiler")
+            confirm.assert_dimension_changed(primary, other_alloc, "allocator")
+            for dimension in ("compiler", "allocator"):
+                with self.assertRaisesRegex(
+                    confirm.RegisteredAnalysisError, "same (compiler|malloc_provider)"
+                ):
+                    confirm.assert_dimension_changed(primary, same, dimension)
+                with self.assertRaisesRegex(confirm.RegisteredAnalysisError, "records no"):
+                    confirm.assert_dimension_changed(primary, missing, dimension)
+            with self.assertRaisesRegex(confirm.RegisteredAnalysisError, "is unknown"):
+                confirm.assert_dimension_changed(primary, unknown, "allocator")
+
+            (other_alloc / "environment_timing-W5.txt").write_text(
+                "compiler=AppleClang 21.0.0\nmalloc_provider=/usr/lib/libsystem.dylib\n"
+            )
+            with self.assertRaisesRegex(confirm.RegisteredAnalysisError, "mid-campaign"):
+                confirm.assert_dimension_changed(primary, other_alloc, "allocator")
+
     def test_restrict_primary_effects_uses_the_full_cell_key(self) -> None:
         effects = pd.concat(
             [

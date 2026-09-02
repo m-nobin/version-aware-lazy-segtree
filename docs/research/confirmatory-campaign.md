@@ -43,7 +43,10 @@ git checkout registered-YYYYMMDD    # or any later commit; the runner verifies t
 cmake --preset release-verify && cmake --build --preset release-verify --parallel
 ctest --preset release-verify       # 100 % before any measurement
 cmake --preset release-verify-clang && cmake --build --preset release-verify-clang --parallel   # Linux second compiler
-cmake --preset release-verify-gcc   && cmake --build --preset release-verify-gcc   --parallel   # macOS second compiler
+# On macOS, `g++` is AppleClang, so name the real GCC or the second-compiler arm
+# repeats the primary one. The registered compiler stage rejects that anyway.
+cmake --preset release-verify-gcc -DCMAKE_CXX_COMPILER=$(brew --prefix gcc)/bin/g++-16 \
+  && cmake --build --preset release-verify-gcc --parallel
 sudo bench/env/pin_linux.sh prepare  # Linux only, once per boot
 ```
 
@@ -72,9 +75,15 @@ Campaign ids: `macos-a`, `linux-b`, then `macos-a-gcc`, `linux-b-clang`,
 for phase in structural timing alloc latency trace; do
   VALSEG_PIN=1 bench/run_confirmatory.sh <id> $phase
 done
-VALSEG_PIN=1 VALSEG_BUILD_DIR=build/release-verify-<second compiler> bench/run_confirmatory.sh <id>-<compiler> timing
-VALSEG_PIN=1 VALSEG_ALT_ALLOC=<allocator library> bench/run_sensitivity.sh <id>-alloc
+bench/run_sensitivity.sh <id>-<compiler> build/release-verify-<second compiler>
+VALSEG_ALT_ALLOC=<allocator library> bench/run_sensitivity.sh <id>-alloc
 ```
+
+Both sensitivity arms go through `run_sensitivity.sh`, which runs the sixteen
+registered cells at twenty trials each. The primary schedule gives forty
+trials to the two W11 cells it shares with the primary family, so a
+`run_confirmatory.sh` compiler arm cannot satisfy the registered
+twenty-paired-trial check.
 
 Every phase is resumable and refuses a changed binary, script, schedule or
 trace on resume. A cell counts as done only when its runs file holds data:
@@ -88,12 +97,18 @@ failed trials stay in the raw CSV with their `status`; nothing is rerun.
 
 ## 6. Blind and analyse
 
-The custody role copies each named campaign into its opaque analyst copy:
+The custody role first moves each measured campaign into the controlled tree,
+because `blind` and `verify-named` refuse a named campaign the analyst could
+reach, then copies it into its opaque analyst copy:
 
 ```sh
-uv run --frozen --project bench/analysis python bench/analysis/blind.py blind <named-a> <analyst-a> --custody-dir <controlled> --study-id <study>
-uv run --frozen --project bench/analysis python bench/analysis/blind.py blind <named-b> <analyst-b> --custody-dir <controlled> --study-id <study>
+mv bench/results/campaigns/<id> <controlled>/named/<id>
+uv run --frozen --project bench/analysis python bench/analysis/blind.py blind <controlled>/named/<named-a> <analyst-a> --custody-dir <controlled> --study-id <study>
+uv run --frozen --project bench/analysis python bench/analysis/blind.py blind <controlled>/named/<named-b> <analyst-b> --custody-dir <controlled> --study-id <study>
 ```
+
+The two sensitivity campaigns are blinded the same way, into the analyst
+copies the compiler and allocator stages read.
 
 The analyst, who sees only the opaque copies and two lexically ordered labels:
 

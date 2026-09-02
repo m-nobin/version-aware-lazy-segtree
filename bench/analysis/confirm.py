@@ -1066,6 +1066,43 @@ def leave_one_trial_out(
     return pd.DataFrame(rows)
 
 
+SENSITIVITY_FIELD = {"compiler": "compiler", "allocator": "malloc_provider"}
+
+
+def assert_dimension_changed(
+    reference_raw: pathlib.Path, sensitivity_raw: pathlib.Path, dimension: str, mode: str = "timing"
+) -> None:
+    """Prove the sensitivity campaign really varied the dimension it names.
+
+    A `release-verify-gcc` preset that resolves to the platform's default
+    compiler, or a preload the loader ignored, produces a campaign that differs
+    from the primary in name only. Its sensitivity result would then be a
+    reassuring null about an experiment that never happened. Both campaigns
+    must report one value each, and the two values must differ.
+    """
+    field = SENSITIVITY_FIELD[dimension]
+    reference = data.environment_values(reference_raw, field, mode)
+    sensitivity = data.environment_values(sensitivity_raw, field, mode)
+    for label, values in (("primary", reference), (dimension, sensitivity)):
+        if not values:
+            raise RegisteredAnalysisError(
+                f"{dimension} sensitivity cannot be checked: the {label} campaign records no {field}"
+            )
+        if len(values) > 1:
+            raise RegisteredAnalysisError(
+                f"the {label} campaign changed {field} mid-campaign: {sorted(values)}"
+            )
+        if values == {"unknown"}:
+            raise RegisteredAnalysisError(
+                f"{dimension} sensitivity cannot be checked: the {label} campaign's {field} is unknown"
+            )
+    if reference == sensitivity:
+        raise RegisteredAnalysisError(
+            f"{dimension} sensitivity ran the same {field} as the primary campaign: "
+            f"{sorted(reference)[0]}"
+        )
+
+
 def campaign_sensitivity(
     reference_runs: pd.DataFrame,
     sensitivity_runs: pd.DataFrame,
@@ -1461,6 +1498,9 @@ def run_stage(
                     out / f"h4_{args.metric}_disagreements.csv", index=False
                 )
             else:
+                assert_dimension_changed(
+                    args.campaign / "raw", args.comparison_campaign / "raw", args.stage, args.mode
+                )
                 table = campaign_sensitivity(
                     runs,
                     comparison_runs,
