@@ -103,5 +103,53 @@ if(BUILD_TESTING)
                      ${CMAKE_CURRENT_SOURCE_DIR}/confirmatory_output_overwrite_guard_test.sh
                      ${CMAKE_CURRENT_SOURCE_DIR}/run_confirmatory.sh)
     set_tests_properties(confirmatory_output_overwrite_guard PROPERTIES LABELS "bench")
+
+    add_test(NAME bench_rss_isolation_regression
+             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/rss_isolation_regression_test.sh
+                     $<TARGET_FILE:valseg_bench>)
+    set_tests_properties(bench_rss_isolation_regression PROPERTIES LABELS "bench")
+
+    add_test(NAME confirmatory_resume_guard
+             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/confirmatory_resume_guard_test.sh
+                     ${CMAKE_CURRENT_SOURCE_DIR}/run_confirmatory.sh)
+    set_tests_properties(confirmatory_resume_guard PROPERTIES LABELS "bench")
+
+    add_test(NAME bench_trace_replay
+             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/trace_replay_test.sh
+                     $<TARGET_FILE:valseg_bench> ${CMAKE_CURRENT_SOURCE_DIR}/testdata/valid_small.trace)
+    set_tests_properties(bench_trace_replay PROPERTIES LABELS "bench")
   endif()
+
+  # Malformed CLI input: checked parsing (bench_main.cpp) must fail the
+  # process before a campaign starts, not silently wrap or truncate.
+  add_test(NAME bench_cli_rejects_negative_size
+           COMMAND valseg_bench --smoke --mode batch --workload W1 --n -5 --structure persistent
+                   --trials 1 --warmup 0 --warmup-seconds 0 --batch-trials 0 --cap-mib 64
+                   --tag cli-bad-n)
+  set_tests_properties(bench_cli_rejects_negative_size PROPERTIES LABELS "bench" WILL_FAIL TRUE)
+
+  add_test(NAME bench_cli_rejects_trailing_garbage
+           COMMAND valseg_bench --smoke --mode batch --workload W1 --n 256 --structure persistent
+                   --trials 1abc --warmup 0 --warmup-seconds 0 --batch-trials 0 --cap-mib 64
+                   --tag cli-bad-trials)
+  set_tests_properties(bench_cli_rejects_trailing_garbage PROPERTIES LABELS "bench" WILL_FAIL TRUE)
+
+  add_test(NAME bench_cli_rejects_overflowing_seed
+           COMMAND valseg_bench --smoke --mode batch --workload W1 --n 256 --structure persistent
+                   --trials 1 --seed 99999999999999999999999 --warmup 0 --warmup-seconds 0
+                   --batch-trials 0 --cap-mib 64 --tag cli-bad-seed)
+  set_tests_properties(bench_cli_rejects_overflowing_seed PROPERTIES LABELS "bench" WILL_FAIL TRUE)
+
+  # Malformed trace input: bench_main.cpp's loadTrace must fail before any
+  # timing starts, so a campaign never begins on a trace it cannot fully read.
+  foreach(fixture malformed_size malformed_op malformed_negative_field malformed_negative_left
+          malformed_range malformed_version malformed_ops_before_n)
+    add_test(NAME bench_trace_rejects_${fixture}
+             COMMAND valseg_bench --mode batch --workload WT
+                     --trace ${CMAKE_CURRENT_SOURCE_DIR}/testdata/${fixture}.trace
+                     --structure persistent --trials 1 --warmup 0 --warmup-seconds 0
+                     --batch-trials 0 --out-dir ${CMAKE_CURRENT_BINARY_DIR}
+                     --tag trace-${fixture})
+    set_tests_properties(bench_trace_rejects_${fixture} PROPERTIES LABELS "bench" WILL_FAIL TRUE)
+  endforeach()
 endif()

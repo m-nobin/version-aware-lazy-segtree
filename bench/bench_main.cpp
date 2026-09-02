@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -16,6 +17,8 @@
 #if defined(__APPLE__)
 #include <pthread.h>
 #include <sys/qos.h>
+#elif defined(__linux__)
+#include <sched.h>
 #endif
 
 #include "adapters.hpp"
@@ -80,20 +83,45 @@ ClockCalibration calibrateClock() {
 }
 
 /**
- * Raise this thread to the interactive quality-of-service class.
+ * Raise this thread to the interactive quality-of-service class and read back
+ * where the process may actually run.
  *
  * Apple silicon has performance and efficiency cores with different clocks and
  * different caches, and the scheduler is free to move a background thread onto
  * an efficiency core part-way through a trial. That turns a structure
  * comparison into a core-placement comparison. Asking for the interactive
  * class is the portable request that keeps the run on performance cores; it is
- * a request, not a guarantee, so the environment file records that it was made.
+ * a request, not a guarantee, so the environment file records the class read
+ * back after the request rather than the request itself. On Linux the
+ * placement is the CPU affinity mask this process inherited from
+ * bench/env/pin_linux.sh: a pin that did not take effect shows up as every
+ * core, not as a bare "requested".
  */
-bool requestPerformanceCores() {
+std::string corePlacement() {
 #if defined(__APPLE__)
-  return pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0) == 0;
+  if (pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0) != 0) {
+    return "qos_request_failed";
+  }
+  qos_class_t actual = QOS_CLASS_UNSPECIFIED;
+  if (pthread_get_qos_class_np(pthread_self(), &actual, nullptr) != 0) {
+    return "qos_readback_failed";
+  }
+  return actual == QOS_CLASS_USER_INTERACTIVE ? "qos_user_interactive" : "qos_other";
+#elif defined(__linux__)
+  cpu_set_t allowed;
+  CPU_ZERO(&allowed);
+  if (sched_getaffinity(0, sizeof(allowed), &allowed) != 0) {
+    return "affinity_readback_failed";
+  }
+  std::string cpus = "affinity";
+  for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
+    if (CPU_ISSET(cpu, &allowed)) {
+      cpus += (cpus == "affinity" ? ":" : ",") + std::to_string(cpu);
+    }
+  }
+  return cpus;
 #else
-  return false;
+  return "unavailable";
 #endif
 }
 
@@ -466,11 +494,85 @@ struct Options {
   bool listCells = false;
   bool outDirGiven = false;
   bool shuffle = true;
+  std::string traceId;
+  long execOrder = -1;  ///< -1 = derive from in-process shuffle position
+  long processSeq = -1; ///< -1 = not supplied by the schedule
 };
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "valseg_bench: " << message << "\n";
   std::exit(2);
+}
+
+/**
+ * Checked replacements for strtoull/strtol/strtod: reject an empty value,
+ * a negative value where none is meaningful, trailing garbage after the
+ * number, and anything strtoul or strtod itself flags as out of range. The
+ * unchecked originals silently wrapped ("--n -5") or silently truncated
+ * ("--trials 1abc") instead of failing the campaign before it started.
+ */
+std::uint64_t parseUnsigned(const std::string& text, const std::string& flag) {
+  if (text.empty() || text[0] == '-') {
+    fail(flag + " must be a non-negative integer: " + text);
+  }
+  errno = 0;
+  char* end = nullptr;
+  const unsigned long long parsed = std::strtoull(text.c_str(), &end, 10);
+  if (end == text.c_str() || *end != '\0') {
+    fail(flag + " must be a non-negative integer: " + text);
+  }
+  if (errno == ERANGE) {
+    fail(flag + " is out of range: " + text);
+  }
+  return static_cast<std::uint64_t>(parsed);
+}
+
+long parseLong(const std::string& text, const std::string& flag) {
+  if (text.empty()) {
+    fail(flag + " must be an integer: " + text);
+  }
+  errno = 0;
+  char* end = nullptr;
+  const long parsed = std::strtol(text.c_str(), &end, 10);
+  if (end == text.c_str() || *end != '\0') {
+    fail(flag + " must be an integer: " + text);
+  }
+  if (errno == ERANGE) {
+    fail(flag + " is out of range: " + text);
+  }
+  return parsed;
+}
+
+long long parseLongLong(const std::string& text, const std::string& flag) {
+  if (text.empty()) {
+    fail(flag + " must be an integer: " + text);
+  }
+  errno = 0;
+  char* end = nullptr;
+  const long long parsed = std::strtoll(text.c_str(), &end, 10);
+  if (end == text.c_str() || *end != '\0') {
+    fail(flag + " must be an integer: " + text);
+  }
+  if (errno == ERANGE) {
+    fail(flag + " is out of range: " + text);
+  }
+  return parsed;
+}
+
+double parseDouble(const std::string& text, const std::string& flag) {
+  if (text.empty()) {
+    fail(flag + " must be a number: " + text);
+  }
+  errno = 0;
+  char* end = nullptr;
+  const double parsed = std::strtod(text.c_str(), &end);
+  if (end == text.c_str() || *end != '\0') {
+    fail(flag + " must be a number: " + text);
+  }
+  if (errno == ERANGE) {
+    fail(flag + " is out of range: " + text);
+  }
+  return parsed;
 }
 
 Options parse(int argc, char** argv) {
@@ -488,10 +590,10 @@ Options parse(int argc, char** argv) {
     } else if (flag == "--structural") {
       options.structural = true;
     } else if (flag == "--warmup-seconds" && hasValue) {
-      options.warmupSeconds = static_cast<std::size_t>(std::strtoull(value.c_str(), nullptr, 10));
+      options.warmupSeconds = static_cast<std::size_t>(parseUnsigned(value, flag));
       ++i;
     } else if (flag == "--batch-trials" && hasValue) {
-      options.batchTrials = static_cast<std::size_t>(std::strtoull(value.c_str(), nullptr, 10));
+      options.batchTrials = static_cast<std::size_t>(parseUnsigned(value, flag));
       ++i;
     } else if (flag == "--mode" && hasValue) {
       if (value == "interleaved") {
@@ -505,17 +607,26 @@ Options parse(int argc, char** argv) {
       }
       ++i;
     } else if (flag == "--sample-every" && hasValue) {
-      options.sampleEvery = static_cast<std::size_t>(std::strtoull(value.c_str(), nullptr, 10));
+      options.sampleEvery = static_cast<std::size_t>(parseUnsigned(value, flag));
       ++i;
     } else if (flag == "--n" && hasValue) {
-      options.sizeFilter = static_cast<std::size_t>(std::strtoull(value.c_str(), nullptr, 10));
+      options.sizeFilter = static_cast<std::size_t>(parseUnsigned(value, flag));
       ++i;
     } else if (flag == "--variant" && hasValue) {
-      options.variantFilter = std::strtod(value.c_str(), nullptr);
+      options.variantFilter = parseDouble(value, flag);
       options.variantFilterSet = true;
       ++i;
     } else if (flag == "--trial-index" && hasValue) {
-      options.trialIndex = std::strtol(value.c_str(), nullptr, 10);
+      options.trialIndex = parseLong(value, flag);
+      ++i;
+    } else if (flag == "--exec-order" && hasValue) {
+      options.execOrder = parseLong(value, flag);
+      ++i;
+    } else if (flag == "--process-seq" && hasValue) {
+      options.processSeq = parseLong(value, flag);
+      ++i;
+    } else if (flag == "--trace-id" && hasValue) {
+      options.traceId = value;
       ++i;
     } else if (flag == "--no-shuffle") {
       options.shuffle = false;
@@ -533,22 +644,22 @@ Options parse(int argc, char** argv) {
       options.tag = value;
       ++i;
     } else if (flag == "--seed" && hasValue) {
-      options.seed = std::strtoull(value.c_str(), nullptr, 10);
+      options.seed = parseUnsigned(value, flag);
       ++i;
     } else if (flag == "--trials" && hasValue) {
-      options.trials = static_cast<std::size_t>(std::strtoull(value.c_str(), nullptr, 10));
+      options.trials = static_cast<std::size_t>(parseUnsigned(value, flag));
       ++i;
     } else if (flag == "--warmup" && hasValue) {
-      options.warmup = static_cast<std::size_t>(std::strtoull(value.c_str(), nullptr, 10));
+      options.warmup = static_cast<std::size_t>(parseUnsigned(value, flag));
       ++i;
     } else if (flag == "--capped-trials" && hasValue) {
-      options.cappedTrials = static_cast<std::size_t>(std::strtoull(value.c_str(), nullptr, 10));
+      options.cappedTrials = static_cast<std::size_t>(parseUnsigned(value, flag));
       ++i;
     } else if (flag == "--trace" && hasValue) {
       options.trace = value;
       ++i;
     } else if (flag == "--cap-mib" && hasValue) {
-      options.capMiB = static_cast<std::size_t>(std::strtoull(value.c_str(), nullptr, 10));
+      options.capMiB = static_cast<std::size_t>(parseUnsigned(value, flag));
       ++i;
     } else if (flag == "--help") {
       std::cout << "usage: valseg_bench [--workload W1|all] [--structure NAME|all]\n"
@@ -557,7 +668,8 @@ Options parse(int argc, char** argv) {
                    "                    [--out-dir DIR] [--tag SUFFIX] [--seed N]\n"
                    "                    [--trials N] [--warmup N] [--warmup-seconds N]\n"
                    "                    [--capped-trials N]\n"
-                   "                    [--cap-mib N] [--trace FILE] [--batch-trials N]\n"
+                   "                    [--cap-mib N] [--trace FILE] [--trace-id ID]\n"
+                   "                    [--batch-trials N] [--exec-order N] [--process-seq N]\n"
                    "                    [--no-shuffle] [--smoke] [--structural] [--list]\n";
       std::exit(0);
     } else {
@@ -600,6 +712,12 @@ Options parse(int argc, char** argv) {
  * Load an operation trace: one line `n,<size>` followed by one line per
  * operation, `u,left,right,delta` or `q,left,right,version`.
  *
+ * The whole file is validated before anything is timed: every range must lie
+ * inside `[0, n)`, and a query may only name a version that an earlier update
+ * has already published (version 0 exists after the build; each update adds
+ * one). This is the interleaved-order rule, which batch replay also
+ * satisfies because it runs every update before any query.
+ *
  * This is the seam for a workload taken from published data rather than
  * generated here. Synthetic streams are the only ones this repository can
  * produce on its own, and a comparison built exclusively on them is worth
@@ -614,6 +732,7 @@ std::vector<Operation> loadTrace(const std::string& path, std::size_t& size) {
   std::vector<Operation> stream;
   std::string line;
   std::size_t lineNumber = 0;
+  std::size_t published = 1;
   while (std::getline(in, line)) {
     ++lineNumber;
     if (line.empty() || line[0] == '#') {
@@ -630,21 +749,38 @@ std::vector<Operation> loadTrace(const std::string& path, std::size_t& size) {
       start = comma + 1;
     }
 
+    const std::string where = path + ":" + std::to_string(lineNumber);
     if (field[0] == "n" && field.size() == 2) {
-      size = static_cast<std::size_t>(std::strtoull(field[1].c_str(), nullptr, 10));
+      if (size != 0) {
+        fail(where + ": n is declared more than once");
+      }
+      size = static_cast<std::size_t>(parseUnsigned(field[1], where + " n"));
       continue;
     }
     if (field.size() != 4 || (field[0] != "u" && field[0] != "q")) {
-      fail(path + ":" + std::to_string(lineNumber) + ": expected n,<size> or u|q,l,r,arg");
+      fail(where + ": expected n,<size> or u|q,l,r,arg");
     }
-    const std::size_t left = static_cast<std::size_t>(std::strtoull(field[1].c_str(), nullptr, 10));
-    const std::size_t right =
-        static_cast<std::size_t>(std::strtoull(field[2].c_str(), nullptr, 10));
-    const long long arg = std::strtoll(field[3].c_str(), nullptr, 10);
+    if (size == 0) {
+      fail(where + ": n must be declared before the first operation");
+    }
+    const std::size_t left = static_cast<std::size_t>(parseUnsigned(field[1], where + " left"));
+    const std::size_t right = static_cast<std::size_t>(parseUnsigned(field[2], where + " right"));
+    if (left > right || right >= size) {
+      fail(where + ": range [" + std::to_string(left) + ", " + std::to_string(right) +
+           "] is not inside [0, " + std::to_string(size) + ")");
+    }
     if (field[0] == "u") {
-      stream.push_back({true, left, right, 0, static_cast<ValueType>(arg)});
+      const long long delta = parseLongLong(field[3], where + " delta");
+      stream.push_back({true, left, right, 0, static_cast<ValueType>(delta)});
+      ++published;
     } else {
-      stream.push_back({false, left, right, static_cast<std::size_t>(arg), 0});
+      const std::size_t version =
+          static_cast<std::size_t>(parseUnsigned(field[3], where + " version"));
+      if (version >= published) {
+        fail(where + ": version " + std::to_string(version) + " is not published yet (" +
+             std::to_string(published) + " versions exist at this point)");
+      }
+      stream.push_back({false, left, right, version, 0});
     }
   }
 
@@ -655,12 +791,20 @@ std::vector<Operation> loadTrace(const std::string& path, std::size_t& size) {
 }
 
 /**
- * The workload record a trace is reported under.
+ * The workload record a trace is reported under. Its id is the --trace-id
+ * label (WT01...) the CSV groups by, so the id cannot identify a trace; the
+ * summary can, and isReplayedTrace is the only test the replay loop uses.
  */
-Workload traceWorkload(std::size_t size) {
+constexpr const char* kReplayedTraceSummary = "replayed trace";
+
+bool isReplayedTrace(const Workload& workload) {
+  return workload.summary == kReplayedTraceSummary;
+}
+
+Workload traceWorkload(std::size_t size, const std::string& traceId) {
   Workload workload;
-  workload.id = "WT";
-  workload.summary = "replayed trace";
+  workload.id = traceId.empty() ? "WT" : traceId;
+  workload.summary = kReplayedTraceSummary;
   workload.sizes = {size};
   workload.operations = 0;
   workload.updateFraction = 0.0;
@@ -727,7 +871,7 @@ std::size_t balancedInterval(std::size_t size) {
 }
 
 void writeEnvironment(const std::string& path, const Options& options,
-                      const ClockCalibration& calibration, bool performanceCores, int argc,
+                      const ClockCalibration& calibration, const std::string& placement, int argc,
                       char** argv) {
   std::ofstream out(path);
   if (!out) {
@@ -749,7 +893,7 @@ void writeEnvironment(const std::string& path, const Options& options,
   out << "memory_cap_mib=" << options.capMiB << "\n";
   out << "clock_overhead_ns=" << calibration.overheadNs << "\n";
   out << "clock_resolution_ns=" << calibration.resolutionNs << "\n";
-  out << "performance_core_qos=" << (performanceCores ? "requested" : "unavailable") << "\n";
+  out << "core_placement=" << placement << "\n";
   out << "execution_order=" << (options.shuffle ? "shuffled_per_trial" : "fixed") << "\n";
   out << "batch_trials=" << options.batchTrials << "\n";
   out << "timing_mode=" << timingModeName(options.mode) << "\n";
@@ -802,8 +946,11 @@ void refuseExistingCampaignOutput(const std::vector<std::string>& paths) {
  * updates at these sizes, so it cannot be cycled, and it is excluded from the
  * throughput comparison for the same reason.
  */
-void warmUp(std::size_t seconds, std::size_t size, std::uint64_t seed, std::size_t capBytes) {
-  if (seconds == 0) {
+void warmUp(std::size_t seconds, std::size_t size, std::uint64_t seed, std::size_t capBytes,
+            const std::string& structureFilter) {
+  // full-copy is never warmed (see the loop below); waiting out the deadline
+  // with nothing to run would just idle the process.
+  if (seconds == 0 || structureFilter == "full-copy") {
     return;
   }
   Workload representative = *findWorkload("W1");
@@ -818,6 +965,13 @@ void warmUp(std::size_t seconds, std::size_t size, std::uint64_t seed, std::size
   while (Clock::now() < deadline) {
     for (const Structure& structure : structures()) {
       if (std::string(structure.name) == "full-copy") {
+        continue;
+      }
+      // Under the fresh-process protocol only one structure is ever measured
+      // in this process; warming any other one still inflates the whole
+      // process's high-water-mark RSS (process_memory.hpp), contaminating
+      // the very peak-RSS reading that process exists to isolate.
+      if (structureFilter != "all" && std::string(structure.name) != structureFilter) {
         continue;
       }
       structure.batch(initial, stream, interval, capBytes);
@@ -892,6 +1046,9 @@ int runStructural(const Options& options) {
 
 int run(int argc, char** argv) {
   const Options options = parse(argc, argv);
+  // The process's own high-water mark before any workload data, trace or
+  // structure exists: the baseline peak_rss_bytes grows from, per trial.
+  const std::size_t initialRss = peakResidentBytes();
 
   if (options.list) {
     printList();
@@ -916,7 +1073,18 @@ int run(int argc, char** argv) {
     return runStructural(options);
   }
 
-  const bool performanceCores = requestPerformanceCores();
+  // A trace is read and fully validated before anything is created on disk,
+  // so a malformed trace fails before the campaign begins rather than after
+  // leaving a header-only runs/memory/environment file behind.
+  std::vector<Workload> plan = workloads();
+  std::vector<Operation> traceStream;
+  if (!options.trace.empty()) {
+    std::size_t traceSize = 0;
+    traceStream = loadTrace(options.trace, traceSize);
+    plan.push_back(traceWorkload(traceSize, options.traceId));
+  }
+
+  const std::string placement = corePlacement();
   const ClockCalibration calibration = calibrateClock();
 
   const std::size_t capBytes = options.capMiB * 1024 * 1024;
@@ -934,9 +1102,10 @@ int run(int argc, char** argv) {
   if (!runs || !memory) {
     fail("cannot write CSV into " + options.outDir + " (does it exist?)");
   }
-  writeEnvironment(environmentPath, options, calibration, performanceCores, argc, argv);
+  writeEnvironment(environmentPath, options, calibration, placement, argc, argv);
 
-  runs << "workload,structure,n,axis,variant,k,seed,trial,exec_order,updates,queries,"
+  runs << "workload,structure,n,axis,variant,k,seed,trial,exec_order,process_seq,initial_rss_bytes,"
+          "updates,queries,"
           "build_ns,build_nodes,update_ns,query_ns,batch_ns,"
           "update_p50,update_p90,update_p99,update_p999,update_max,"
           "query_p50,query_p90,query_p99,query_p999,query_max,"
@@ -955,16 +1124,14 @@ int run(int argc, char** argv) {
   // once the cap has been seen this many times.
   std::map<std::string, std::size_t> cappedSeen;
 
-  std::vector<Workload> plan = workloads();
-  std::vector<Operation> traceStream;
-  if (!options.trace.empty()) {
-    std::size_t traceSize = 0;
-    traceStream = loadTrace(options.trace, traceSize);
-    plan.push_back(traceWorkload(traceSize));
-  }
-
   for (const Workload& original : plan) {
-    if (options.workloadFilter != "all" && options.workloadFilter != original.id) {
+    // A trace workload's id is relabeled to --trace-id for CSV grouping
+    // (each registered external draw needs its own label), but --workload WT
+    // remains the CLI activation keyword regardless of that relabeling.
+    const bool isSelectedTrace =
+        !options.trace.empty() && options.workloadFilter == "WT" && isReplayedTrace(original);
+    if (options.workloadFilter != "all" && options.workloadFilter != original.id &&
+        !isSelectedTrace) {
       continue;
     }
     const Workload workload = options.smoke ? shrink(original) : original;
@@ -974,7 +1141,7 @@ int run(int argc, char** argv) {
         continue;
       }
       const std::size_t defaultInterval = balancedInterval(size);
-      warmUp(options.warmupSeconds, size, options.seed, capBytes);
+      warmUp(options.warmupSeconds, size, options.seed, capBytes, options.structureFilter);
 
       // Trials are the outer loop and structures the inner one, so every
       // structure is measured under whatever the machine was doing during that
@@ -1033,7 +1200,7 @@ int run(int argc, char** argv) {
           }
 
           const std::vector<Operation> stream =
-              workload.id == "WT" ? traceStream : generate(workload, size, variant, seed);
+              isReplayedTrace(workload) ? traceStream : generate(workload, size, variant, seed);
 
           // An unbounded interval means "never checkpoint": the log is
           // replayed from version zero. It is the K -> infinity end of the
@@ -1043,6 +1210,15 @@ int run(int argc, char** argv) {
 
           for (std::size_t position = 0; position < jobs.size(); ++position) {
             const Job& job = jobs[position];
+            // A fresh confirmatory process measures exactly one structure, so
+            // the in-process shuffle position is always 0; the schedule's
+            // within-block order and global sequence, passed in from
+            // confirm_schedule.py, are what the order-effect regression
+            // actually needs. Unset (-1) falls back to the legacy in-process
+            // position for monolithic/manual invocations.
+            const long execOrder =
+                options.execOrder >= 0 ? options.execOrder : static_cast<long>(position);
+            const long processSeq = options.processSeq;
             const std::size_t interval = job.interval == 0 ? unbounded : job.interval;
 
             const std::string cellKey = workload.id + "|" + job.structure->name + "|" +
@@ -1102,11 +1278,12 @@ int run(int argc, char** argv) {
             const std::string memoryKey =
                 key + "," + std::to_string(seed) + "," + std::to_string(trial);
 
-            runs << key << ',' << job.interval << ',' << seed << ',' << trial << ',' << position
-                 << ',' << result.updates << ',' << result.queries << ',' << result.buildNs << ','
-                 << result.buildNodes << ',' << result.updateNs << ',' << result.queryNs << ','
-                 << batchNs << ',' << result.updateLatency.p50 << ',' << result.updateLatency.p90
-                 << ',' << result.updateLatency.p99 << ',' << result.updateLatency.p999 << ','
+            runs << key << ',' << job.interval << ',' << seed << ',' << trial << ',' << execOrder
+                 << ',' << processSeq << ',' << initialRss << ',' << result.updates << ','
+                 << result.queries << ',' << result.buildNs << ',' << result.buildNodes << ','
+                 << result.updateNs << ',' << result.queryNs << ',' << batchNs << ','
+                 << result.updateLatency.p50 << ',' << result.updateLatency.p90 << ','
+                 << result.updateLatency.p99 << ',' << result.updateLatency.p999 << ','
                  << result.updateLatency.max << ',' << result.queryLatency.p50 << ','
                  << result.queryLatency.p90 << ',' << result.queryLatency.p99 << ','
                  << result.queryLatency.p999 << ',' << result.queryLatency.max << ','

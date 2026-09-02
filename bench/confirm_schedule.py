@@ -94,6 +94,65 @@ def build_jobs(
     return jobs
 
 
+def build_schedule(
+    jobs: list[dict], trials_for, mode: str, schedule_seed: int
+) -> list[dict]:
+    """One row per (cell, structure, trial) process: balanced, tagged, in the
+    order the runner will execute them.
+
+    ``exec_order`` is the position within its shuffled trial block (the
+    registered within-block structure order); ``process_seq`` is this row's
+    position in the whole schedule (the registered global process sequence).
+    """
+    max_trials = max((trials_for(job) for job in jobs), default=0)
+    rows = []
+    global_sequence = 0
+    for trial in range(max_trials):
+        block = [job for job in jobs if trial < trials_for(job)]
+        random.Random(f"{schedule_seed}|{trial}").shuffle(block)
+        for block_position, job in enumerate(block):
+            tag = (
+                f"{mode}-{job['workload']}-n{job['n']}-v{job['variant_index']}"
+                f"-{job['structure']}-t{trial:02d}"
+            )
+            rows.append(
+                {
+                    "workload": job["workload"],
+                    "n": job["n"],
+                    "variant": job["variant"],
+                    "structure": job["structure"],
+                    "trial": trial,
+                    "trials": trials_for(job),
+                    "exec_order": block_position,
+                    "process_seq": global_sequence,
+                    "tag": tag,
+                }
+            )
+            global_sequence += 1
+    return rows
+
+
+SCHEDULE_COLUMNS = [
+    "workload",
+    "n",
+    "variant",
+    "structure",
+    "trial",
+    "trials",
+    "exec_order",
+    "process_seq",
+    "tag",
+]
+
+
+def write_schedule(rows: list[dict], out: pathlib.Path) -> None:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    separator = chr(9)
+    lines = [separator.join(str(row[column]) for column in SCHEDULE_COLUMNS) for row in rows]
+    header = "# " + separator.join(SCHEDULE_COLUMNS)
+    out.write_text(header + chr(10) + chr(10).join(lines) + chr(10))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -129,35 +188,9 @@ def main() -> None:
             return args.primary_trials
         return args.trials
 
-    max_trials = max((trials_for(job) for job in jobs), default=0)
-    lines = []
-    for trial in range(max_trials):
-        block = [job for job in jobs if trial < trials_for(job)]
-        random.Random(f"{args.schedule_seed}|{trial}").shuffle(block)
-        for job in block:
-            tag = (
-                f"{args.mode}-{job['workload']}-n{job['n']}-v{job['variant_index']}"
-                f"-{job['structure']}-t{trial:02d}"
-            )
-            lines.append(
-                "\t".join(
-                    [
-                        job["workload"],
-                        job["n"],
-                        job["variant"],
-                        job["structure"],
-                        str(trial),
-                        str(trials_for(job)),
-                        tag,
-                    ]
-                )
-            )
-
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(
-        "# workload\tn\tvariant\tstructure\ttrial\ttrials\ttag\n" + "\n".join(lines) + "\n"
-    )
-    print(f"{len(lines)} processes -> {args.out}", file=sys.stderr)
+    rows = build_schedule(jobs, trials_for, args.mode, args.schedule_seed)
+    write_schedule(rows, args.out)
+    print(f"{len(rows)} processes -> {args.out}", file=sys.stderr)
 
 
 if __name__ == "__main__":

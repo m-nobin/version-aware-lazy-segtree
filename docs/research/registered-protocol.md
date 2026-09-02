@@ -69,7 +69,11 @@ runs; it is never inferred from the primary batch replays.
   different microarchitecture family (GCC). Environment and pinning:
   `bench/collect_environment.sh`, `bench/env/pin_macos.sh`,
   `bench/env/pin_linux.sh`. Power, thermal, governor, core placement and
-  allocator are captured before every process.
+  allocator are captured before every process, and the binary records the
+  placement it read back after its own request (`core_placement`: QoS class
+  on macOS, inherited CPU affinity mask on Linux) in every environment file.
+  A trace is validated in full (domain bounds and published-version
+  references) before a process times anything.
 - **Sensitivity:** W1, W5 and W11 rerun under (a) the platform's second
   compiler (`release-verify-gcc` / `release-verify-clang` presets) and (b) a
   second allocator via preload (`bench/run_sensitivity.sh`), each as its own
@@ -428,7 +432,17 @@ artifact hash is recorded.
 3. Re-verify the registered commit and manifest, seal one study-wide blinding
    map under independent custody, then per machine:
    `structural`, `timing`, `alloc`, `latency`, `trace` phases, then the two
-   sensitivity campaigns.
+   sensitivity campaigns. `bench/run_confirmatory.sh` itself refuses to start
+   a non-dry-run phase from a dirty worktree, a commit other than the one
+   `docs/research/registration-manifest.txt` names, a manifest that fails
+   `bench/make_registration.sh --verify`, or a protocol whose deposited
+   DOI/URL still reads "Pending"; a resumed campaign refuses to continue if
+   its recorded binaries, scripts, seed or commit no longer match, or if a
+   generated schedule or trace file no longer matches its own recorded
+   checksum. Each phase writes a completion marker only after confirming
+   every file its schedule promised is present. `bench/run_sensitivity.sh`
+   routes its sixteen cells through the same balanced schedule generator and
+   the registered seed and warm-up, rather than a separate ad hoc loop.
 4. The analyst runs `bench/run_registered_analysis.sh analyst`:
    primary/regime/hierarchical and registered sensitivities on the opaque
    analyst copies; H4 across machines; compiler and allocator sensitivities.
