@@ -77,7 +77,11 @@ VALSEG_PIN=1 VALSEG_ALT_ALLOC=<allocator library> bench/run_sensitivity.sh <id>-
 ```
 
 Every phase is resumable and refuses a changed binary, script, schedule or
-trace on resume. Evidence per phase: `complete_<phase>` written only after
+trace on resume. A cell counts as done only when its runs file holds data:
+an unclean shutdown leaves zero-length files whose metadata reached the
+journal but whose contents never flushed, so those cells are cleared and
+measured again rather than skipped, and the audit does not count them as
+present. Evidence per phase: `complete_<phase>` written only after
 the expected-versus-present audit, `system_*.txt` before every process,
 `environment_*.txt` with `core_placement` after it. Capped, incomplete and
 failed trials stay in the raw CSV with their `status`; nothing is rerun.

@@ -119,6 +119,11 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
                      ${CMAKE_CURRENT_SOURCE_DIR}/run_confirmatory.sh)
     set_tests_properties(confirmatory_resume_guard PROPERTIES LABELS "bench")
 
+    add_test(NAME confirmatory_crash_recovery
+             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/confirmatory_crash_recovery_test.sh
+                     ${CMAKE_CURRENT_SOURCE_DIR}/run_confirmatory.sh)
+    set_tests_properties(confirmatory_crash_recovery PROPERTIES LABELS "bench")
+
     add_test(NAME bench_trace_replay
              COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/trace_replay_test.sh
                      $<TARGET_FILE:valseg_bench> ${CMAKE_CURRENT_SOURCE_DIR}/testdata/valid_small.trace)
