@@ -18,7 +18,21 @@ ls /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor   # must exist
 lscpu | grep -E 'Model name|^CPU\(s\)|Thread|L2|L3'         # x86-64, not an Apple family
 ```
 
-## 2. Reach it from the Mac
+## 2. Reach it from the Mac without a password
+
+Once, at the Linux machine's own keyboard, make sure it accepts SSH and find
+its address:
+
+```sh
+sudo apt-get install --yes openssh-server
+sudo systemctl enable --now ssh
+hostname -I | awk '{print $1}'      # the HOST used below
+whoami                              # the USER used below
+```
+
+Everything after this runs on the Mac. `ssh-copy-id` asks for the Linux
+password once and never again; it installs the public key so later logins are
+key-only.
 
 ```sh
 ssh-keygen -t ed25519 -f ~/.ssh/valseg_linux -N ''
@@ -28,9 +42,28 @@ Host bench-linux
   HostName HOST
   User USER
   IdentityFile ~/.ssh/valseg_linux
+  IdentitiesOnly yes
   ServerAliveInterval 30
 CFG
-ssh bench-linux uname -m        # x86_64
+chmod 600 ~/.ssh/config
+```
+
+Verify the login is passwordless and lands on the right architecture. The
+first command must print `x86_64` without prompting:
+
+```sh
+ssh bench-linux uname -m
+ssh -o BatchMode=yes bench-linux true && echo "key auth ok"
+```
+
+`BatchMode=yes` disables every interactive prompt, so it fails loudly if the
+key was not installed rather than silently falling back to a password.
+
+If the machine sleeps or drops off the network mid-campaign, the phase stops
+and resumes cleanly on the next run; nothing is lost. To prevent the pause:
+
+```sh
+ssh -t bench-linux 'sudo systemctl mask sleep.target suspend.target hibernate.target'
 ```
 
 `bench-linux` is the only name the rest of this page uses.
