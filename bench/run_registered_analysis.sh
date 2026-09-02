@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The one locked registered-analysis script, in two halves that different
-# people run. The analyst half sees only opaque campaign copies and the two
+# The one locked registered-analysis script, in two halves run from different
+# locations. The analyst half sees only opaque campaign copies and the two
 # lexically ordered contrast labels; it never receives a named campaign or the
 # custody directory. The custodian half hashes every blinded output, unblinds,
 # verifies the named inputs and runs the deterministic and model stages.

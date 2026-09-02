@@ -3,26 +3,27 @@
 This document, together with the frozen files that will be listed in
 `docs/research/registration-manifest.txt`, is the prepared analysis plan
 for the confirmatory campaign of the Route B research programme. Once the
-manifest is deposited immutably (OSF or Zenodo) with a link to the repository
-commit, everything here is frozen: a later change requires a versioned,
+manifest is generated from a clean commit and that commit is tagged and
+pushed, everything here is frozen: a later change requires a versioned,
 timestamped protocol deviation recorded in section 12 before any affected
-result is inspected. No confirmatory seed runs before the deposit timestamp.
+result is inspected. No confirmatory seed runs before the tag's push
+timestamp. The protocol and manifest are published with the paper's arXiv
+submission; there is no separate deposit before the campaign.
 
-Status: **prepared, not yet deposited.** The registered commit, tag, manifest
-hash, deposit DOI/URL and timestamp are recorded in
+Status: **prepared, not yet registered.** The registered commit, tag,
+manifest hash and registration timestamp are recorded in
 `docs/research/registration-record.md` at registration time; that file is
-outside the frozen list so recording the deposit changes no frozen checksum.
-Until then this protocol binds nothing and no confirmatory measurement may
-run.
+outside the frozen list so recording the registration changes no frozen
+checksum. Until then this protocol binds nothing and no confirmatory
+measurement may run.
 
 | Registration field | Value |
 | --- | --- |
 | Frozen repository commit | The commit `registration-manifest.txt` names; recorded with its tag in `registration-record.md` |
-| Manifest SHA-256 | Recorded in `registration-record.md` at deposit |
-| Immutable DOI / URL | Recorded in `registration-record.md` at deposit |
-| Deposit UTC timestamp | Recorded in `registration-record.md` at deposit |
+| Manifest SHA-256 | Recorded in `registration-record.md` at registration |
+| Registration UTC timestamp | The push time of the registered tag; recorded in `registration-record.md` |
 | Statistical reviewer / approval record | Approved at round 3 on 1 September 2026 by the automated reviewer acting for Sunjare Zulfiker; record in `docs/research/statistical-review.md` |
-| Blinding custodian / controlled location | Sunjare Zulfiker, custody material held on his own machine/account outside the primary analyst's routine access; assigned 2 September 2026 |
+| Blinding custody | A custody role performed by the authors from a controlled directory outside every campaign tree; the separation is procedural, see section 6 |
 
 Pilot-informed choices are marked *(pilot)* throughout and their basis is
 section 11. The exploratory pilot of 21 August 2026 is never pooled with
@@ -194,7 +195,7 @@ file hashes are in the registration manifest.
   `numpy_version` it was computed with.
 - **Classification:** the four-state rule of `classify()` against
   `log(delta)`, interval-based, never point-estimate-based.
-- **Blinded orientation:** the custodian supplies the registered contrast's
+- **Blinded orientation:** the custody role supplies the registered contrast's
   two opaque labels in lexical order as `LABEL-A < LABEL-B`; neither is called
   treatment, subject or baseline in the analyst workflow. Pre-unblinding
   effects are oriented as A relative to B and carry both labels. After names
@@ -302,12 +303,12 @@ rows also abort rather than changing the denominator.
 ## 6. Blinding
 
 One blinding seal covers both machines and the registered sensitivity
-campaigns. Before measurement, a custodian runs `blind.py seal` with a
+campaigns. Before measurement, the custody role runs `blind.py seal` with a
 controlled `--custody-dir` outside every analyst campaign. The key, named raw
 campaign and structure-name map remain there; the analyst directory receives
 only a key hash commitment (`blind.py attach` binds the other machine and
 sensitivity campaigns to the same study-wide seal) and, via `blind.py blind`, generically named CSVs
-whose structure field is already `S01`..`S09`. The custodian also retains a
+whose structure field is already `S01`..`S09`. The custody role also retains a
 hash manifest binding every named source file to its blinded copy; the analyst
 gets only its commitment and blinded-file hashes. `confirm.py --blinded` only
 validates opaque labels and has no key/map import path.
@@ -330,10 +331,13 @@ time. Before names are written, `unblind` reads the opaque contrast labels
 that the blinded outputs carry and refuses to proceed unless they resolve to
 exactly the registered pair; the named copies gain a `persistent_direction`
 column that applies the orientation rule of section 5 mechanically. The
-custodian executes the `custodian` half of the locked script and the analyst
-the `analyst` half; the custodian and controlled path are recorded in the
-registration deposit access log; they must not be the primary analyst or a
-location routinely available to that analyst. H3 holdout responses remain
+`custodian` half of the locked script and the `analyst` half are both run
+by the authors. The separation is procedural, not personal: the custody
+directory lives outside every campaign tree, the analyst half never receives
+its path, and the unblinding record hashes every blinded output before the
+map is opened, so any analysis inspected after unblinding is detectable. The
+controlled path is recorded in `registration-record.md`. H3 holdout
+responses remain
 unopened until the fitted artifact and its hash exist, as specified in
 `docs/research/cost-model.md` section 4.
 
@@ -432,10 +436,9 @@ artifact hash is recorded.
    confirmation and dry-run campaigns keep `dryrun` in their id. Resolve all
    resulting defects before freezing PR7.
 2. Merge/freeze PR6 and PR7 at one clean commit; obtain independent statistical
-   approval and name the custodian; run `bench/make_registration.sh`, verify
-   every checksum, commit the manifest, tag the commit it names, deposit the
-   protocol and manifest, verify the deposit is retrievable, and record the
-   commit, tag, manifest hash, DOI and timestamp in
+   approval; run `bench/make_registration.sh`, verify every checksum, commit
+   the manifest, tag the commit it names, push the tag, and record the
+   commit, tag, manifest hash and push timestamp in
    `docs/research/registration-record.md`. The step-by-step, with the
    evidence each step leaves, is `docs/research/confirmatory-campaign.md`.
 3. Re-verify the registered commit and manifest, seal one study-wide blinding
@@ -447,7 +450,7 @@ artifact hash is recorded.
    `docs/research/registration-manifest.txt` names, with a frozen file that
    fails `bench/make_registration.sh --verify`, or while
    `docs/research/registration-record.md` still reads "Pending" for the
-   DOI/URL; a resumed campaign refuses to continue if
+   registered tag; a resumed campaign refuses to continue if
    its recorded binaries, scripts, seed or commit no longer match, or if a
    generated schedule or trace file no longer matches its own recorded
    checksum. Each phase writes a completion marker only after confirming
@@ -460,7 +463,7 @@ artifact hash is recorded.
 4. The analyst runs `bench/run_registered_analysis.sh analyst`:
    primary/regime/hierarchical and registered sensitivities on the opaque
    analyst copies; H4 across machines; compiler and allocator sensitivities.
-   The custodian then runs `bench/run_registered_analysis.sh custodian`: hash
+   The custody role then runs `bench/run_registered_analysis.sh custodian`: hash
    every output; unblind; verify controlled named input against its custody
    manifest; run checksums and H1; H3 prepare/fit/evaluate; build the H5
    responses from the trace phase and transfer; H5; verify the

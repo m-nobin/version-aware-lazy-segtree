@@ -4,4 +4,4 @@
 # This is not registration evidence. After the final PR6 and PR7 inputs are
 # merged, run bench/make_registration.sh from that clean commit. The command
 # refuses a dirty worktree, records git_dirty=no, verifies every checksum, and
-# replaces this placeholder with the deposit artifact.
+# replaces this placeholder with the registered manifest.

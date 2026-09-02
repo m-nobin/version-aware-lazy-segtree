@@ -90,8 +90,8 @@ testing.
 Everything above describes the pilot-era workflow. The confirmatory campaign
 runs under the frozen protocol in
 [docs/research/registered-protocol.md](../docs/research/registered-protocol.md)
-instead, and no confirmatory seed runs before that protocol's immutable
-deposit.
+instead, and no confirmatory seed runs before that protocol's registration
+(a tagged, pushed commit with its manifest).
 
 The differences that matter:
 
@@ -116,7 +116,7 @@ The differences that matter:
   measured, and `initial_rss_bytes` records the process's own baseline
   before any workload exists. A non-dry-run phase refuses a dirty worktree,
   an unregistered commit, a manifest that fails verification, or a protocol
-  whose deposit is still pending, and every phase writes a completion marker
+  whose registration is still pending, and every phase writes a completion marker
   only once every file its schedule promised is present. The `trace` phase
   collects all twelve registered external draws
   (`bench/h5_trace_draws.csv`), not one distribution replayed under twelve
@@ -126,7 +126,7 @@ The differences that matter:
   (non-dry-run) campaign id may not contain `dryrun` or `pilot`, and a real
   phase starts only from a clean commit that descends from the registered one,
   with every frozen file verifying against the manifest and
-  `docs/research/registration-record.md` recording the deposit. Trial counts
+  `docs/research/registration-record.md` recording the registration. Trial counts
   per cell class live in `bench/primary_cells.csv`
   (registered H2 cells, 40 trials) and `bench/capped_cells.csv` (pilot-known
   cap cells, 2 trials); everything else runs 20. `VALSEG_DRY_RUN=1` switches
@@ -165,9 +165,10 @@ The differences that matter:
   possible regime subjects are computed before identities are disclosed.
 - **Registration is a file list with hashes.** `bench/make_registration.sh`
   writes `docs/research/registration-manifest.txt` over every frozen file;
-  the deposit of that manifest with the protocol is the registration
-  timestamp, and `docs/research/registration-record.md` (outside the frozen
-  list) records the commit, tag, DOI and timestamp afterwards.
+  pushing the tag on the commit it names is the registration timestamp, and
+  `docs/research/registration-record.md` (outside the frozen list) records
+  the commit, tag, manifest hash and timestamp afterwards. The protocol and
+  manifest are published with the paper.
   `docs/research/confirmatory-campaign.md` is the one-shot runbook from
   registration to Gate G3.
 
