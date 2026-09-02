@@ -228,7 +228,12 @@ run_schedule() {
   local schedule="$meta/schedule_$mode.tsv"
   local trials=20 primary_trials=40
   if [[ "$mode" == "alloc" ]]; then trials=3 primary_trials=3; fi
-  if [[ -n "$dry" ]]; then trials="$dry_trials" primary_trials="$dry_trials"; fi
+  # A dry run lowers the trial count; it never raises it above the campaign it
+  # rehearses, so alloc stays at its registered three however high dry_trials is.
+  if [[ -n "$dry" ]]; then
+    [[ "$dry_trials" -lt "$trials" ]] && trials="$dry_trials"
+    [[ "$dry_trials" -lt "$primary_trials" ]] && primary_trials="$dry_trials"
+  fi
   if [[ ! -e "$schedule" ]]; then
     local workloads="all"
     [[ "$mode" == "latency" ]] && workloads="$latency_workloads"
@@ -300,7 +305,7 @@ trace)
     fi
     hash_or_verify_artifact "$trace_file"
     trials="$draw_trials"
-    [[ -n "$dry" ]] && trials="$dry_trials"
+    [[ -n "$dry" && "$dry_trials" -lt "$trials" ]] && trials="$dry_trials"
     # The draw's machine-independent counts, one row per recorded seed, are
     # what the H5 transfer joins to the external adapter's responses.
     if [[ ! -s "$raw/structural_trace-$draw_id-$draw_id.csv" ]]; then
