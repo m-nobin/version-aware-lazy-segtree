@@ -1,6 +1,13 @@
-"""Turn the campaign into figures, LaTeX tables and the macros the report cites.
+"""Turn the exploratory pilot into figures, LaTeX tables and the macros it cites.
 
-Run it after a campaign:
+This reads `bench/results/raw`, which is the pilot, and nothing else. The
+registered confirmatory campaigns live under `bench/results/campaigns/<id>`
+and are read only by `confirm.py`, whose decision CSVs the manuscript's
+confirmatory tables and figures are generated from. Pointing this script at a
+campaign directory would pool exploratory and confirmatory evidence, which the
+protocol forbids.
+
+Run it after the pilot campaign:
 
     uv run --project bench/analysis bench/analysis/report.py
 
