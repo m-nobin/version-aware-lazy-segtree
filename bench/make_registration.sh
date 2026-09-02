@@ -60,6 +60,7 @@ frozen=(
   bench/external/thealgorithms_persistent_seg_tree_lazy_prop.cpp
   bench/external/PROVENANCE.md
   bench/confirm_schedule.py
+  bench/campaign_gate.sh
   bench/run_confirmatory.sh
   bench/run_registered_analysis.sh
   bench/run_sensitivity.sh

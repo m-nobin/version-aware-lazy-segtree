@@ -43,14 +43,16 @@ printf 'not a real allocator\n' > "$fake_allocator"
 run_arm() {
   local campaign="$1"
   shift
+  # VALSEG_DRY_RUN keeps the registration gate out of the way: what is under
+  # test is the arm wiring, and the gate has its own fixture.
   # run_sensitivity.sh writes under the repository it lives in, so the
   # campaign ids are scratch-only and removed at the end.
-  (cd "$scratch" && env "$@" bash "$script" "$campaign" "$scratch/build" >/dev/null)
+  (cd "$scratch" && env VALSEG_DRY_RUN=1 "$@" bash "$script" "$campaign" "$scratch/build" >/dev/null)
 }
 
 root="$(cd "$(dirname "$script")/.." && pwd)"
-compiler_campaign="sensitivity-arms-test-compiler-$$"
-allocator_campaign="sensitivity-arms-test-allocator-$$"
+compiler_campaign="sensitivity-arms-test-dryrun-compiler-$$"
+allocator_campaign="sensitivity-arms-test-dryrun-allocator-$$"
 compiler_raw="$root/bench/results/campaigns/$compiler_campaign/raw"
 allocator_raw="$root/bench/results/campaigns/$allocator_campaign/raw"
 trap 'rm -rf -- "$scratch" "$root/bench/results/campaigns/$compiler_campaign" \
@@ -84,10 +86,18 @@ if ! grep -q "^alt_allocator=$fake_allocator$" "$system_file" \
   exit 1
 fi
 
-if (cd "$scratch" && VALSEG_ALT_ALLOC="$scratch/absent.so" bash "$script" \
-      "sensitivity-arms-test-missing-$$" "$scratch/build" >/dev/null 2>&1); then
+if (cd "$scratch" && VALSEG_DRY_RUN=1 VALSEG_ALT_ALLOC="$scratch/absent.so" bash "$script" \
+      "sensitivity-arms-test-dryrun-missing-$$" "$scratch/build" >/dev/null 2>&1); then
   echo "an unreadable VALSEG_ALT_ALLOC was accepted" >&2
   exit 1
 fi
+
+# A confirmatory id has to reach the registration gate rather than measure.
+if (cd "$scratch" && bash "$script" "sensitivity-arms-test-real-$$" "$scratch/build" >/dev/null 2>&1); then
+  echo "a confirmatory sensitivity campaign ran without passing the registration gate" >&2
+  rm -rf -- "$root/bench/results/campaigns/sensitivity-arms-test-real-$$"
+  exit 1
+fi
+rm -rf -- "$root/bench/results/campaigns/sensitivity-arms-test-real-$$"
 
 echo "both sensitivity arms run the registered schedule"

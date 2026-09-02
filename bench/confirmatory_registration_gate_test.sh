@@ -16,6 +16,7 @@ trap 'rm -rf -- "$scratch"' EXIT
 mkdir -p "$scratch/bench" "$scratch/docs/research" "$scratch/build/release-verify/bench"
 cp "$runner" "$scratch/bench/run_confirmatory.sh"
 cp "$registration" "$scratch/bench/make_registration.sh"
+cp "$(dirname "$runner")/campaign_gate.sh" "$scratch/bench/campaign_gate.sh"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$scratch/build/release-verify/bench/valseg_bench"
 chmod +x "$scratch/build/release-verify/bench/valseg_bench"
 git -C "$scratch" init -q

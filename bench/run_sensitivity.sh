@@ -36,6 +36,14 @@ fi
 binary="$build/bench/valseg_bench"
 [[ -x "$binary" ]] || { echo "missing $binary; build the release-verify preset first" >&2; exit 2; }
 
+# Sensitivity output feeds the registered compiler and allocator decisions, so
+# it passes the same gate as the primary campaign.
+dry=""
+[[ "${VALSEG_DRY_RUN:-0}" == "1" ]] && dry="yes"
+# shellcheck source=bench/campaign_gate.sh
+source "$root/bench/campaign_gate.sh"
+campaign_gate "$root" "$campaign" "$dry"
+
 raw="$root/bench/results/campaigns/$campaign/raw"
 meta="$root/bench/results/campaigns/$campaign"
 mkdir -p "$raw"
@@ -66,6 +74,35 @@ if [[ ! -e "$schedule" ]]; then
     --schedule-seed "$schedule_seed" --workloads W1,W5,W11 \
     --structures persistent,copy-on-push --out "$schedule"
 fi
+
+# The same refusal the primary runner applies: a resumed campaign whose binary,
+# allocator, script or commit changed is not the campaign it claims to be.
+expected_meta="$(
+  printf 'campaign=%s\n' "$campaign"
+  printf 'dry_run=%s\n' "${dry:-no}"
+  printf 'seed_base=%s\n' "$confirm_seed"
+  printf 'schedule_seed=%s\n' "$schedule_seed"
+  printf 'trials=%s\n' "$trials"
+  printf 'git_commit=%s\n' "$campaign_gate_commit"
+  printf 'git_dirty=%s\n' "$campaign_gate_dirty"
+  printf 'registered_commit=%s\n' "$campaign_gate_registered_commit"
+  printf 'build_dir=%s\n' "$build"
+  printf 'timing_binary_sha256=%s\n' "$(shasum -a 256 "$binary" | cut -d' ' -f1)"
+  printf 'alt_allocator=%s\n' "${alloc:-none}"
+  printf 'alt_allocator_sha256=%s\n' \
+    "$([[ -n "$alloc" ]] && shasum -a 256 "$alloc" | cut -d' ' -f1 || echo none)"
+  printf 'runner_script_sha256=%s\n' "$(shasum -a 256 "$0" | cut -d' ' -f1)"
+)"
+if [[ -e "$meta/campaign.txt" ]]; then
+  if [[ "$expected_meta" != "$(cat "$meta/campaign.txt")" ]]; then
+    echo "refusing to resume $campaign: recorded metadata does not match the current binary, allocator, script or commit" >&2
+    diff <(printf '%s\n' "$expected_meta") "$meta/campaign.txt" >&2 || true
+    exit 2
+  fi
+else
+  printf '%s\n' "$expected_meta" > "$meta/campaign.txt"
+fi
+
 total=$(grep -vc '^#' "$schedule")
 done_count=0
 while IFS=$'\t' read -r workload n variant structure trial cell_trials exec_order process_seq tag; do

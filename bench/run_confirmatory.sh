@@ -84,10 +84,6 @@ dry=""
 # is read only on a dry run; a confirmatory campaign always uses 20/40.
 dry_trials="${VALSEG_DRY_RUN_TRIALS:-2}"
 if [[ "${VALSEG_DRY_RUN:-0}" == "1" ]]; then
-  if [[ "$campaign" != *dryrun* ]]; then
-    echo "dry runs must use a campaign id containing 'dryrun'" >&2
-    exit 2
-  fi
   if [[ ! "$dry_trials" =~ ^[1-9][0-9]*$ ]]; then
     echo "VALSEG_DRY_RUN_TRIALS must be a positive integer" >&2
     exit 2
@@ -95,10 +91,10 @@ if [[ "${VALSEG_DRY_RUN:-0}" == "1" ]]; then
   seed="$dryrun_seed"
   warmup_seconds=0
   dry="yes"
-elif [[ "$campaign" == *dryrun* || "$campaign" == *pilot* ]]; then
-  echo "confirmatory campaign ids must not contain 'dryrun' or 'pilot' (set VALSEG_DRY_RUN=1 for a dry run)" >&2
-  exit 2
 fi
+# shellcheck source=bench/campaign_gate.sh
+source "$root/bench/campaign_gate.sh"
+campaign_gate "$root" "$campaign" "$dry"
 
 raw="$root/bench/results/campaigns/$campaign/raw"
 meta="$root/bench/results/campaigns/$campaign"
@@ -140,37 +136,11 @@ hash_or_verify_artifact() {
 }
 
 record_meta() {
-  local commit dirty registered_commit=none
-  commit="$(git -C "$root" rev-parse HEAD 2>/dev/null || echo untracked)"
-  dirty="$(test -n "$(git -C "$root" status --porcelain 2>/dev/null)" && echo yes || echo no)"
-
-  if [[ -z "$dry" ]]; then
-    if [[ "$dirty" == "yes" ]]; then
-      echo "refusing: worktree is dirty; a confirmatory campaign must start from a clean, registered commit" >&2
-      exit 2
-    fi
-    # The manifest names the commit it was generated from, and committing the
-    # manifest itself moves HEAD past that commit. What is frozen is the file
-    # set: the campaign commit must descend from the registered one and every
-    # frozen file must still hash exactly as the manifest recorded.
-    local manifest="$root/docs/research/registration-manifest.txt"
-    registered_commit="$(awk -F= '/^# git_commit=/{print $2}' "$manifest" 2>/dev/null || true)"
-    if [[ -z "$registered_commit" ]] ||
-      ! git -C "$root" merge-base --is-ancestor "$registered_commit" "$commit" 2>/dev/null; then
-      echo "refusing: commit $commit does not descend from the registered commit ($manifest)" >&2
-      exit 2
-    fi
-    "$root/bench/make_registration.sh" --verify "$manifest" >/dev/null || {
-      echo "refusing: registration manifest failed checksum verification" >&2
-      exit 2
-    }
-    local record="$root/docs/research/registration-record.md" tag_line
-    tag_line="$(grep -F '| Registered tag |' "$record" 2>/dev/null || true)"
-    if [[ -z "$tag_line" || "$tag_line" == *Pending* ]]; then
-      echo "refusing: $record does not record the registered tag" >&2
-      exit 2
-    fi
-  fi
+  local commit dirty registered_commit
+  campaign_gate "$root" "$campaign" "$dry"
+  commit="$campaign_gate_commit"
+  dirty="$campaign_gate_dirty"
+  registered_commit="$campaign_gate_registered_commit"
 
   local expected file="$meta/campaign.txt"
   expected="$(

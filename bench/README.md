@@ -155,7 +155,11 @@ The differences that matter:
   that built it and the library that answered `malloc`, and the registered
   compiler and allocator stages reject a campaign that matches the primary
   one on either, so a preset that quietly resolved to the default compiler,
-  or a preload the loader ignored, cannot read as insensitivity.
+  or a preload the loader ignored, cannot read as insensitivity. Both runners
+  share `bench/campaign_gate.sh`, so a sensitivity campaign refuses a dirty
+  worktree, an unregistered commit, a failed manifest verification and a
+  pending registration record exactly as the primary campaign does, and
+  refuses to resume across a changed binary, allocator or script.
   `bench/env/pin_linux.sh` and `bench/env/pin_macos.sh` put each machine
   into, and record, the registered measurement state;
   [bench/env/README.md](env/README.md) is the step-by-step for driving the
