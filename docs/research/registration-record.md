@@ -18,3 +18,9 @@ with the paper's arXiv submission.
 | Registration UTC timestamp (tag push) | Pending |
 | Custody directory (outside every campaign tree) | Pending |
 | Verified by, on | Pending |
+
+The custody directory holds the blinding key, the label map and the input
+manifests. It lives outside every campaign tree and outside the repository, so
+the analyst half cannot reach it by path; the campaigns themselves are moved
+into it before they are blinded. Record the absolute path above at registration
+time.
