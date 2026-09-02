@@ -114,9 +114,7 @@ private:
 
 } // namespace
 
-// ---------------------------------------------------------------------------
 // Initialization
-// ---------------------------------------------------------------------------
 
 TEST(FatNodePersistentSegmentTreeTest, InitializationPublishesVersionZero) {
   FatNodePersistentSegmentTree tree({10, 20, 30, 40, 50});
@@ -181,9 +179,7 @@ TEST(FatNodePersistentSegmentTreeTest, SingleElementTree) {
   EXPECT_EQ(tree.rangeSum(v1, 0, 0), 10);
 }
 
-// ---------------------------------------------------------------------------
 // Fat-node allocation evidence
-// ---------------------------------------------------------------------------
 
 TEST(FatNodePersistentSegmentTreeTest, UpdateExceedingCapacityCopiesOnlyTheFullNode) {
   FatNodePersistentSegmentTree tree({0, 0, 0, 0});
@@ -373,9 +369,7 @@ TEST(FatNodePersistentSegmentTreeTest, NodeCountGrowsByOverflowingVisitedNodesPe
   }
 }
 
-// ---------------------------------------------------------------------------
 // Cumulative updates
-// ---------------------------------------------------------------------------
 
 TEST(FatNodePersistentSegmentTreeTest, OverlappingUpdatesAccumulateCorrectly) {
   FatNodePersistentSegmentTree tree({1, 2, 3, 4, 5});
@@ -419,9 +413,7 @@ TEST(FatNodePersistentSegmentTreeTest, MultipleUpdatesAccumulate) {
   EXPECT_EQ(tree.rangeSum(v2, 0, 3), 40);
 }
 
-// ---------------------------------------------------------------------------
 // Zero-delta updates
-// ---------------------------------------------------------------------------
 
 TEST(FatNodePersistentSegmentTreeTest, ZeroDeltaUpdatePublishesVersionWithoutNodes) {
   FatNodePersistentSegmentTree tree({1, 2, 3});
@@ -482,9 +474,7 @@ TEST(FatNodePersistentSegmentTreeTest, UpdateAfterZeroDeltaLeavesSharedVersionIn
   EXPECT_EQ(tree.rangeSum(v5, 0, 2), 54);
 }
 
-// ---------------------------------------------------------------------------
 // Negative values and deltas
-// ---------------------------------------------------------------------------
 
 TEST(FatNodePersistentSegmentTreeTest, NegativeInitialValues) {
   FatNodePersistentSegmentTree tree({-3, -1, -4, -1});
@@ -536,9 +526,7 @@ TEST(FatNodePersistentSegmentTreeTest, MixedPositiveAndNegativeDeltas) {
   EXPECT_EQ(tree.rangeSum(v2, 3, 3), 10);
 }
 
-// ---------------------------------------------------------------------------
 // Historical isolation
-// ---------------------------------------------------------------------------
 
 TEST(FatNodePersistentSegmentTreeTest, VersionZeroIsolatedAfterManyUpdates) {
   FatNodePersistentSegmentTree tree({1, 2, 3, 4, 5, 6, 7, 8});
@@ -587,9 +575,7 @@ TEST(FatNodePersistentSegmentTreeTest, InterleavedPartialUpdateIsolation) {
   EXPECT_EQ(tree.rangeSum(0, 0, 3), 4); // version 0 still isolated
 }
 
-// ---------------------------------------------------------------------------
 // Failed-operation isolation
-// ---------------------------------------------------------------------------
 
 TEST(FatNodePersistentSegmentTreeTest, FailedUpdatePublishesNothing) {
   FatNodePersistentSegmentTree tree({1, 2, 3});
@@ -623,9 +609,7 @@ TEST(FatNodePersistentSegmentTreeTest, FailedQueryThrowsAndLeavesStateIntact) {
   EXPECT_EQ(tree.rangeSum(1, 0, 3), 30);
 }
 
-// ---------------------------------------------------------------------------
 // Validation contracts
-// ---------------------------------------------------------------------------
 
 TEST(FatNodePersistentSegmentTreeTest, DefaultTreeHasNoVersions) {
   FatNodePersistentSegmentTree tree;
@@ -659,9 +643,7 @@ TEST(FatNodePersistentSegmentTreeTest, InvalidRangeOnQueryThrows) {
   EXPECT_THROW(tree.rangeSum(0, 0, 5), std::out_of_range);     // right >= size
 }
 
-// ---------------------------------------------------------------------------
 // Large 64-bit values
-// ---------------------------------------------------------------------------
 
 TEST(FatNodePersistentSegmentTreeTest, LargeValuesSumAndUpdateCorrectly) {
   const long long base = 1'000'000'000'000'000LL;

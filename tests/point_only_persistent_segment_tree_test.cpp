@@ -48,9 +48,7 @@ std::size_t ceilLog2(std::size_t n) {
 
 } // namespace
 
-// ---------------------------------------------------------------------------
 // Initialization
-// ---------------------------------------------------------------------------
 
 TEST(PointOnlyPersistentSegmentTreeTest, InitializationPublishesVersionZero) {
   PointOnlyPersistentSegmentTree tree({10, 20, 30, 40, 50});
@@ -115,9 +113,7 @@ TEST(PointOnlyPersistentSegmentTreeTest, SingleElementTree) {
   EXPECT_EQ(tree.rangeSum(v1, 0, 0), 10);
 }
 
-// ---------------------------------------------------------------------------
 // Path copying and point-only allocation evidence
-// ---------------------------------------------------------------------------
 
 TEST(PointOnlyPersistentSegmentTreeTest, SinglePointUpdateCopiesOnePath) {
   PointOnlyPersistentSegmentTree tree({10, 20, 30, 40});
@@ -219,9 +215,7 @@ TEST(PointOnlyPersistentSegmentTreeTest, NodeCountGrowsByIntersectingNodesPerRan
   }
 }
 
-// ---------------------------------------------------------------------------
 // Cumulative updates
-// ---------------------------------------------------------------------------
 
 TEST(PointOnlyPersistentSegmentTreeTest, OverlappingUpdatesAccumulateCorrectly) {
   PointOnlyPersistentSegmentTree tree({1, 2, 3, 4, 5});
@@ -284,9 +278,7 @@ TEST(PointOnlyPersistentSegmentTreeTest, RepeatedFullCoverageUpdatesAccumulate) 
   EXPECT_EQ(tree.rangeSum(v3, 0, 3), 12);
 }
 
-// ---------------------------------------------------------------------------
 // Zero-delta updates
-// ---------------------------------------------------------------------------
 
 TEST(PointOnlyPersistentSegmentTreeTest, ZeroDeltaUpdatePublishesVersionWithoutNodes) {
   PointOnlyPersistentSegmentTree tree({1, 2, 3});
@@ -337,9 +329,7 @@ TEST(PointOnlyPersistentSegmentTreeTest, UpdateAfterZeroDeltaLeavesSharedVersion
   EXPECT_EQ(tree.rangeSum(v2, 0, 2), 36);
 }
 
-// ---------------------------------------------------------------------------
 // Negative values and deltas
-// ---------------------------------------------------------------------------
 
 TEST(PointOnlyPersistentSegmentTreeTest, NegativeInitialValues) {
   PointOnlyPersistentSegmentTree tree({-3, -1, -4, -1});
@@ -391,9 +381,7 @@ TEST(PointOnlyPersistentSegmentTreeTest, MixedPositiveAndNegativeDeltas) {
   EXPECT_EQ(tree.rangeSum(v2, 3, 3), 10);
 }
 
-// ---------------------------------------------------------------------------
 // Historical isolation
-// ---------------------------------------------------------------------------
 
 TEST(PointOnlyPersistentSegmentTreeTest, VersionZeroIsolatedAfterManyUpdates) {
   PointOnlyPersistentSegmentTree tree({1, 2, 3, 4, 5, 6, 7, 8});
@@ -441,9 +429,7 @@ TEST(PointOnlyPersistentSegmentTreeTest, InterleavedPartialUpdateIsolation) {
   EXPECT_EQ(tree.rangeSum(0, 0, 3), 4); // version 0 still isolated
 }
 
-// ---------------------------------------------------------------------------
 // Failed-operation isolation
-// ---------------------------------------------------------------------------
 
 TEST(PointOnlyPersistentSegmentTreeTest, FailedUpdatePublishesNothing) {
   PointOnlyPersistentSegmentTree tree({1, 2, 3});
@@ -477,9 +463,7 @@ TEST(PointOnlyPersistentSegmentTreeTest, FailedQueryThrowsAndLeavesStateIntact) 
   EXPECT_EQ(tree.rangeSum(1, 0, 3), 30);
 }
 
-// ---------------------------------------------------------------------------
 // Validation contracts
-// ---------------------------------------------------------------------------
 
 TEST(PointOnlyPersistentSegmentTreeTest, DefaultTreeHasNoVersions) {
   PointOnlyPersistentSegmentTree tree;
@@ -513,9 +497,7 @@ TEST(PointOnlyPersistentSegmentTreeTest, InvalidRangeOnQueryThrows) {
   EXPECT_THROW(tree.rangeSum(0, 0, 5), std::out_of_range);     // right >= size
 }
 
-// ---------------------------------------------------------------------------
 // Large 64-bit values
-// ---------------------------------------------------------------------------
 
 TEST(PointOnlyPersistentSegmentTreeTest, LargeValuesSumAndUpdateCorrectly) {
   const long long base = 1'000'000'000'000'000LL;

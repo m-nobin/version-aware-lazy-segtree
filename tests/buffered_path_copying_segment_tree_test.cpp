@@ -114,9 +114,7 @@ std::size_t leafDepth(std::size_t n, std::size_t index) {
 
 } // namespace
 
-// ---------------------------------------------------------------------------
 // Initialization
-// ---------------------------------------------------------------------------
 
 TEST(BufferedPathCopyingSegmentTreeTest, InitializationPublishesVersionZero) {
   BufferedPathCopyingSegmentTree tree({10, 20, 30, 40, 50});
@@ -188,9 +186,7 @@ TEST(BufferedPathCopyingSegmentTreeTest, SingleElementTree) {
   EXPECT_EQ(tree.rangeSum(v3, 0, 0), 16);
 }
 
-// ---------------------------------------------------------------------------
 // Buffering and copy evidence
-// ---------------------------------------------------------------------------
 
 TEST(BufferedPathCopyingSegmentTreeTest, UpdatesWithinBufferCapacityAppendNoNodes) {
   BufferedPathCopyingSegmentTree tree({0, 0, 0, 0});
@@ -379,9 +375,7 @@ TEST(BufferedPathCopyingSegmentTreeTest, NodeCountMatchesCopyModelOverRanges) {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Cumulative updates
-// ---------------------------------------------------------------------------
 
 TEST(BufferedPathCopyingSegmentTreeTest, OverlappingUpdatesAccumulateCorrectly) {
   BufferedPathCopyingSegmentTree tree({1, 2, 3, 4, 5});
@@ -446,9 +440,7 @@ TEST(BufferedPathCopyingSegmentTreeTest, RepeatedFullCoverageUpdatesAccumulate) 
   }
 }
 
-// ---------------------------------------------------------------------------
 // Zero-delta updates
-// ---------------------------------------------------------------------------
 
 TEST(BufferedPathCopyingSegmentTreeTest, ZeroDeltaUpdatePublishesVersionWithoutNodes) {
   BufferedPathCopyingSegmentTree tree({1, 2, 3});
@@ -507,9 +499,7 @@ TEST(BufferedPathCopyingSegmentTreeTest, UpdateAfterZeroDeltaLeavesSharedVersion
   EXPECT_EQ(tree.rangeSum(v4, 0, 2), 66);
 }
 
-// ---------------------------------------------------------------------------
 // Negative values and deltas
-// ---------------------------------------------------------------------------
 
 TEST(BufferedPathCopyingSegmentTreeTest, NegativeInitialValues) {
   BufferedPathCopyingSegmentTree tree({-3, -1, -4, -1});
@@ -565,9 +555,7 @@ TEST(BufferedPathCopyingSegmentTreeTest, MixedPositiveAndNegativeDeltas) {
   EXPECT_EQ(tree.rangeSum(v3, 3, 3), 3);
 }
 
-// ---------------------------------------------------------------------------
 // Historical isolation
-// ---------------------------------------------------------------------------
 
 TEST(BufferedPathCopyingSegmentTreeTest, VersionZeroIsolatedAfterManyUpdates) {
   BufferedPathCopyingSegmentTree tree({1, 2, 3, 4, 5, 6, 7, 8});
@@ -617,9 +605,7 @@ TEST(BufferedPathCopyingSegmentTreeTest, InterleavedPartialUpdateIsolation) {
   EXPECT_EQ(tree.rangeSum(0, 0, 3), 4); // version 0 still isolated
 }
 
-// ---------------------------------------------------------------------------
 // Failed-operation isolation
-// ---------------------------------------------------------------------------
 
 TEST(BufferedPathCopyingSegmentTreeTest, FailedUpdatePublishesNothing) {
   BufferedPathCopyingSegmentTree tree({1, 2, 3});
@@ -658,9 +644,7 @@ TEST(BufferedPathCopyingSegmentTreeTest, FailedQueryThrowsAndLeavesStateIntact) 
   EXPECT_EQ(tree.rangeSum(1, 0, 3), 30);
 }
 
-// ---------------------------------------------------------------------------
 // Validation contracts
-// ---------------------------------------------------------------------------
 
 TEST(BufferedPathCopyingSegmentTreeTest, DefaultTreeHasNoVersions) {
   BufferedPathCopyingSegmentTree tree;
@@ -694,9 +678,7 @@ TEST(BufferedPathCopyingSegmentTreeTest, InvalidRangeOnQueryThrows) {
   EXPECT_THROW(tree.rangeSum(0, 0, 5), std::out_of_range);     // right >= size
 }
 
-// ---------------------------------------------------------------------------
 // Large 64-bit values
-// ---------------------------------------------------------------------------
 
 TEST(BufferedPathCopyingSegmentTreeTest, LargeValuesSumAndUpdateCorrectly) {
   const long long base = 1'000'000'000'000'000LL;

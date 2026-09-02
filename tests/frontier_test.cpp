@@ -226,9 +226,7 @@ private:
   }
 };
 
-// ---------------------------------------------------------------------------
 // F: definition, closed form and the subject's arena growth
-// ---------------------------------------------------------------------------
 
 TEST(Frontier, ClosedFormMatchesTheRecursionOnEveryRange) {
   for (std::size_t n = 1; n <= 64; ++n) {
@@ -278,9 +276,7 @@ TEST(Frontier, SubjectArenaIsBuildPlusFrontierSumOnSeededHistory) {
   EXPECT_EQ(tree.nodeCount(), 2 * n - 1 + frontierTotal);
 }
 
-// ---------------------------------------------------------------------------
 // Extrema and expectations
-// ---------------------------------------------------------------------------
 
 std::size_t largestFrontier(std::size_t n) {
   std::size_t largest = 0;
@@ -338,9 +334,7 @@ TEST(Frontier, SumOverAllRangesAndFixedWidthWindowsMatchesEnumeration) {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Point materialization: intersecting nodes
-// ---------------------------------------------------------------------------
 
 TEST(Frontier, PointOnlyAppendsExactlyTheIntersectingNodesOnEveryRange) {
   for (std::size_t n = 1; n <= 32; ++n) {
@@ -360,9 +354,7 @@ TEST(Frontier, PointOnlyAppendsExactlyTheIntersectingNodesOnEveryRange) {
   }
 }
 
-// ---------------------------------------------------------------------------
 // P and the copy-on-push identity F + 2P
-// ---------------------------------------------------------------------------
 
 TEST(Frontier, CopyOnPushAppendsFrontierPlusTwicePushesOnEveryPairOfRanges) {
   for (std::size_t n = 1; n <= 8; ++n) {
@@ -469,9 +461,7 @@ TEST(Frontier, PushFrontierWorstCaseIsAttained) {
   }
 }
 
-// ---------------------------------------------------------------------------
 // The lower-bound counterexample inside model R
-// ---------------------------------------------------------------------------
 
 TEST(Frontier, EdgeTagModelAgreesWithTheOracleAndAllocatesThePartialCount) {
   for (std::size_t n = 1; n <= 16; ++n) {

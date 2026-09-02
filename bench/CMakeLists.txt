@@ -8,7 +8,7 @@
 # Two binaries from the same sources. valseg_bench measures time against the
 # untouched system allocator. valseg_bench_alloc links a counting operator new
 # that records requested and peak bytes, which is the only way to see the
-# std::vector doubling that a payload figure hides — and which adds a header to
+# std::vector doubling that a payload figure hides, and which adds a header to
 # every allocation, so its timings are not reported.
 set(VALSEG_BENCH_SOURCES bench_main.cpp workloads.cpp)
 

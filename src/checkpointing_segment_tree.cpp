@@ -1,5 +1,6 @@
 #include <valseg/checkpointing_segment_tree.hpp>
 #include <valseg/detail/checked_size.hpp>
+#include <valseg/detail/validation.hpp>
 #include <valseg/policy.hpp>
 
 #include <algorithm>
@@ -322,27 +323,16 @@ Validation
 */
 
 void CheckpointingSegmentTree::validateInitialized() const {
-  if (checkpoints.empty()) {
-    throw std::runtime_error("Tree has no versions.");
-  }
+  detail::validateInitialized(checkpoints.size());
 }
 
 void CheckpointingSegmentTree::validateVersion(std::size_t version) const {
-  if (version > events.size()) {
-    throw std::out_of_range("Invalid version number.");
-  }
+  detail::validateVersion(version, versionCount());
 }
 
 void CheckpointingSegmentTree::validateRange(std::size_t left, std::size_t right) const {
-  if (arraySize == 0) {
-    throw std::runtime_error("Tree is empty.");
-  }
-  if (left > right) {
-    throw std::invalid_argument("Left index is greater than right index.");
-  }
-  if (right >= arraySize) {
-    throw std::out_of_range("Range exceeds array size.");
-  }
+  detail::validateNonEmpty(arraySize);
+  detail::validateRange(arraySize, left, right);
 }
 
 } // namespace valseg

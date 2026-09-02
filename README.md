@@ -137,6 +137,23 @@ cmake --build --preset analyze
 ctest --preset analyze
 ```
 
+Install the library and use it from another project:
+
+```bash
+cmake --preset release
+cmake --build --preset release
+cmake --install build/release --prefix /path/to/prefix
+```
+
+```cmake
+find_package(valseg 0.1 CONFIG REQUIRED)
+target_link_libraries(app PRIVATE valseg::valseg)
+```
+
+`add_subdirectory` exposes the same `valseg::valseg` target. The tests and the benchmark runner
+build only when this repository is the top-level project; a parent project can set
+`VALSEG_BUILD_BENCH=ON` to opt in.
+
 ## Verification matrix
 
 | Platform | Compiler    | CI preset         |
@@ -146,12 +163,13 @@ ctest --preset analyze
 | Windows  | MSVC        | `ci-windows-msvc` |
 | macOS    | Apple Clang | `ci-macos-clang`  |
 
-CI also enforces ClangFormat 18 and runs Linux Clang with AddressSanitizer and UndefinedBehaviorSanitizer. Each compiled job uploads verbose logs and JUnit XML.
+CI also enforces ClangFormat 18 on `include/`, `src/`, `tests/` and the benchmark sources under `bench/` (the vendored `bench/external/` is excluded), and runs Linux Clang with AddressSanitizer and UndefinedBehaviorSanitizer. Each compiled job uploads verbose logs and JUnit XML.
 
 ## Repository layout
 
 ```text
 include/valseg/             Public headers
+include/valseg/detail/      Shared checked arithmetic, numeric-domain and validation helpers
 src/                        Library implementations
 tests/                      Deterministic and randomized differential GoogleTest suites
 tests/compile_fail/         Sources that must fail to compile, run as CTest cases

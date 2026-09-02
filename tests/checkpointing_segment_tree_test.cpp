@@ -58,9 +58,7 @@ std::size_t expectedNodeCount(std::size_t n, std::size_t updates, std::size_t in
 
 } // namespace
 
-// ---------------------------------------------------------------------------
 // Initialization
-// ---------------------------------------------------------------------------
 
 TEST(CheckpointingSegmentTreeTest, InitializationPublishesVersionZero) {
   CheckpointingSegmentTree tree({10, 20, 30, 40, 50});
@@ -150,9 +148,7 @@ TEST(CheckpointingSegmentTreeTest, SingleElementTree) {
   EXPECT_EQ(tree.rangeSum(v1, 0, 0), 10);
 }
 
-// ---------------------------------------------------------------------------
 // Checkpoint schedule and retained-space evidence
-// ---------------------------------------------------------------------------
 
 // For perfect and uneven n and K in {1, 4, 500}: after every update the
 // checkpoint count grows exactly when the new version is a multiple of K
@@ -276,9 +272,7 @@ TEST(CheckpointingSegmentTreeTest, DefaultIntervalCheckpointsEveryFiveHundredVer
   EXPECT_EQ(tree.rangeSum(505, 0, 2), 505 * 3); // latest, ephemeral tree
 }
 
-// ---------------------------------------------------------------------------
 // Range updates and replay
-// ---------------------------------------------------------------------------
 
 TEST(CheckpointingSegmentTreeTest, OverlappingUpdatesAccumulateCorrectly) {
   CheckpointingSegmentTree tree({1, 2, 3, 4, 5}, 2);
@@ -342,9 +336,7 @@ TEST(CheckpointingSegmentTreeTest, RepeatedFullCoverageUpdatesAccumulate) {
   EXPECT_EQ(tree.rangeSum(v3, 0, 3), 12);
 }
 
-// ---------------------------------------------------------------------------
 // Zero-delta updates
-// ---------------------------------------------------------------------------
 
 TEST(CheckpointingSegmentTreeTest, ZeroDeltaUpdatePublishesVersionWithoutTreeNodes) {
   CheckpointingSegmentTree tree({1, 2, 3});
@@ -397,9 +389,7 @@ TEST(CheckpointingSegmentTreeTest, UpdateAfterZeroDeltaLeavesEarlierVersionsInta
   EXPECT_EQ(tree.rangeSum(v2, 0, 2), 36);
 }
 
-// ---------------------------------------------------------------------------
 // Negative values and deltas
-// ---------------------------------------------------------------------------
 
 TEST(CheckpointingSegmentTreeTest, NegativeInitialValues) {
   CheckpointingSegmentTree tree({-3, -1, -4, -1});
@@ -453,9 +443,7 @@ TEST(CheckpointingSegmentTreeTest, MixedPositiveAndNegativeDeltas) {
   EXPECT_EQ(tree.rangeSum(v2, 3, 3), 10);
 }
 
-// ---------------------------------------------------------------------------
 // Historical isolation
-// ---------------------------------------------------------------------------
 
 TEST(CheckpointingSegmentTreeTest, VersionZeroIsolatedAfterManyUpdates) {
   CheckpointingSegmentTree tree({1, 2, 3, 4, 5, 6, 7, 8}, 3);
@@ -506,9 +494,7 @@ TEST(CheckpointingSegmentTreeTest, InterleavedPartialUpdateIsolation) {
   EXPECT_EQ(tree.rangeSum(0, 0, 3), 4); // version 0 still isolated
 }
 
-// ---------------------------------------------------------------------------
 // Failed-operation isolation
-// ---------------------------------------------------------------------------
 
 TEST(CheckpointingSegmentTreeTest, FailedUpdatePublishesNothing) {
   CheckpointingSegmentTree tree({1, 2, 3}, 1);
@@ -544,9 +530,7 @@ TEST(CheckpointingSegmentTreeTest, FailedQueryThrowsAndLeavesStateIntact) {
   EXPECT_EQ(tree.rangeSum(1, 0, 3), 30);
 }
 
-// ---------------------------------------------------------------------------
 // Validation contracts
-// ---------------------------------------------------------------------------
 
 TEST(CheckpointingSegmentTreeTest, DefaultTreeHasNoVersions) {
   CheckpointingSegmentTree tree;
@@ -581,9 +565,7 @@ TEST(CheckpointingSegmentTreeTest, InvalidRangeOnQueryThrows) {
   EXPECT_THROW(tree.rangeSum(0, 0, 5), std::out_of_range);     // right >= size
 }
 
-// ---------------------------------------------------------------------------
 // Large 64-bit values
-// ---------------------------------------------------------------------------
 
 TEST(CheckpointingSegmentTreeTest, LargeValuesSumAndUpdateCorrectly) {
   const long long base = 1'000'000'000'000'000LL;

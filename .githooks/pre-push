@@ -25,12 +25,13 @@ else
   exit 1
 fi
 
-if ! find include src tests -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0 |
+if ! find include src tests bench -type f \( -name '*.cpp' -o -name '*.hpp' \) -not -path 'bench/external/*' -print0 |
   xargs -0 ${FORMATTER} --dry-run --Werror; then
   echo "" >&2
   echo "pre-push: formatting check failed (same command CI runs)." >&2
   echo "pre-push: fix the reported files with:" >&2
-  echo "pre-push:   find include src tests -type f \\( -name '*.cpp' -o -name '*.hpp' \\) -print0 |" >&2
+  echo "pre-push:   find include src tests bench -type f \\( -name '*.cpp' -o -name '*.hpp' \\) \\" >&2
+  echo "pre-push:     -not -path 'bench/external/*' -print0 |" >&2
   echo "pre-push:     xargs -0 ${FORMATTER} -i" >&2
   echo "pre-push: then commit the result and push again." >&2
   exit 1

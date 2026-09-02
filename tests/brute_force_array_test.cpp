@@ -7,9 +7,7 @@
 
 using valseg::BruteForceArray;
 
-// ---------------------------------------------------------------------------
 // Initialization
-// ---------------------------------------------------------------------------
 
 TEST(BruteForceArrayTest, Initialization) {
   BruteForceArray arr({1, 2, 3, 4, 5});
@@ -19,9 +17,7 @@ TEST(BruteForceArrayTest, Initialization) {
   EXPECT_EQ(arr.rangeSum(0, 0, 4), 15);
 }
 
-// ---------------------------------------------------------------------------
 // Single range update
-// ---------------------------------------------------------------------------
 
 TEST(BruteForceArrayTest, SingleRangeUpdate) {
   BruteForceArray arr({1, 2, 3, 4, 5});
@@ -38,9 +34,7 @@ TEST(BruteForceArrayTest, SingleRangeUpdate) {
   EXPECT_EQ(arr.rangeSum(v1, 1, 3), 24);
 }
 
-// ---------------------------------------------------------------------------
 // Multiple versions
-// ---------------------------------------------------------------------------
 
 TEST(BruteForceArrayTest, MultipleVersions) {
   BruteForceArray arr({1, 2, 3, 4, 5});
@@ -53,9 +47,7 @@ TEST(BruteForceArrayTest, MultipleVersions) {
   EXPECT_EQ(arr.rangeSum(v2, 0, 4), 39);
 }
 
-// ---------------------------------------------------------------------------
 // Historical queries — old versions remain unchanged
-// ---------------------------------------------------------------------------
 
 TEST(BruteForceArrayTest, HistoricalQueries) {
   BruteForceArray arr({10, 20, 30, 40});
@@ -68,9 +60,7 @@ TEST(BruteForceArrayTest, HistoricalQueries) {
   EXPECT_EQ(arr.rangeSum(v2, 0, 3), 140);
 }
 
-// ---------------------------------------------------------------------------
 // Negative updates
-// ---------------------------------------------------------------------------
 
 TEST(BruteForceArrayTest, NegativeUpdates) {
   BruteForceArray arr({5, 5, 5, 5});
@@ -80,9 +70,7 @@ TEST(BruteForceArrayTest, NegativeUpdates) {
   EXPECT_EQ(arr.rangeSum(v1, 0, 3), 12);
 }
 
-// ---------------------------------------------------------------------------
 // Single element update
-// ---------------------------------------------------------------------------
 
 TEST(BruteForceArrayTest, SingleElementUpdate) {
   BruteForceArray arr({1, 2, 3});
@@ -93,9 +81,7 @@ TEST(BruteForceArrayTest, SingleElementUpdate) {
   EXPECT_EQ(arr.rangeSum(0, 1, 1), 2);
 }
 
-// ---------------------------------------------------------------------------
 // Whole array update
-// ---------------------------------------------------------------------------
 
 TEST(BruteForceArrayTest, WholeArrayUpdate) {
   BruteForceArray arr({1, 1, 1, 1});
@@ -105,9 +91,7 @@ TEST(BruteForceArrayTest, WholeArrayUpdate) {
   EXPECT_EQ(arr.rangeSum(v1, 0, 3), 16);
 }
 
-// ---------------------------------------------------------------------------
 // Version isolation — modifying v2 must not alter v1
-// ---------------------------------------------------------------------------
 
 TEST(BruteForceArrayTest, VersionIsolation) {
   BruteForceArray arr({1, 2, 3});
@@ -119,9 +103,7 @@ TEST(BruteForceArrayTest, VersionIsolation) {
   EXPECT_EQ(arr.rangeSum(v2, 0, 2), 36);
 }
 
-// ---------------------------------------------------------------------------
 // Validation contracts
-// ---------------------------------------------------------------------------
 
 TEST(BruteForceArrayTest, InvalidVersionQueryThrows) {
   BruteForceArray arr({1, 2, 3});
