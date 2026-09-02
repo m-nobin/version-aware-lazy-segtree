@@ -94,7 +94,13 @@ Hardware counters are not a candidate: they are not collectable on every
 target machine. The pilot's `working_set_transition` uses the captured
 `l2_bytes = 4194304` of the Apple M4 development machine (its capture
 reports no L3); the registered protocol takes the figure for each machine
-from its environment capture.
+from its environment capture. `l2_bytes` is the same field name on both
+platforms but not the same physical scope: Apple Silicon's L2 is shared
+across a performance-core cluster, while a typical x86-64 L2 is per-core.
+The model treats the captured number as the working-set threshold either
+way; this is disclosed as a study limitation rather than resolved by
+normalizing per core, which would need a second registered constant this
+programme has not adopted.
 
 The per-operation structural counts can be computed for any stream before it
 is timed, so the model can be evaluated on a cell without reading its

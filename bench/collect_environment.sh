@@ -10,6 +10,26 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 
 say() { printf '%s=%s\n' "$1" "$2"; }
 
+# Linux cache size at one level/type, in bytes, or n/a. macOS reads the same
+# three figures straight from sysctl; sysfs needs a small scan because the
+# index that holds a given level/type is not fixed across microarchitectures.
+linux_cache_bytes() {
+  local level="$1" want_type="$2" dir size
+  for dir in /sys/devices/system/cpu/cpu0/cache/index*; do
+    [[ -r "$dir/level" && -r "$dir/type" && -r "$dir/size" ]] || continue
+    if [[ "$(cat "$dir/level")" == "$level" && "$(cat "$dir/type")" == "$want_type" ]]; then
+      size="$(cat "$dir/size")"
+      case "$size" in
+      *K) echo $(("${size%K}" * 1024)) ;;
+      *M) echo $(("${size%M}" * 1024 * 1024)) ;;
+      *) echo "$size" ;;
+      esac
+      return
+    fi
+  done
+  echo n/a
+}
+
 say collected_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 say hostname_hash "$(hostname | shasum -a 256 | cut -c1-12)"
 say os "$(uname -s) $(uname -r) $(uname -m)"
@@ -40,16 +60,26 @@ Linux)
   say os_product "$(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME")"
   say cpu_model "$(awk -F: '/model name/{print $2; exit}' /proc/cpuinfo | xargs)"
   say cpu_logical "$(nproc --all)"
+  say cpu_physical "$(awk -F: '/^cpu cores/{print $2; exit}' /proc/cpuinfo | xargs || echo n/a)"
+  say cacheline_bytes "$(getconf LEVEL1_DCACHE_LINESIZE 2>/dev/null || echo n/a)"
+  say l1d_bytes "$(linux_cache_bytes 1 Data)"
+  say l2_bytes "$(linux_cache_bytes 2 Unified)"
+  say l3_bytes "$(linux_cache_bytes 3 Unified)"
   say memory_bytes "$(awk '/MemTotal/{print $2 * 1024}' /proc/meminfo)"
   say page_bytes "$(getconf PAGE_SIZE)"
   say governor "$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo n/a)"
   say turbo_disabled "$(cat /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || echo n/a)"
   say transparent_hugepages "$(cat /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || echo n/a)"
   say aslr "$(cat /proc/sys/kernel/randomize_va_space 2>/dev/null || echo n/a)"
+  say power_source "$(awk 'FNR==1 && $0==1{print "AC Power"; exit}' /sys/class/power_supply/*/online 2>/dev/null || echo n/a)"
+  say thermal_millicelsius "$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo n/a)"
   say load_average "$(cut -d' ' -f1-3 /proc/loadavg)"
   say allocator "glibc malloc"
   ;;
 esac
+
+say stdlib_version "$(printf '%s\n' '#include <cstddef>' | ${CXX:-c++} -dM -E -x c++ - 2>/dev/null \
+  | awk '/^#define (_LIBCPP_VERSION|__GLIBCXX__) /{print $2, $3; exit}' || echo n/a)"
 
 say compiler "$(${CXX:-c++} --version 2>/dev/null | head -1)"
 say cmake "$(cmake --version 2>/dev/null | head -1)"

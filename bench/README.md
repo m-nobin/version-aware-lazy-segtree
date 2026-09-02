@@ -103,21 +103,41 @@ The differences that matter:
   distribution; the interleaved mode survives for allocation runs and
   diagnostics.
 - **One process per (cell, structure, trial).** `bench/confirm_schedule.py`
-  turns the binary's own `--list-cells` inventory into a balanced,
-  seed-shuffled schedule; `bench/run_confirmatory.sh <campaign-id> <phase>`
-  executes it resumably, capturing the environment before every process.
-  Phases: `structural`, `timing`, `alloc`, `latency`, `trace`. Fresh
-  processes are what make `peak_rss_bytes` a per-cell number. Trial counts
-  per cell class live in `bench/primary_cells.csv` (registered H2 cells, 40
-  trials) and `bench/capped_cells.csv` (pilot-known cap cells, 2 trials);
-  everything else runs 20. `VALSEG_DRY_RUN=1` switches to the excluded
-  dry-run seeds.
+  turns the binary's own `--list-cells` inventory into `(machine, mode, cell,
+  trial)` blocks, shuffled per trial by the registered schedule seed, and
+  records both the within-block order and a global process sequence number
+  for every row (`exec_order`, `process_seq`); `bench/run_confirmatory.sh
+  <campaign-id> <phase>` executes it resumably, passing both values into the
+  binary so they land in `runs_*.csv`, capturing the environment before every
+  process, and hashing the generated schedule/trace files so a later resume
+  refuses one that has changed. Phases: `structural`, `timing`, `alloc`,
+  `latency`, `trace`. Fresh processes are what make `peak_rss_bytes` a
+  per-cell number; `--warmup-seconds` only warms the structure being
+  measured, and `initial_rss_bytes` records the process's own baseline
+  before any workload exists. A non-dry-run phase refuses a dirty worktree,
+  an unregistered commit, a manifest that fails verification, or a protocol
+  whose deposit is still pending, and every phase writes a completion marker
+  only once every file its schedule promised is present. The `trace` phase
+  collects all twelve registered external draws
+  (`bench/h5_trace_draws.csv`), not one distribution replayed under twelve
+  labels. Trial counts per cell class live in `bench/primary_cells.csv`
+  (registered H2 cells, 40 trials) and `bench/capped_cells.csv` (pilot-known
+  cap cells, 2 trials); everything else runs 20. `VALSEG_DRY_RUN=1` switches
+  to the excluded dry-run seeds. CLI and trace-file numeric fields are
+  checked (rejecting overflow, a negative value where none is meaningful, and
+  trailing garbage) rather than silently wrapped or truncated, and a trace
+  is validated as a whole before anything is timed: `n` comes first, every
+  range lies inside `[0, n)`, and a query names only a version an earlier
+  update has already published.
 - **Sensitivity paths.** The `release-verify-gcc` and `release-verify-clang`
   presets build the second-compiler binaries; `bench/run_sensitivity.sh`
-  reruns the sixteen cells and twenty trials fixed in
-  `bench/sensitivity_cells.csv` under a preloaded second allocator.
+  reruns the sixteen cells fixed in `bench/sensitivity_cells.csv` through the
+  same balanced schedule generator, registered seed and registered warm-up as
+  the primary campaign, under a preloaded second allocator.
   `bench/env/pin_linux.sh` and `bench/env/pin_macos.sh` put each machine
-  into, and record, the registered measurement state.
+  into, and record, the registered measurement state;
+  [bench/env/README.md](env/README.md) is the step-by-step for driving the
+  Linux machine from the Mac over SSH.
 - **Confirmatory statistics live in `bench/analysis/confirm.py`** — paired
   log-ratio intervals, the four-state classification against `delta = 1.05`,
   the Holm-controlled primary family, the BH-flagged exploratory regime map,
@@ -203,9 +223,13 @@ prints them side by side.
   variation and a 10,000-resample percentile bootstrap interval.
 - **Outliers.** None are removed. The range and the interval make them visible.
 - **Core placement.** The measuring thread requests the interactive
-  quality-of-service class, which keeps it on performance cores. On an
-  asymmetric processor an unpinned run compares core placements, not structures.
-  On Linux, also fix the governor and pin explicitly:
+  quality-of-service class, which keeps it on performance cores, and the
+  environment file records what it read back afterwards as `core_placement`:
+  the QoS class on macOS (`qos_user_interactive`), the CPU affinity mask the
+  process actually inherited on Linux (`affinity:2` under
+  `bench/env/pin_linux.sh run`; a pin that did not take effect shows every
+  core). On an asymmetric processor an unpinned run compares core placements,
+  not structures. On Linux, also fix the governor and pin explicitly:
 
   ```sh
   sudo cpupower frequency-set --governor performance

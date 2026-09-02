@@ -58,6 +58,10 @@ Desktop.ini
 *.tmp
 *.temp
 
+# Python bytecode cache (confirm_schedule.py and friends run outside
+# bench/analysis's own virtualenv-scoped .gitignore)
+__pycache__/
+
 # Local benchmark data and generated artifacts. Analysis and report sources,
 # the raw-data manifest and the pilot provenance record are versioned.
 bench/results/*

@@ -12,7 +12,10 @@
 #
 # VALSEG_DRY_RUN=1 switches to the dry-run seeds (excluded from confirmation),
 # two trials per cell and no warm-up load; the campaign id must then contain
-# "dryrun" so dry-run data can never be mistaken for confirmatory data.
+# "dryrun" so dry-run data can never be mistaken for confirmatory data. A dry
+# run may start from any commit. A real run refuses a dirty worktree, a
+# commit other than the one the registration manifest names, and a manifest
+# that fails checksum verification -- so no real phase runs before deposit.
 # VALSEG_PIN=1 wraps every process in bench/env/pin_<os>.sh run --.
 # VALSEG_BUILD_DIR overrides the default release-verify build directory.
 set -euo pipefail
@@ -83,20 +86,105 @@ timing_binary="$build/bench/valseg_bench"
 alloc_binary="$build/bench/valseg_bench_alloc"
 [[ -x "$timing_binary" ]] || { echo "missing $timing_binary; build release-verify first" >&2; exit 2; }
 
-record_meta() {
-  local file="$meta/campaign.txt"
-  if [[ ! -e "$file" ]]; then
-    {
-      printf 'campaign=%s\n' "$campaign"
-      printf 'dry_run=%s\n' "${dry:-no}"
-      printf 'seed_base=%s\n' "$seed"
-      printf 'schedule_seed=%s\n' "$schedule_seed"
-      printf 'git_commit=%s\n' "$(git -C "$root" rev-parse HEAD 2>/dev/null || echo untracked)"
-      printf 'git_dirty=%s\n' "$(test -n "$(git -C "$root" status --porcelain 2>/dev/null)" && echo yes || echo no)"
-      printf 'build_dir=%s\n' "$build"
-      printf 'binary_sha256=%s\n' "$(shasum -a 256 "$timing_binary" | cut -d' ' -f1)"
-    } > "$file"
+hash_or() {
+  local path="$1" fallback="$2"
+  [[ -e "$path" ]] && shasum -a 256 "$path" | cut -d' ' -f1 || echo "$fallback"
+}
+
+# Hash one generated campaign artifact (a schedule or a trace file) the first
+# time it is produced, and refuse a later mismatch: a schedule or trace that
+# was regenerated with different content is exactly the "changed schedule"
+# the registered protocol says a resumed campaign must never mix in.
+hash_or_verify_artifact() {
+  local path="$1"
+  local sidecar="$path.sha256" digest
+  digest="$(shasum -a 256 "$path" | cut -d' ' -f1)"
+  if [[ -e "$sidecar" ]]; then
+    if [[ "$(cat "$sidecar")" != "$digest" ]]; then
+      echo "refusing: $path no longer matches its recorded checksum ($sidecar)" >&2
+      exit 2
+    fi
+  else
+    printf '%s\n' "$digest" > "$sidecar"
   fi
+}
+
+record_meta() {
+  local commit dirty
+  commit="$(git -C "$root" rev-parse HEAD 2>/dev/null || echo untracked)"
+  dirty="$(test -n "$(git -C "$root" status --porcelain 2>/dev/null)" && echo yes || echo no)"
+
+  if [[ -z "$dry" ]]; then
+    if [[ "$dirty" == "yes" ]]; then
+      echo "refusing: worktree is dirty; a confirmatory campaign must start from a clean, registered commit" >&2
+      exit 2
+    fi
+    local manifest="$root/docs/research/registration-manifest.txt" registered_commit
+    registered_commit="$(awk -F= '/^# git_commit=/{print $2}' "$manifest" 2>/dev/null || true)"
+    if [[ -z "$registered_commit" || "$registered_commit" != "$commit" ]]; then
+      echo "refusing: commit $commit is not the registered commit ($manifest)" >&2
+      exit 2
+    fi
+    "$root/bench/make_registration.sh" --verify "$manifest" >/dev/null || {
+      echo "refusing: registration manifest failed checksum verification" >&2
+      exit 2
+    }
+    local doi_line
+    doi_line="$(grep -F '| Immutable DOI / URL |' "$root/docs/research/registered-protocol.md" || true)"
+    if [[ -z "$doi_line" || "$doi_line" == *Pending* ]]; then
+      echo "refusing: registered-protocol.md does not record a deposited DOI/URL" >&2
+      exit 2
+    fi
+  fi
+
+  local expected file="$meta/campaign.txt"
+  expected="$(
+    printf 'campaign=%s\n' "$campaign"
+    printf 'dry_run=%s\n' "${dry:-no}"
+    printf 'seed_base=%s\n' "$seed"
+    printf 'schedule_seed=%s\n' "$schedule_seed"
+    printf 'git_commit=%s\n' "$commit"
+    printf 'git_dirty=%s\n' "$dirty"
+    printf 'build_dir=%s\n' "$build"
+    printf 'timing_binary_sha256=%s\n' "$(hash_or "$timing_binary" missing)"
+    printf 'alloc_binary_sha256=%s\n' "$(hash_or "$alloc_binary" not_built)"
+    printf 'schedule_script_sha256=%s\n' "$(hash_or "$root/bench/confirm_schedule.py" missing)"
+    printf 'runner_script_sha256=%s\n' "$(hash_or "$root/bench/run_confirmatory.sh" missing)"
+    printf 'environment_script_sha256=%s\n' "$(hash_or "$root/bench/collect_environment.sh" missing)"
+  )"
+  if [[ -e "$file" ]]; then
+    if [[ "$expected" != "$(cat "$file")" ]]; then
+      echo "refusing to resume $campaign: recorded metadata does not match the current binaries, scripts, seed or commit" >&2
+      diff <(printf '%s\n' "$expected") "$file" >&2 || true
+      exit 2
+    fi
+  else
+    printf '%s\n' "$expected" > "$file"
+  fi
+}
+
+# Write a completion marker for one phase only after every file its schedule
+# promised is actually present, so a marker is trustworthy evidence rather
+# than "the loop reached the end". Idempotent: a second call with the same
+# expected count is a no-op, a different one refuses (the resume-mismatch
+# case belongs to record_meta, not here).
+audit_and_mark_phase() {
+  local phase_name="$1" expected="$2" glob="$3"
+  local marker="$meta/complete_$phase_name" produced
+  produced=$(find "$raw" -maxdepth 1 -name "$glob" | wc -l | tr -d ' ')
+  if [[ "$produced" -lt "$expected" ]]; then
+    echo "refusing to mark $phase_name complete: expected $expected output files, found $produced" >&2
+    exit 1
+  fi
+  if [[ -e "$marker" ]]; then
+    return 0
+  fi
+  {
+    printf 'phase=%s\n' "$phase_name"
+    printf 'expected_files=%s\n' "$expected"
+    printf 'present_files=%s\n' "$produced"
+    printf 'completed_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > "$marker"
 }
 
 run_schedule() {
@@ -114,10 +202,11 @@ run_schedule() {
       --capped-cells "$root/bench/capped_cells.csv" \
       --schedule-seed "$schedule_seed" --workloads "$workloads" --out "$schedule"
   fi
+  hash_or_verify_artifact "$schedule"
   local total done_count
   total=$(grep -vc '^#' "$schedule")
   done_count=0
-  while IFS=$'\t' read -r workload n variant structure trial cell_trials tag; do
+  while IFS=$'\t' read -r workload n variant structure trial cell_trials exec_order process_seq tag; do
     [[ "$workload" == \#* ]] && continue
     done_count=$((done_count + 1))
     if [[ -e "$raw/runs_$tag.csv" ]]; then
@@ -126,13 +215,15 @@ run_schedule() {
     refuse_existing_output "$raw/system_$tag.txt"
     printf '=== %s [%d/%d] ===\n' "$tag" "$done_count" "$total"
     bash "$root/bench/collect_environment.sh" > "$raw/system_$tag.txt"
-    "${pin[@]}" "$binary" --mode "${extra_flags[@]}" \
+    "${pin[@]+"${pin[@]}"}" "$binary" --mode "${extra_flags[@]}" \
       --workload "$workload" --n "$n" --variant "$variant" --structure "$structure" \
       --trials "$cell_trials" --trial-index "$trial" \
       --warmup "$warmup_trials" --warmup-seconds "$warmup_seconds" \
       --seed "$seed" --capped-trials 1 --batch-trials 0 \
+      --exec-order "$exec_order" --process-seq "$process_seq" \
       --out-dir "$raw" --tag "$tag"
   done < "$schedule"
+  audit_and_mark_phase "$mode" "$total" "runs_$mode-*.csv"
 }
 
 record_meta
@@ -157,29 +248,42 @@ structural)
     "$timing_binary" --structural --workload "$workload" --out-dir "$raw" \
       --tag "$tag" --seed "$seed" --trials 40 --warmup "$warmup_trials"
   done
+  audit_and_mark_phase structural 12 "structural_timing-*.csv"
   ;;
 trace)
-  trace_file="$meta/external.trace"
-  if [[ ! -e "$trace_file" ]]; then
-    python3 "$root/bench/traces/make_external_distribution.py" --out "$trace_file"
-  fi
-  trials=20
-  [[ -n "$dry" ]] && trials=2
-  for structure in lazy persistent copy-on-push full-copy point-only checkpointing buffered fat-node external; do
-    for ((trial = 0; trial < trials; ++trial)); do
-      tag="trace-WT-$structure-t$(printf '%02d' "$trial")"
-      if [[ -e "$raw/runs_$tag.csv" ]]; then
-        continue
-      fi
-      refuse_existing_output "$raw/system_$tag.txt"
-      bash "$root/bench/collect_environment.sh" > "$raw/system_$tag.txt"
-      "${pin[@]}" "$timing_binary" --mode batch --trace "$trace_file" --workload WT \
-        --structure "$structure" --trials "$trials" --trial-index "$trial" \
-        --warmup "$warmup_trials" --warmup-seconds "$warmup_seconds" \
-        --seed "$seed" --capped-trials 1 --batch-trials 0 \
-        --out-dir "$raw" --tag "$tag"
+  # One trace file per registered external draw (bench/h5_trace_draws.csv):
+  # H5 needs all twelve, not one distribution replayed under twelve labels.
+  draws_csv="$root/bench/h5_trace_draws.csv"
+  expected_trace_files=0
+  while IFS=, read -r draw_id draw_seed draw_n draw_operations draw_update_share draw_interval_share draw_trials; do
+    [[ "$draw_id" == "draw_id" ]] && continue
+    trace_file="$meta/external-$draw_id.trace"
+    if [[ ! -e "$trace_file" ]]; then
+      python3 "$root/bench/traces/make_external_distribution.py" --out "$trace_file" \
+        --seed "$draw_seed" --n "$draw_n" --operations "$draw_operations" \
+        --update-share "$draw_update_share" --interval-share "$draw_interval_share"
+    fi
+    hash_or_verify_artifact "$trace_file"
+    trials="$draw_trials"
+    [[ -n "$dry" ]] && trials=2
+    for structure in lazy persistent copy-on-push full-copy point-only checkpointing buffered fat-node external; do
+      for ((trial = 0; trial < trials; ++trial)); do
+        expected_trace_files=$((expected_trace_files + 1))
+        tag="trace-$draw_id-$structure-t$(printf '%02d' "$trial")"
+        if [[ -e "$raw/runs_$tag.csv" ]]; then
+          continue
+        fi
+        refuse_existing_output "$raw/system_$tag.txt"
+        bash "$root/bench/collect_environment.sh" > "$raw/system_$tag.txt"
+        "${pin[@]+"${pin[@]}"}" "$timing_binary" --mode batch --trace "$trace_file" --workload WT \
+          --trace-id "$draw_id" --structure "$structure" --trials "$trials" --trial-index "$trial" \
+          --warmup "$warmup_trials" --warmup-seconds "$warmup_seconds" \
+          --seed "$seed" --capped-trials 1 --batch-trials 0 \
+          --out-dir "$raw" --tag "$tag"
+      done
     done
-  done
+  done < "$draws_csv"
+  audit_and_mark_phase trace "$expected_trace_files" "runs_trace-*.csv"
   ;;
 *)
   echo "usage: $0 <campaign-id> [timing|alloc|latency|structural|trace]" >&2
