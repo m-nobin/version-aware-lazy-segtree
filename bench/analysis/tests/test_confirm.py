@@ -7,6 +7,7 @@ import json
 import pathlib
 import sys
 import tempfile
+import warnings
 import unittest
 from unittest import mock
 
@@ -492,6 +493,17 @@ class HierarchicalTests(unittest.TestCase):
         self.assertEqual(len(caught.exception.diagnostics), len(confirm.MIXEDLM_OPTIMIZERS))
         self.assertTrue(all("optimizer" in entry for entry in caught.exception.diagnostics))
 
+    def test_repeated_optimizer_warnings_are_counted_not_repeated(self) -> None:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            for _ in range(50):
+                warnings.warn("singular covariance", RuntimeWarning)
+            warnings.warn("boundary", RuntimeWarning)
+        messages, total = confirm.summarize_warnings(caught)
+        self.assertEqual(messages, ["singular covariance (x50)", "boundary"])
+        self.assertEqual(total, 51)
+        self.assertEqual(confirm.summarize_warnings([]), ([], 0))
+
     def test_non_convergence_fails_without_ols_fallback(self) -> None:
         runs = synthetic_runs(ratio=1.5, pair_noise=0.03, trials=16, cells=3)
         with mock.patch("statsmodels.formula.api.mixedlm") as mixedlm:
@@ -772,6 +784,11 @@ class BlindTests(unittest.TestCase):
             pd.concat([runs, incomplete], ignore_index=True).to_csv(
                 source / "raw" / "runs_timing-W1-named.csv", index=False
             )
+            (source / "raw" / "environment_timing-W1-named.txt").write_text(
+                "compiler=AppleClang 21.0.0\n"
+                "malloc_provider=/usr/lib/system/libsystem_malloc.dylib\n"
+                "command=valseg_bench --structure persistent\n"
+            )
             blind.seal(analyst, custody, "study")
             second_analyst = root / "analyst-b"
             blind.attach(second_analyst, custody, "study")
@@ -788,6 +805,17 @@ class BlindTests(unittest.TestCase):
                 blind.verify_named_campaign(source, analyst, custody, "study"),
                 receipt["custody_manifest_sha256"],
             )
+            # The analyst copy carries the build facts the registered
+            # sensitivity stages read, and nothing that names a structure.
+            carried = (analyst / "raw" / "environment_timing-W1-named.txt").read_text()
+            self.assertIn("compiler=AppleClang 21.0.0", carried)
+            self.assertIn("malloc_provider=", carried)
+            self.assertNotIn("persistent", carried)
+            self.assertEqual(
+                confirm.data.environment_values(analyst / "raw", "compiler"),
+                {"AppleClang 21.0.0"},
+            )
+
             blinded = confirm.data.load_runs(analyst / "raw", "timing")
             self.assertEqual(blinded.attrs["incomplete_rows"], 1)
             confirm.assert_blinded(blinded)

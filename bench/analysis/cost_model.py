@@ -965,6 +965,14 @@ def main(argv: list[str] | None = None) -> None:
     if args.stage == "transfer":
         if args.transfer_responses is None:
             parser.error("--stage transfer requires --transfer-responses")
+        # The external stage writes this file. When that stage failed closed,
+        # the locked script still reaches transfer, and a study record deserves
+        # a stated reason rather than a pandas traceback.
+        if not args.transfer_responses.exists():
+            raise SystemExit(
+                f"missing external responses: {args.transfer_responses}; "
+                "the external stage has to succeed before the transfer stage"
+            )
         model_artifact, model_hash = read_artifact(model_path)
         cells = transfer_external(pd.read_csv(args.transfer_responses), model_artifact)
         cells["model_artifact_sha256"] = model_hash

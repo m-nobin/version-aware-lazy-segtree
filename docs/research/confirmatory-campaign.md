@@ -60,8 +60,13 @@ The custody role, from the controlled directory, before any measurement is analy
 
 ```sh
 uv run --frozen --project bench/analysis python bench/analysis/blind.py seal   <analyst-a> --custody-dir <controlled> --study-id <study>
-uv run --frozen --project bench/analysis python bench/analysis/blind.py attach <analyst-b> --custody-dir <controlled> --study-id <study>
+for other in <analyst-b> <analyst-compiler> <analyst-allocator>; do
+  uv run --frozen --project bench/analysis python bench/analysis/blind.py attach "$other" --custody-dir <controlled> --study-id <study>
+done
 ```
+
+Every campaign the analyst half reads needs its own commitment under the same
+key, the two sensitivity campaigns included.
 
 Evidence: the custody directory holds the key and label map; the analyst
 half never receives its path.
@@ -108,7 +113,11 @@ uv run --frozen --project bench/analysis python bench/analysis/blind.py blind <c
 ```
 
 The two sensitivity campaigns are blinded the same way, into the analyst
-copies the compiler and allocator stages read.
+copies the compiler and allocator stages read. A blinded copy carries each
+process's `compiler` and `malloc_provider` beside the run data, and nothing
+else from its environment file: both are properties of the process rather than
+of any structure, and the registered sensitivity stages have to read them to
+tell a second compiler from the same one.
 
 The analyst, who sees only the opaque copies and two lexically ordered labels:
 

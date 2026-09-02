@@ -258,6 +258,23 @@ class CostModelTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no external-adapter trials"):
             cost_model.external_responses(runs[runs["structure"] != "external"], structural, draws)
 
+    def test_transfer_states_why_the_external_responses_are_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            with self.assertRaisesRegex(SystemExit, "the external stage has to succeed"):
+                cost_model.main(
+                    [
+                        "--stage",
+                        "transfer",
+                        "--summary",
+                        str(root),
+                        "--model-artifact",
+                        str(root / "model.json"),
+                        "--transfer-responses",
+                        str(root / "absent.csv"),
+                    ]
+                )
+
     def test_load_structural_default_pattern_excludes_trace_counts(self) -> None:
         _, structural, _ = self.external_inputs()
         synthetic = structural[structural["workload"] == "WT01"].assign(workload="W1")

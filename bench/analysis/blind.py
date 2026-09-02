@@ -50,6 +50,9 @@ STRUCTURES = [
     "fat-node",
     "external",
 ]
+# Environment fields the analyst copy may carry: build facts that identify no
+# structure, and that the registered sensitivity stages have to read.
+BLINDED_ENVIRONMENT_FIELDS = frozenset({"compiler", "malloc_provider"})
 REQUIRED_LOCAL_BLINDED_OUTPUTS = [
     "primary_update.csv",
     "regime_update_contrast-a.csv",
@@ -239,6 +242,30 @@ def blind_campaign(
         entries.append(
             {
                 "kind": "structural",
+                "source_file": source.name,
+                "source_sha256": sha256_file(source),
+                "blinded_file": destination.name,
+                "blinded_sha256": sha256_file(destination),
+            }
+        )
+    # The registered compiler and allocator stages check that a sensitivity
+    # campaign really varied what it names, and both facts are properties of
+    # the process rather than of any structure: they name no structure and
+    # leak nothing. The rest of an environment file does name one, in its
+    # recorded command line, so only these fields cross into the analyst copy.
+    for source in sorted(source_raw.glob("environment_*.txt")):
+        kept = [
+            line
+            for line in source.read_text().splitlines()
+            if line.partition("=")[0] in BLINDED_ENVIRONMENT_FIELDS
+        ]
+        if not kept:
+            continue
+        destination = target_raw / source.name
+        destination.write_text("\n".join(kept) + "\n")
+        entries.append(
+            {
+                "kind": "environment",
                 "source_file": source.name,
                 "source_sha256": sha256_file(source),
                 "blinded_file": destination.name,

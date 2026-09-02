@@ -283,6 +283,25 @@ def broad_regime(
     return table
 
 
+def summarize_warnings(caught: list) -> tuple[list[str], int]:
+    """Fold an optimizer's warning stream into one line per distinct message.
+
+    MixedLM emits the same few messages once per iteration, so the raw list is
+    hundreds of duplicates repeated into every row of the decision CSV. The
+    diagnostic has to answer which warnings fired and how loudly, so each
+    message is kept once in first-occurrence order with its count, and the
+    total is reported separately.
+    """
+    totals: dict[str, int] = {}
+    for item in caught:
+        message = str(item.message)
+        totals[message] = totals.get(message, 0) + 1
+    return (
+        [message if count == 1 else f"{message} (x{count})" for message, count in totals.items()],
+        sum(totals.values()),
+    )
+
+
 def hierarchical(
     runs: pd.DataFrame,
     subject: str = "persistent",
@@ -338,7 +357,7 @@ def hierarchical(
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")
                 candidate = model.fit(method=optimizer, maxiter=500, disp=False)
-            warning_messages = [str(item.message) for item in caught]
+            warning_messages, warning_count = summarize_warnings(caught)
             candidate_effects = candidate.fe_params.filter(like="C(cell)")
             candidate_conf = candidate.conf_int().loc[candidate_effects.index]
             random_covariance = np.asarray(candidate.cov_re, dtype=float)
@@ -377,7 +396,7 @@ def hierarchical(
                 {
                     "converged": bool(candidate.converged),
                     "warnings": warning_messages,
-                    "warning_count": len(warning_messages),
+                    "warning_count": warning_count,
                     "random_covariance_min_eigenvalue": random_min_eigenvalue,
                     "fixed_covariance_min_eigenvalue": fixed_min_eigenvalue,
                     "fixed_covariance_max_eigenvalue": fixed_max_eigenvalue,
