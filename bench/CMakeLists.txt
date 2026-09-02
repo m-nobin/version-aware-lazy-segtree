@@ -104,10 +104,15 @@ if(BUILD_TESTING)
                      ${CMAKE_CURRENT_SOURCE_DIR}/run_confirmatory.sh)
     set_tests_properties(confirmatory_output_overwrite_guard PROPERTIES LABELS "bench")
 
-    add_test(NAME bench_rss_isolation_regression
-             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/rss_isolation_regression_test.sh
-                     $<TARGET_FILE:valseg_bench>)
-    set_tests_properties(bench_rss_isolation_regression PROPERTIES LABELS "bench")
+    # The RSS bound is a statement about the production allocator: a
+    # sanitizer's quarantine keeps freed warm-up memory resident, so under
+    # -fsanitize the warmed process legitimately exceeds it.
+    if(NOT CMAKE_CXX_FLAGS MATCHES "-fsanitize")
+      add_test(NAME bench_rss_isolation_regression
+               COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/rss_isolation_regression_test.sh
+                       $<TARGET_FILE:valseg_bench>)
+      set_tests_properties(bench_rss_isolation_regression PROPERTIES LABELS "bench")
+    endif()
 
     add_test(NAME confirmatory_resume_guard
              COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/confirmatory_resume_guard_test.sh
