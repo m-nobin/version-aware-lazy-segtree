@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Assemble the immutable-registration manifest: the SHA-256 of every file the
-# registered protocol freezes, plus the repository state. The manifest is
-# what gets deposited (OSF or Zenodo) with the protocol document; the deposit
-# timestamp is the registration time, and no confirmatory seed may run before
-# it.
+# registered protocol freezes, plus the repository state. The commit it names
+# is tagged and pushed; the tag's push time is the registration time, and no
+# confirmatory seed may run before it. The manifest is published with the
+# paper.
 #
 #   bench/make_registration.sh             # write after PR6/PR7 are merged
 #   bench/make_registration.sh --verify    # verify every recorded checksum
@@ -99,7 +99,7 @@ trap - EXIT
 printf 'manifest -> %s\n' "$out"
 shasum -a 256 "$out"
 cat <<NEXT
-next: commit this manifest, tag the commit it names, deposit, then record the
-deposit in docs/research/registration-record.md (not a frozen file):
+next: commit this manifest, tag the commit it names, push the tag, then record
+the registration in docs/research/registration-record.md (not a frozen file):
   git tag -a registered-$(date -u +%Y%m%d) $(git -C "$root" rev-parse HEAD) -m "registered protocol"
 NEXT

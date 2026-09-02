@@ -5,8 +5,10 @@ The one-shot execution of the registered protocol
 the command and the evidence it leaves; a step with no evidence file did not
 happen. Machine A is the macOS Apple Silicon development machine, machine B
 the Linux x86-64 machine driven as in `bench/env/README.md`. Nothing here
-runs before the deposit in step 2 is recorded, and `bench/run_confirmatory.sh`
-enforces that on its own.
+runs before the registration in step 2 is recorded, and
+`bench/run_confirmatory.sh` enforces that on its own. Both roles below,
+analyst and custody, are performed by the authors; the custody directory is
+the only thing that must stay outside every campaign tree.
 
 ## 1. Preconditions
 
@@ -14,7 +16,6 @@ enforces that on its own.
 | --- | --- |
 | Both machines completed the excluded-seed dry run on the frozen harness | `bench/results/campaigns/<id>-dryrun/complete_*` on each machine |
 | Statistical review approved | `statistical-review.md` |
-| Custodian named | `registered-protocol.md`, registration table |
 | PR6, PR7 and PR8 merged; worktree clean | `git status --porcelain` empty |
 
 ## 2. Register
@@ -27,12 +28,13 @@ git tag -a registered-YYYYMMDD <commit the manifest names> -m "registered protoc
 git push origin main registered-YYYYMMDD
 ```
 
-Deposit `registered-protocol.md` and `registration-manifest.txt` on OSF or
-Zenodo, open the deposit from a browser that is not logged in, then fill every
-row of `registration-record.md` (commit, tag, manifest SHA-256, DOI/URL, UTC
-timestamp, who verified retrieval and when) and commit it. The record is not
-a frozen file, so this commit changes no registered checksum. The registered
-seed is authorized from this moment and not before.
+Fill every row of `registration-record.md` (commit, tag, manifest SHA-256,
+the tag's push timestamp from `git log -1 --format=%cI registered-YYYYMMDD`
+or the GitHub tag page, the custody directory, who verified and when) and
+commit it. The record is not a frozen file, so this commit changes no
+registered checksum. The registered seed is authorized from this moment and
+not before. The protocol and manifest are published with the arXiv
+submission of the paper.
 
 ## 3. Build and verify on each machine
 
@@ -51,7 +53,7 @@ runner refuses to write it otherwise.
 
 ## 4. Seal the blinding
 
-The custodian, on their own machine, before any measurement is analysed:
+The custody role, from the controlled directory, before any measurement is analysed:
 
 ```sh
 uv run --frozen --project bench/analysis python bench/analysis/blind.py seal   <analyst-a> --custody-dir <controlled> --study-id <study>
@@ -59,7 +61,7 @@ uv run --frozen --project bench/analysis python bench/analysis/blind.py attach <
 ```
 
 Evidence: the custody directory holds the key and label map; the analyst
-never receives its path.
+half never receives its path.
 
 ## 5. Measure, per machine
 
@@ -82,7 +84,7 @@ failed trials stay in the raw CSV with their `status`; nothing is rerun.
 
 ## 6. Blind and analyse
 
-The custodian copies each named campaign into its opaque analyst copy:
+The custody role copies each named campaign into its opaque analyst copy:
 
 ```sh
 uv run --frozen --project bench/analysis python bench/analysis/blind.py blind <named-a> <analyst-a> --custody-dir <controlled> --study-id <study>
@@ -95,7 +97,7 @@ The analyst, who sees only the opaque copies and two lexically ordered labels:
 bench/run_registered_analysis.sh analyst <analyst-a> <analyst-b> <compiler-campaign> <allocator-campaign> S0x S0y
 ```
 
-The custodian, once, after the analyst half has run:
+The custody role, once, after the analyst half has run:
 
 ```sh
 bench/run_registered_analysis.sh custodian <analyst-a> <analyst-b> <named-a> <named-b> <controlled> <study>
@@ -118,8 +120,9 @@ and UTC time from `blind.py unblind`, the model artifact hash, and the
 find bench/results/campaigns/<id>/raw -type f | sort | xargs shasum -a 256 > bench/results/campaigns/<id>/raw.sha256
 ```
 
-Deposit every campaign directory (raw, `campaign.txt`, schedules, traces,
-`raw.sha256`, `analysis/`) in the artifact deposit. Pilot, dry-run and
+Archive every campaign directory (raw, `campaign.txt`, schedules, traces,
+`raw.sha256`, `analysis/`) as the artifact published with the paper's arXiv
+submission. Pilot, dry-run and
 confirmatory directories are never merged: the pilot lives under
 `bench/results/raw`, dry runs carry `dryrun` in their id, and the runner
 refuses that substring for a real run.
@@ -132,5 +135,5 @@ restrict hardware claims if H4 fails; foreground H5 contradictions; freeze
 `claim-evidence-matrix.md` to those results. Every deviation from the
 protocol is entered in its section 12 with a UTC timestamp before the
 affected output is inspected. Tables and figures are generated only from the
-deposited campaign directories, each carrying the source rows, script, commit
+archived campaign directories, each carrying the source rows, script, commit
 and input checksums it was built from.

@@ -3,7 +3,7 @@
 # id may not look like a dry run or the pilot, and a real phase refuses to
 # start from a dirty worktree, from a commit that does not descend from the
 # registered one, or before docs/research/registration-record.md records a
-# deposited DOI/URL. The runner resolves everything relative to its own
+# registered tag. The runner resolves everything relative to its own
 # location, so this builds a throwaway repository around a copy of it and a
 # stub binary; nothing here touches the real bench/results tree.
 set -euo pipefail
@@ -52,11 +52,11 @@ manifest="$scratch/docs/research/registration-manifest.txt"
 } > "$manifest"
 git -C "$scratch" -c user.name=t -c user.email=t@t add -A
 git -C "$scratch" -c user.name=t -c user.email=t@t commit -q -m manifest
-expect_refusal "no registration record" "does not record a deposited DOI/URL" run linux-a structural
+expect_refusal "no registration record" "does not record the registered tag" run linux-a structural
 
-printf '| Immutable DOI / URL | Pending |\n' > "$scratch/docs/research/registration-record.md"
+printf '| Registered tag | Pending |\n' > "$scratch/docs/research/registration-record.md"
 git -C "$scratch" -c user.name=t -c user.email=t@t add -A
 git -C "$scratch" -c user.name=t -c user.email=t@t commit -q -m record
-expect_refusal "pending record" "does not record a deposited DOI/URL" run linux-a structural
+expect_refusal "pending record" "does not record the registered tag" run linux-a structural
 
 echo "registration gate refuses every unregistered start"

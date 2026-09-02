@@ -90,7 +90,7 @@ ssh bench-linux 'tail -3 version-aware-lazy-segtree/dryrun.log'   # progress
 
 The real campaign is the same loop without `VALSEG_DRY_RUN=1` and with a
 campaign id that does not contain `dryrun`; the script refuses to start it
-before the protocol's deposit is recorded. Sensitivity campaigns follow the
+before the protocol's registration is recorded. Sensitivity campaigns follow the
 same pattern with `VALSEG_BUILD_DIR=build/release-verify-clang` and
 `VALSEG_ALT_ALLOC=/usr/lib/x86_64-linux-gnu/libmimalloc.so.2`.
 
@@ -116,4 +116,4 @@ rsync -a --info=progress2 \
 ```
 
 `bench/results/campaigns/` is ignored by Git; the copy is what the
-registered analysis, the checksum stage and the deposit read.
+registered analysis, the checksum stage and the paper's archive read.

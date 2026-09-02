@@ -17,7 +17,7 @@
 # start from any commit. A real run refuses a dirty worktree, a commit that
 # does not descend from the registered commit, a frozen file whose checksum
 # no longer matches the manifest, and a registration record without a
-# deposited DOI/URL -- so no real phase runs before deposit.
+# registered tag -- so no real phase runs before registration.
 # VALSEG_PIN=1 wraps every process in bench/env/pin_<os>.sh run --.
 # VALSEG_BUILD_DIR overrides the default release-verify build directory.
 set -euo pipefail
@@ -139,10 +139,10 @@ record_meta() {
       echo "refusing: registration manifest failed checksum verification" >&2
       exit 2
     }
-    local record="$root/docs/research/registration-record.md" doi_line
-    doi_line="$(grep -F '| Immutable DOI / URL |' "$record" 2>/dev/null || true)"
-    if [[ -z "$doi_line" || "$doi_line" == *Pending* ]]; then
-      echo "refusing: $record does not record a deposited DOI/URL" >&2
+    local record="$root/docs/research/registration-record.md" tag_line
+    tag_line="$(grep -F '| Registered tag |' "$record" 2>/dev/null || true)"
+    if [[ -z "$tag_line" || "$tag_line" == *Pending* ]]; then
+      echo "refusing: $record does not record the registered tag" >&2
       exit 2
     fi
   fi
