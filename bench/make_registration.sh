@@ -98,3 +98,8 @@ trap - EXIT
 
 printf 'manifest -> %s\n' "$out"
 shasum -a 256 "$out"
+cat <<NEXT
+next: commit this manifest, tag the commit it names, deposit, then record the
+deposit in docs/research/registration-record.md (not a frozen file):
+  git tag -a registered-$(date -u +%Y%m%d) $(git -C "$root" rev-parse HEAD) -m "registered protocol"
+NEXT

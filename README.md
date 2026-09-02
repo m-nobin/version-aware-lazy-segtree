@@ -36,9 +36,12 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 > statistics, fail-closed H3/H4/H5 decisions, custody-separated blinding, sensitivity paths and
 > an external implementation in place, and the statistical machinery approved by an independent
 > review ([docs/research/statistical-review.md](docs/research/statistical-review.md)). The
-> The blinding custodian is assigned (Sunjare Zulfiker); the final PR7 dry runs and the
-> immutable registration deposit remain open. No confirmatory measurement runs before that
-> deposit.
+> The blinding custodian is assigned (Sunjare Zulfiker). The fresh-process harness is hardened
+> and its excluded-seed dry run passed on macOS
+> ([bench/README.md](bench/README.md)); the Linux x86-64 dry run on dedicated hardware
+> ([bench/env/README.md](bench/env/README.md)), the immutable registration deposit and the
+> one-shot campaign ([docs/research/confirmatory-campaign.md](docs/research/confirmatory-campaign.md))
+> remain open. No confirmatory measurement runs before that deposit.
 
 ## Implemented components
 

@@ -96,9 +96,14 @@ def captured_cache_bytes(raw: pathlib.Path) -> int | None:
     return None
 
 
-def load_structural(directory: pathlib.Path) -> pd.DataFrame:
+def load_structural(
+    directory: pathlib.Path, pattern: str = "structural*-W[0-9]*.csv"
+) -> pd.DataFrame:
+    """Structural counts under ``directory``. The default pattern takes the
+    synthetic W1-W12 files only, so a trace phase's ``structural_trace-WT*``
+    rows never enter the H3 split; ``external_responses`` reads those."""
     frames = []
-    for path in sorted(directory.glob("structural*-W*.csv")):
+    for path in sorted(directory.glob(pattern)):
         try:
             frames.append(pd.read_csv(path))
         except pd.errors.EmptyDataError:
@@ -516,6 +521,64 @@ def transfer_external(
     return result
 
 
+EXTERNAL_TRACE_COLUMNS = {
+    "seed": "trace_seed",
+    "operations": "trace_operations",
+    "update_share": "trace_update_share",
+    "interval_share": "trace_interval_share",
+}
+
+
+def external_responses(
+    runs: pd.DataFrame, structural: pd.DataFrame, draws: pd.DataFrame
+) -> pd.DataFrame:
+    """The H5 transfer input: the external adapter's trace-phase trials joined
+    to their structural counts and to the registered draw parameters.
+
+    Fails closed on a registered draw with no trials, a trial under an
+    unregistered draw, a trial without counts for its seed, or a domain size
+    that disagrees with the registry. Trial status is kept, not filtered:
+    ``transfer_external`` is the one place that requires complete trials.
+    """
+    keys = ["workload", "n", "axis", "variant", "seed"]
+    target = runs[runs["structure"] == "external"].copy()
+    if target.empty:
+        raise ValueError("no external-adapter trials in the trace phase")
+    registered = set(draws["draw_id"].astype(str))
+    present = set(target["workload"].astype(str))
+    if registered - present:
+        raise ValueError(
+            "registered trace draws without external trials: "
+            + ", ".join(sorted(registered - present))
+        )
+    if present - registered:
+        raise ValueError(
+            "external trials under unregistered draws: " + ", ".join(sorted(present - registered))
+        )
+    rows = target.merge(
+        structural.drop(columns=["k"]),
+        on=keys,
+        how="left",
+        suffixes=("", "_structural"),
+        validate="many_to_one",
+        indicator=True,
+    )
+    if (rows["_merge"] != "both").any():
+        raise ValueError("external trials without structural counts for their seed")
+    rows = rows.drop(columns=["_merge"])
+    registry = draws.rename(columns={"draw_id": "workload", "n": "trace_n", **EXTERNAL_TRACE_COLUMNS})
+    registry = registry[["workload", "trace_n", *EXTERNAL_TRACE_COLUMNS.values()]]
+    registry["workload"] = registry["workload"].astype(str)
+    rows["workload"] = rows["workload"].astype(str)
+    rows = rows.merge(registry, on="workload", how="left", validate="many_to_one")
+    if (rows["n"] != rows["trace_n"]).any():
+        raise ValueError("external trial domain size disagrees with the registered draw")
+    rows = rows.drop(columns=["trace_n"])
+    rows["partition"] = "external"
+    rows["stream_group"] = rows["workload"]
+    return rows
+
+
 def sha256_file(path: pathlib.Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -815,12 +878,19 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--stage",
-        choices=("prepare", "fit", "evaluate", "transfer", "pilot"),
+        choices=("prepare", "fit", "evaluate", "external", "transfer", "pilot"),
         required=True,
         help=(
-            "prepare disjoint responses, fit training only, evaluate holdout, transfer the fixed "
-            "model, or run all three H3 stages for a pilot"
+            "prepare disjoint responses, fit training only, evaluate holdout, build the external "
+            "(H5) responses from the trace phase, transfer the fixed model, or run all three H3 "
+            "stages for a pilot"
         ),
+    )
+    parser.add_argument(
+        "--h5-draws",
+        type=pathlib.Path,
+        default=pathlib.Path(__file__).resolve().parents[1] / "h5_trace_draws.csv",
+        help="registered external draw parameters joined by the external stage",
     )
     parser.add_argument(
         "--model-artifact",
@@ -864,7 +934,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--transfer-responses",
         type=pathlib.Path,
-        help="PR7-produced external response/predictor rows required by transfer",
+        help="external response/predictor rows from --stage external, required by transfer",
     )
     parser.add_argument(
         "--capped-cells",
@@ -879,6 +949,18 @@ def main(argv: list[str] | None = None) -> None:
     partition_directory = args.partition_directory or args.summary / "cost_model_inputs"
     manifest_path = args.partition_manifest or partition_directory / PARTITION_MANIFEST_NAME
     model_path = args.model_artifact or args.summary / "cost_model_fit.json"
+
+    if args.stage == "external":
+        rows = external_responses(
+            data.load_runs(args.raw, "trace"),
+            load_structural(structural_directory, "structural*-WT*.csv"),
+            pd.read_csv(args.h5_draws),
+        )
+        args.summary.mkdir(parents=True, exist_ok=True)
+        destination = args.summary / f"{args.output_stem}_external_responses.csv"
+        output_hash = write_csv_artifact(rows, destination)
+        print(f"{len(rows)} external trial rows -> {destination} (sha256 {output_hash})")
+        return
 
     if args.stage == "transfer":
         if args.transfer_responses is None:

@@ -8,16 +8,19 @@ commit, everything here is frozen: a later change requires a versioned,
 timestamped protocol deviation recorded in section 12 before any affected
 result is inspected. No confirmatory seed runs before the deposit timestamp.
 
-Status: **prepared, not yet deposited.** The deposit DOI, URL and timestamp
-are recorded here at registration time; until then this protocol binds
-nothing and no confirmatory measurement may run.
+Status: **prepared, not yet deposited.** The registered commit, tag, manifest
+hash, deposit DOI/URL and timestamp are recorded in
+`docs/research/registration-record.md` at registration time; that file is
+outside the frozen list so recording the deposit changes no frozen checksum.
+Until then this protocol binds nothing and no confirmatory measurement may
+run.
 
 | Registration field | Value |
 | --- | --- |
-| Frozen repository commit | Pending PR6 statistical review and PR7 two-machine dry run |
-| Manifest SHA-256 | Pending clean-commit generation and verification |
-| Immutable DOI / URL | Pending OSF or Zenodo deposit |
-| Deposit UTC timestamp | Pending |
+| Frozen repository commit | The commit `registration-manifest.txt` names; recorded with its tag in `registration-record.md` |
+| Manifest SHA-256 | Recorded in `registration-record.md` at deposit |
+| Immutable DOI / URL | Recorded in `registration-record.md` at deposit |
+| Deposit UTC timestamp | Recorded in `registration-record.md` at deposit |
 | Statistical reviewer / approval record | Approved at round 3 on 1 September 2026 by the automated reviewer acting for Sunjare Zulfiker; record in `docs/research/statistical-review.md` |
 | Blinding custodian / controlled location | Sunjare Zulfiker, custody material held on his own machine/account outside the primary analyst's routine access; assigned 2 September 2026 |
 
@@ -282,10 +285,12 @@ pre-unblinding output still matches its recorded hash. An exploratory
 table is always labeled exploratory and can never be promoted into H1–H5, the
 abstract, or the primary family through a deviation.
 
-PR7 supplies H5's versioned response/predictor join: one row per external
-adapter trial with `workload = draw_id`, the ordinary timing response columns,
-the same structural predictor columns used by the model, and `trace_seed`,
-`trace_operations`, `trace_update_share` and `trace_interval_share`. The H5
+`cost_model.py --stage external` builds H5's response/predictor join from
+the trace phase: one row per external adapter trial with `workload =
+draw_id`, the ordinary timing response columns, the structural predictor
+columns the model uses (written per draw by `valseg_bench --structural
+--trace`), and `trace_seed`, `trace_operations`, `trace_update_share` and
+`trace_interval_share` from `bench/h5_trace_draws.csv`. The H5
 transfer rejects every row whose status is not `ok`; the H5 stage verifies
 those fields, `n` and the exact complete-trial count against
 `bench/h5_trace_draws.csv`. The locked
@@ -428,19 +433,28 @@ artifact hash is recorded.
    resulting defects before freezing PR7.
 2. Merge/freeze PR6 and PR7 at one clean commit; obtain independent statistical
    approval and name the custodian; run `bench/make_registration.sh`, verify
-   every checksum, deposit, and record the commit, DOI and timestamp here.
+   every checksum, commit the manifest, tag the commit it names, deposit the
+   protocol and manifest, verify the deposit is retrievable, and record the
+   commit, tag, manifest hash, DOI and timestamp in
+   `docs/research/registration-record.md`. The step-by-step, with the
+   evidence each step leaves, is `docs/research/confirmatory-campaign.md`.
 3. Re-verify the registered commit and manifest, seal one study-wide blinding
    map under independent custody, then per machine:
    `structural`, `timing`, `alloc`, `latency`, `trace` phases, then the two
    sensitivity campaigns. `bench/run_confirmatory.sh` itself refuses to start
-   a non-dry-run phase from a dirty worktree, a commit other than the one
-   `docs/research/registration-manifest.txt` names, a manifest that fails
-   `bench/make_registration.sh --verify`, or a protocol whose deposited
-   DOI/URL still reads "Pending"; a resumed campaign refuses to continue if
+   a non-dry-run phase under a campaign id containing `dryrun` or `pilot`,
+   from a dirty worktree, from a commit that does not descend from the one
+   `docs/research/registration-manifest.txt` names, with a frozen file that
+   fails `bench/make_registration.sh --verify`, or while
+   `docs/research/registration-record.md` still reads "Pending" for the
+   DOI/URL; a resumed campaign refuses to continue if
    its recorded binaries, scripts, seed or commit no longer match, or if a
    generated schedule or trace file no longer matches its own recorded
    checksum. Each phase writes a completion marker only after confirming
-   every file its schedule promised is present. `bench/run_sensitivity.sh`
+   every file its schedule promised is present. The `trace` phase also
+   writes each draw's structural counts, which `cost_model.py --stage
+   external` joins to the external adapter's trials as the H5 transfer
+   input. `bench/run_sensitivity.sh`
    routes its sixteen cells through the same balanced schedule generator and
    the registered seed and warm-up, rather than a separate ad hoc loop.
 4. The analyst runs `bench/run_registered_analysis.sh analyst`:
@@ -448,7 +462,8 @@ artifact hash is recorded.
    analyst copies; H4 across machines; compiler and allocator sensitivities.
    The custodian then runs `bench/run_registered_analysis.sh custodian`: hash
    every output; unblind; verify controlled named input against its custody
-   manifest; run checksums and H1; H3 prepare/fit/evaluate; H5; verify the
+   manifest; run checksums and H1; H3 prepare/fit/evaluate; build the H5
+   responses from the trace phase and transfer; H5; verify the
    pre-unblinding outputs are unchanged.
 5. Freeze the claim–evidence matrix to the obtained results (Gate G3).
 

@@ -995,16 +995,27 @@ struct Job {
  * Write structural_<tag>-W*.csv: one row per (workload, n, variant, seed)
  * for the seeds the timing campaign records under the same options, so the
  * rows join the runs CSV on those columns. No structure is built and nothing
- * is timed; --structure and --trace are ignored in this mode.
+ * is timed; --structure is ignored in this mode. With --trace the plan is
+ * that one replayed trace: its counts do not depend on the seed, but one row
+ * per recorded seed is still written so the rows join the trace phase's runs
+ * CSV on the same key.
  */
 int runStructural(const Options& options) {
   const std::string suffix = options.tag.empty() ? std::string() : "_" + options.tag;
   std::vector<Workload> plan = workloads();
+  std::vector<Operation> traceStream;
+  if (!options.trace.empty()) {
+    std::size_t traceSize = 0;
+    traceStream = loadTrace(options.trace, traceSize);
+    plan = {traceWorkload(traceSize, options.traceId)};
+  }
   for (const Workload& original : plan) {
-    if (options.workloadFilter != "all" && options.workloadFilter != original.id) {
+    if (!isReplayedTrace(original) && options.workloadFilter != "all" &&
+        options.workloadFilter != original.id) {
       continue;
     }
-    const Workload workload = options.smoke ? shrink(original) : original;
+    const Workload workload =
+        options.smoke && !isReplayedTrace(original) ? shrink(original) : original;
     const std::string path = options.outDir + "/structural" + suffix + "-" + workload.id + ".csv";
     if (!options.smoke || options.outDirGiven) {
       refuseExistingCampaignOutput({path});
@@ -1022,7 +1033,8 @@ int runStructural(const Options& options) {
            ++attempt) {
         const std::uint64_t seed = options.seed + attempt;
         for (const double variant : workload.variants) {
-          const std::vector<Operation> stream = generate(workload, size, variant, seed);
+          const std::vector<Operation> stream =
+              isReplayedTrace(workload) ? traceStream : generate(workload, size, variant, seed);
           std::size_t interval = balancedInterval(size);
           if (workload.axis == VariantAxis::CheckpointInterval) {
             interval = variant == 0.0 ? 0 : static_cast<std::size_t>(variant);

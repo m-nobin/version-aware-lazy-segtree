@@ -16,7 +16,7 @@ set -euo pipefail
 usage() {
   cat >&2 <<'USAGE'
 usage: run_registered_analysis.sh analyst ANALYST-A ANALYST-B COMPILER ALLOCATOR LABEL-A LABEL-B
-       run_registered_analysis.sh custodian ANALYST-A ANALYST-B NAMED-A NAMED-B CUSTODY-DIR STUDY-ID H5-RESPONSES
+       run_registered_analysis.sh custodian ANALYST-A ANALYST-B NAMED-A NAMED-B CUSTODY-DIR STUDY-ID
 USAGE
   exit 2
 }
@@ -76,9 +76,8 @@ run_analyst() {
 }
 
 run_custodian() {
-  [[ "$#" -eq 7 ]] || usage
+  [[ "$#" -eq 6 ]] || usage
   local analyst_a="$1" analyst_b="$2" named_a="$3" named_b="$4" custody="$5" study_id="$6"
-  local h5_responses="$7"
 
   "${blind[@]}" unblind "$analyst_a" "$analyst_b" --custody-dir "$custody" --study-id "$study_id"
   "${blind[@]}" verify-named "$named_a" "$analyst_a" --custody-dir "$custody" --study-id "$study_id"
@@ -106,6 +105,11 @@ run_custodian() {
   "${confirm[@]}" --campaign "$analyst_a" --stage h3 \
     --cell-predictions "$model_summary/confirmatory-model_cells.csv" \
     --model-artifact "$model_artifact" || unavailable+=(h3)
+  # The H5 input is derived from machine A's trace phase here, not handed in,
+  # so the custodian cannot pass the wrong file.
+  local h5_responses="$model_summary/confirmatory-model_external_responses.csv"
+  "${model[@]}" --stage external --raw "$named_a/raw" --summary "$model_summary" \
+    --output-stem confirmatory-model || unavailable+=(h5-responses)
   "${model[@]}" --stage transfer --summary "$model_summary" \
     --model-artifact "$model_artifact" --transfer-responses "$h5_responses" \
     --output-stem confirmatory-model || unavailable+=(h5-transfer)

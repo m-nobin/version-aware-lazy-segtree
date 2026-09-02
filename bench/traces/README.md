@@ -26,6 +26,7 @@ parameters come from the paper's description and which mapping choices are
 this repository's. `bench/h5_trace_draws.csv` registers twelve deterministic
 draws (`WT01`–`WT12`); H5 evaluates both operation responses for all 24
 draw-operation cells after twenty complete trials per draw, and fails closed
-if any cell or trial is absent. PR7 must make
-`bench/run_confirmatory.sh <id> trace` generate and replay every registered
-draw under the fresh-process protocol.
+if any cell or trial is absent. `bench/run_confirmatory.sh <id> trace`
+generates and replays every registered draw under the fresh-process protocol
+and writes each draw's structural counts beside its runs;
+`cost_model.py --stage external` joins the two into the H5 transfer input.
