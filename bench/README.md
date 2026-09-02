@@ -110,7 +110,10 @@ The differences that matter:
   <campaign-id> <phase>` executes it resumably, passing both values into the
   binary so they land in `runs_*.csv`, capturing the environment before every
   process, and hashing the generated schedule/trace files so a later resume
-  refuses one that has changed. Phases: `structural`, `timing`, `alloc`,
+  refuses one that has changed. A resume re-measures any cell whose runs file
+  is empty, so the zero-length files an unclean shutdown leaves behind become
+  holes that are filled rather than cells silently counted as done. Phases:
+  `structural`, `timing`, `alloc`,
   `latency`, `trace`. Fresh processes are what make `peak_rss_bytes` a
   per-cell number; `--warmup-seconds` only warms the structure being
   measured, and `initial_rss_bytes` records the process's own baseline

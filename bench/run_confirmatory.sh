@@ -32,6 +32,21 @@ refuse_existing_output() {
   done
 }
 
+# A cell is finished only when its runs file has content. An unclean shutdown
+# (power loss, panic) leaves zero-length outputs behind: the file metadata
+# reaches the journal but the data never flushes. Treating those as finished
+# would leave silent holes that the phase audit then counts as present, so the
+# cell's partial files are cleared and it is measured again.
+reuse_or_clear_cell() {
+  local tag="$1"
+  if [[ -s "$raw/runs_$tag.csv" ]]; then
+    return 0
+  fi
+  rm -f "$raw/runs_$tag.csv" "$raw/memory_$tag.csv" \
+    "$raw/environment_$tag.txt" "$raw/system_$tag.txt"
+  return 1
+}
+
 # Internal test hook for the shell-level metadata guard. It runs before any
 # campaign setup or binary lookup, so CTest can exercise the refusal path
 # without creating campaign output.
@@ -182,7 +197,7 @@ record_meta() {
 audit_and_mark_phase() {
   local phase_name="$1" expected="$2" glob="$3"
   local marker="$meta/complete_$phase_name" produced
-  produced=$(find "$raw" -maxdepth 1 -name "$glob" | wc -l | tr -d ' ')
+  produced=$(find "$raw" -maxdepth 1 -name "$glob" -size +0 | wc -l | tr -d ' ')
   if [[ "$produced" -lt "$expected" ]]; then
     echo "refusing to mark $phase_name complete: expected $expected output files, found $produced" >&2
     exit 1
@@ -220,10 +235,9 @@ run_schedule() {
   while IFS=$'\t' read -r workload n variant structure trial cell_trials exec_order process_seq tag; do
     [[ "$workload" == \#* ]] && continue
     done_count=$((done_count + 1))
-    if [[ -e "$raw/runs_$tag.csv" ]]; then
+    if reuse_or_clear_cell "$tag"; then
       continue
     fi
-    refuse_existing_output "$raw/system_$tag.txt"
     printf '=== %s [%d/%d] ===\n' "$tag" "$done_count" "$total"
     bash "$root/bench/collect_environment.sh" > "$raw/system_$tag.txt"
     "${pin[@]+"${pin[@]}"}" "$binary" --mode "${extra_flags[@]}" \
@@ -253,7 +267,7 @@ structural)
   # recorded seeds cover every cell's trial count.
   for workload in W1 W2 W3 W4 W5 W6 W7 W8 W9 W10 W11 W12; do
     tag="timing-$workload"
-    if [[ -e "$raw/structural_$tag-$workload.csv" ]]; then
+    if [[ -s "$raw/structural_$tag-$workload.csv" ]]; then
       continue
     fi
     "$timing_binary" --structural --workload "$workload" --out-dir "$raw" \
@@ -279,7 +293,7 @@ trace)
     [[ -n "$dry" ]] && trials=2
     # The draw's machine-independent counts, one row per recorded seed, are
     # what the H5 transfer joins to the external adapter's responses.
-    if [[ ! -e "$raw/structural_trace-$draw_id-$draw_id.csv" ]]; then
+    if [[ ! -s "$raw/structural_trace-$draw_id-$draw_id.csv" ]]; then
       "$timing_binary" --structural --trace "$trace_file" --trace-id "$draw_id" --workload WT \
         --out-dir "$raw" --tag "trace-$draw_id" --seed "$seed" --trials "$trials" \
         --warmup "$warmup_trials"
@@ -288,10 +302,9 @@ trace)
       for ((trial = 0; trial < trials; ++trial)); do
         expected_trace_files=$((expected_trace_files + 1))
         tag="trace-$draw_id-$structure-t$(printf '%02d' "$trial")"
-        if [[ -e "$raw/runs_$tag.csv" ]]; then
+        if reuse_or_clear_cell "$tag"; then
           continue
         fi
-        refuse_existing_output "$raw/system_$tag.txt"
         bash "$root/bench/collect_environment.sh" > "$raw/system_$tag.txt"
         "${pin[@]+"${pin[@]}"}" "$timing_binary" --mode batch --trace "$trace_file" --workload WT \
           --trace-id "$draw_id" --structure "$structure" --trials "$trials" --trial-index "$trial" \
