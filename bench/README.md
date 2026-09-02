@@ -133,7 +133,10 @@ The differences that matter:
   per cell class live in `bench/primary_cells.csv`
   (registered H2 cells, 40 trials) and `bench/capped_cells.csv` (pilot-known
   cap cells, 2 trials); everything else runs 20. `VALSEG_DRY_RUN=1` switches
-  to the excluded dry-run seeds. CLI and trace-file numeric fields are
+  to the excluded dry-run seeds and two trials per cell, which proves the
+  harness but cannot classify a cell; `VALSEG_DRY_RUN_TRIALS` raises that
+  count so a validation dry run reaches the four shared pairs the registered
+  decisions need. CLI and trace-file numeric fields are
   checked (rejecting overflow, a negative value where none is meaningful, and
   trailing garbage) rather than silently wrapped or truncated, and a trace
   is validated as a whole before anything is timed: `n` comes first, every

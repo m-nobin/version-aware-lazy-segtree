@@ -77,9 +77,19 @@ sample_every=64
 
 seed="$confirm_seed"
 dry=""
+# A dry run measures two trials per cell, which is enough to prove the harness
+# and too few to classify a cell: the registered decisions need four shared
+# pairs, and leave-one-out needs five. VALSEG_DRY_RUN_TRIALS raises the count
+# so a validation dry run exercises every registered decision on real data. It
+# is read only on a dry run; a confirmatory campaign always uses 20/40.
+dry_trials="${VALSEG_DRY_RUN_TRIALS:-2}"
 if [[ "${VALSEG_DRY_RUN:-0}" == "1" ]]; then
   if [[ "$campaign" != *dryrun* ]]; then
     echo "dry runs must use a campaign id containing 'dryrun'" >&2
+    exit 2
+  fi
+  if [[ ! "$dry_trials" =~ ^[1-9][0-9]*$ ]]; then
+    echo "VALSEG_DRY_RUN_TRIALS must be a positive integer" >&2
     exit 2
   fi
   seed="$dryrun_seed"
@@ -218,7 +228,7 @@ run_schedule() {
   local schedule="$meta/schedule_$mode.tsv"
   local trials=20 primary_trials=40
   if [[ "$mode" == "alloc" ]]; then trials=3 primary_trials=3; fi
-  if [[ -n "$dry" ]]; then trials=2 primary_trials=2; fi
+  if [[ -n "$dry" ]]; then trials="$dry_trials" primary_trials="$dry_trials"; fi
   if [[ ! -e "$schedule" ]]; then
     local workloads="all"
     [[ "$mode" == "latency" ]] && workloads="$latency_workloads"
@@ -290,7 +300,7 @@ trace)
     fi
     hash_or_verify_artifact "$trace_file"
     trials="$draw_trials"
-    [[ -n "$dry" ]] && trials=2
+    [[ -n "$dry" ]] && trials="$dry_trials"
     # The draw's machine-independent counts, one row per recorded seed, are
     # what the H5 transfer joins to the external adapter's responses.
     if [[ ! -s "$raw/structural_trace-$draw_id-$draw_id.csv" ]]; then
