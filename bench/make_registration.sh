@@ -55,6 +55,11 @@ frozen=(
   bench/workloads.hpp
   bench/adapters.hpp
   bench/structural_counts.hpp
+  bench/allocation_counter.hpp
+  bench/allocation_counter_on.cpp
+  bench/allocation_counter_off.cpp
+  bench/process_memory.hpp
+  bench/CMakeLists.txt
   bench/copy_on_push_segment_tree.hpp
   bench/external/thealgorithms_persistent_lazy.hpp
   bench/external/thealgorithms_persistent_seg_tree_lazy_prop.cpp
