@@ -122,9 +122,15 @@ done_count=0
 while IFS=$'\t' read -r workload n variant structure trial cell_trials exec_order process_seq tag; do
   [[ "$workload" == \#* ]] && continue
   done_count=$((done_count + 1))
-  if [[ -e "$raw/runs_$tag.csv" ]]; then
+  # A cell is finished only when its runs file has content, the same rule the
+  # primary runner uses: an unclean shutdown leaves zero-length outputs whose
+  # metadata reached the journal but whose data never flushed, and treating
+  # those as finished would leave a silent hole in the arm.
+  if [[ -s "$raw/runs_$tag.csv" ]]; then
     continue
   fi
+  rm -f "$raw/runs_$tag.csv" "$raw/memory_$tag.csv" \
+    "$raw/environment_$tag.txt" "$raw/system_$tag.txt"
   printf '=== %s [%d/%d] ===\n' "$tag" "$done_count" "$total"
   bash "$root/bench/collect_environment.sh" > "$raw/system_$tag.txt"
   {

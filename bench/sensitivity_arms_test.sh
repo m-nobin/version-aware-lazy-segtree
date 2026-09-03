@@ -105,6 +105,16 @@ if (cd "$scratch" && VALSEG_DRY_RUN=1 VALSEG_ALT_ALLOC="$scratch/absent.so" bash
   exit 1
 fi
 
+# A cell whose runs file is empty is not finished. An unclean shutdown leaves
+# exactly that, and skipping it would leave a silent hole in the arm.
+emptied="$(find "$compiler_raw" -name 'runs_*.csv' | head -1)"
+: > "$emptied"
+run_arm "$compiler_campaign" VALSEG_SENSITIVITY_TRIALS=1
+if [[ ! -s "$emptied" ]]; then
+  echo "an emptied cell was skipped instead of re-measured" >&2
+  exit 1
+fi
+
 # A confirmatory id has to reach the registration gate rather than measure.
 if (cd "$scratch" && bash "$script" "sensitivity-arms-test-real-$$" "$scratch/build" >/dev/null 2>&1); then
   echo "a confirmatory sensitivity campaign ran without passing the registration gate" >&2
