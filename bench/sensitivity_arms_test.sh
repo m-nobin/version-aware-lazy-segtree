@@ -105,6 +105,19 @@ if (cd "$scratch" && VALSEG_DRY_RUN=1 VALSEG_ALT_ALLOC="$scratch/absent.so" bash
   exit 1
 fi
 
+# The preload variable has to reach the loader, which means being set inside
+# the pin wrapper rather than outside it: macOS strips DYLD_* when it execs a
+# SIP-protected binary, and the wrapper execs caffeinate. Outside, the arm
+# silently measures the default allocator while claiming a second one.
+# A structural check, not a behavioural one: proving it by measurement needs a
+# library that really overrides malloc, and on macOS that needs __interpose
+# rather than a plain definition, which is more fragile than the thing tested.
+# shellcheck disable=SC2016
+if ! grep -q '${pin\[@\]+"${pin\[@\]}"} env ${preload\[@\]' "$script"; then
+  echo "the preload is not set inside the pin wrapper; a pinned arm would lose it" >&2
+  exit 1
+fi
+
 # A cell whose runs file is empty is not finished. An unclean shutdown leaves
 # exactly that, and skipping it would leave a silent hole in the arm.
 emptied="$(find "$compiler_raw" -name 'runs_*.csv' | head -1)"

@@ -144,9 +144,14 @@ while IFS=$'\t' read -r workload n variant structure trial cell_trials exec_orde
       printf 'alt_allocator=none\n'
     fi
   } >> "$raw/system_$tag.txt"
-  # The preload is a request; the environment file records the library that
-  # actually answered malloc, and the registered analysis checks it.
-  env ${preload[@]+"${preload[@]}"} ${pin[@]+"${pin[@]}"} "$binary" --mode batch \
+  # Order matters: the preload variable is set immediately before the benchmark
+  # binary, inside the pin wrapper rather than outside it. macOS strips DYLD_*
+  # when it execs a SIP-protected binary, and the pin wrapper is a shell script
+  # that execs caffeinate, so setting it outside means the loader never sees
+  # it and the arm silently measures the default allocator. The preload is a
+  # request either way; the environment file records the library that actually
+  # answered malloc, and the registered analysis checks that.
+  ${pin[@]+"${pin[@]}"} env ${preload[@]+"${preload[@]}"} "$binary" --mode batch \
     --workload "$workload" --n "$n" --variant "$variant" --structure "$structure" \
     --trials "$cell_trials" --trial-index "$trial" \
     --warmup "$warmup_trials" --warmup-seconds "$warmup_seconds" \
