@@ -549,14 +549,58 @@ class SensitivityTests(unittest.TestCase):
             )
 
     @staticmethod
-    def environments(directory: pathlib.Path, compiler: str, provider: str) -> pathlib.Path:
+    def environments(
+        directory: pathlib.Path,
+        compiler: str,
+        provider: str,
+        placement: str = "affinity:2",
+    ) -> pathlib.Path:
         raw = directory / "raw"
         raw.mkdir(parents=True, exist_ok=True)
         for workload in ("W1", "W5"):
             (raw / f"environment_timing-{workload}.txt").write_text(
                 f"compiler={compiler}\nmalloc_provider={provider}\n"
+                f"core_placement={placement}\n"
             )
         return raw
+
+    def test_a_campaign_measured_in_two_placements_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            raw = self.environments(root / "a", "AppleClang 21", "/usr/lib/libsystem.dylib")
+            confirm.assert_one_measurement_state(raw, "primary")
+
+            # A reboot drops the pin: the cells measured afterwards read back
+            # every core instead of the one the campaign was pinned to.
+            (raw / "environment_timing-W5.txt").write_text(
+                "compiler=AppleClang 21\nmalloc_provider=/usr/lib/libsystem.dylib\n"
+                "core_placement=affinity:0,1,2,3\n"
+            )
+            with self.assertRaisesRegex(
+                confirm.RegisteredAnalysisError, "more than one placement"
+            ):
+                confirm.assert_one_measurement_state(raw, "primary")
+
+            bare = root / "b" / "raw"
+            bare.mkdir(parents=True)
+            with self.assertRaisesRegex(
+                confirm.RegisteredAnalysisError, "records no core placement"
+            ):
+                confirm.assert_one_measurement_state(bare, "primary")
+
+    def test_an_unpinned_sensitivity_arm_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            primary = self.environments(
+                root / "a", "AppleClang 21", "/usr/lib/libsystem.dylib", "affinity:2"
+            )
+            unpinned = self.environments(
+                root / "b", "GNU 16.1.0", "/usr/lib/libsystem.dylib", "affinity:0,1,2,3"
+            )
+            with self.assertRaisesRegex(
+                confirm.RegisteredAnalysisError, "different placement than the primary"
+            ):
+                confirm.assert_dimension_changed(primary, unpinned, "compiler")
 
     def test_sensitivity_requires_the_dimension_to_have_changed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -52,7 +52,9 @@ STRUCTURES = [
 ]
 # Environment fields the analyst copy may carry: build facts that identify no
 # structure, and that the registered sensitivity stages have to read.
-BLINDED_ENVIRONMENT_FIELDS = frozenset({"compiler", "malloc_provider"})
+BLINDED_ENVIRONMENT_FIELDS = frozenset(
+    {"compiler", "malloc_provider", "core_placement"}
+)
 REQUIRED_LOCAL_BLINDED_OUTPUTS = [
     "primary_update.csv",
     "regime_update_contrast-a.csv",

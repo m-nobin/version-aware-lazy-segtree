@@ -1085,6 +1085,25 @@ def leave_one_trial_out(
     return pd.DataFrame(rows)
 
 
+def assert_one_measurement_state(raw: pathlib.Path, label: str, mode: str = "timing") -> None:
+    """Every process in a campaign was measured in the same machine state.
+
+    A reboot returns a machine to its default governor and drops any core
+    pinning, and a campaign that resumes afterwards measures its remaining
+    cells somewhere else. Nothing downstream would notice: the effect is a
+    plausible number, not a missing file. The environment file records the
+    placement each process read back after its own request, so a campaign that
+    disagrees with itself is visible here and is not one campaign.
+    """
+    placements = data.environment_values(raw, "core_placement", mode)
+    if not placements:
+        raise RegisteredAnalysisError(f"the {label} campaign records no core placement")
+    if len(placements) > 1:
+        raise RegisteredAnalysisError(
+            f"the {label} campaign was measured in more than one placement: {sorted(placements)}"
+        )
+
+
 SENSITIVITY_FIELD = {"compiler": "compiler", "allocator": "malloc_provider"}
 
 
@@ -1100,6 +1119,18 @@ def assert_dimension_changed(
     must report one value each, and the two values must differ.
     """
     field = SENSITIVITY_FIELD[dimension]
+    assert_one_measurement_state(reference_raw, "primary", mode)
+    assert_one_measurement_state(sensitivity_raw, dimension, mode)
+    # The arms are compared cell by cell against the primary campaign, so a
+    # placement difference between them would be read as a compiler or
+    # allocator effect.
+    reference_placement = data.environment_values(reference_raw, "core_placement", mode)
+    sensitivity_placement = data.environment_values(sensitivity_raw, "core_placement", mode)
+    if reference_placement != sensitivity_placement:
+        raise RegisteredAnalysisError(
+            f"{dimension} sensitivity was measured in a different placement than the primary "
+            f"campaign: {sorted(sensitivity_placement)} against {sorted(reference_placement)}"
+        )
     reference = data.environment_values(reference_raw, field, mode)
     sensitivity = data.environment_values(sensitivity_raw, field, mode)
     for label, values in (("primary", reference), (dimension, sensitivity)):

@@ -48,6 +48,19 @@ raw="$root/bench/results/campaigns/$campaign/raw"
 meta="$root/bench/results/campaigns/$campaign"
 mkdir -p "$raw"
 
+# The sensitivity arms are compared against the primary campaign cell by cell,
+# so they have to be measured the same way. Running them unpinned while the
+# primary campaign is pinned to one core confounds the compiler or allocator
+# effect with the placement difference, and the recorded core_placement is
+# where that shows up.
+pin=()
+if [[ "${VALSEG_PIN:-0}" == "1" ]]; then
+  case "$(uname -s)" in
+  Darwin) pin=("$root/bench/env/pin_macos.sh" run --) ;;
+  Linux)  pin=("$root/bench/env/pin_linux.sh" run --) ;;
+  esac
+fi
+
 preload=()
 if [[ -n "$alloc" ]]; then
   case "$(uname -s)" in
@@ -91,6 +104,7 @@ expected_meta="$(
   printf 'alt_allocator=%s\n' "${alloc:-none}"
   printf 'alt_allocator_sha256=%s\n' \
     "$([[ -n "$alloc" ]] && shasum -a 256 "$alloc" | cut -d' ' -f1 || echo none)"
+  printf 'pinned=%s\n' "${VALSEG_PIN:-0}"
   printf 'runner_script_sha256=%s\n' "$(shasum -a 256 "$0" | cut -d' ' -f1)"
 )"
 if [[ -e "$meta/campaign.txt" ]]; then
@@ -126,7 +140,7 @@ while IFS=$'\t' read -r workload n variant structure trial cell_trials exec_orde
   } >> "$raw/system_$tag.txt"
   # The preload is a request; the environment file records the library that
   # actually answered malloc, and the registered analysis checks it.
-  env ${preload[@]+"${preload[@]}"} "$binary" --mode batch \
+  env ${preload[@]+"${preload[@]}"} ${pin[@]+"${pin[@]}"} "$binary" --mode batch \
     --workload "$workload" --n "$n" --variant "$variant" --structure "$structure" \
     --trials "$cell_trials" --trial-index "$trial" \
     --warmup "$warmup_trials" --warmup-seconds "$warmup_seconds" \

@@ -85,10 +85,17 @@ for phase in structural timing alloc latency trace; do
   VALSEG_PIN=1 bench/run_confirmatory.sh <id> $phase
 done
 # machine A only
-bench/run_sensitivity.sh macos-a-gcc build/release-verify-gcc
-VALSEG_ALT_ALLOC=$(brew --prefix mimalloc)/lib/libmimalloc.dylib \
+VALSEG_PIN=1 bench/run_sensitivity.sh macos-a-gcc build/release-verify-gcc
+VALSEG_PIN=1 VALSEG_ALT_ALLOC=$(brew --prefix mimalloc)/lib/libmimalloc.dylib \
   bench/run_sensitivity.sh macos-a-alloc
 ```
+
+`VALSEG_PIN=1` on the sensitivity arms too: they are compared against the
+primary campaign cell by cell, so an arm measured unpinned against a pinned
+primary campaign reads a placement difference as a compiler or allocator
+effect. The registered stages refuse the pair if their recorded
+`core_placement` disagrees, and refuse a campaign that disagrees with itself,
+which is what a reboot mid-campaign produces.
 
 On macOS the run refuses to start on battery power, so the machine stays on AC
 for the whole campaign.
