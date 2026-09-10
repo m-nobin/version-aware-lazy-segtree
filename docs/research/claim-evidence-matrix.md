@@ -1,8 +1,7 @@
 # Claim-evidence matrix
 
-Prior-art audit for the research programme, originally recorded 30 August
-2026 and re-audited against the retained primary sources on 31 August 2026.
-Search-result counts are not novelty evidence. Every retained claim below has
+Prior-art audit for the research programme, checked against retained primary
+sources. Search-result counts are not novelty evidence. Every retained claim below has
 an exact locator in section 7a, and every proposed contribution names the
 closest precedent found in the audited corpus and the narrower difference the
 project can test or defend.
@@ -119,59 +118,7 @@ are printed publication pages unless explicitly marked PDF/manuscript pages.
 | Contribution | Closest precedent | Status after audit |
 | --- | --- | --- |
 | C1 taxonomy | Kaplan and DSST technique taxonomies; Salzberg-Tsotras comparison framework | Open. The audited corpus did not contain one comparison that places retained tags, copy-on-push, materialization, snapshots/checkpoints, modification boxes and fat nodes under the project's algebraic interface. |
-| C2 boundary | MVSB/SB additive contributions; Library Checker copy-on-push affine implementation | Established at G2 for the stated representation. `docs/proof.md` §9 gives sufficiency, conditional necessity, faithful-action corollary and an AffineSum witness. |
-| C3 frontier laws | DSST/MVBT point-update accounting; Fiat-Kaplan model-specific lower bounds | Exact frontier identities established at G2. The lower-bound attempt was withdrawn after the edge-tag counterexample, so no project optimality claim remains. |
+| C2 boundary | MVSB/SB additive contributions; Library Checker copy-on-push affine implementation | Established for the stated representation. `docs/proof.md` §9 gives sufficiency, conditional necessity, faithful-action corollary and an AffineSum witness. |
+| C3 frontier laws | DSST/MVBT point-update accounting; Fiat-Kaplan model-specific lower bounds | Exact frontier identities established. The lower-bound attempt was withdrawn after the edge-tag counterexample, so no project optimality claim remains. |
 | C4 predictive cost model | No source in the audited corpus provided a directly comparable persistence-strategy selection model | Model form and units are frozen; predictive success remains unestablished until the registered holdout. |
 | C5 registered regime study | Pluquet et al. 2008 and HistOOry 2009 | Open. The proposed distinction is a registered, paired, cross-machine range-action study, not experimental persistence in general. |
-
-## 9. Gate G1 technical assessment (corrected 31 August 2026)
-
-- The four previously unresolved primary-source flags (Kaplan, Timeline Index,
-  Johnson and McGeoch) are resolved; all other retained rows were rechecked and
-  section 7a records exact locators.
-- The Timeline Index description is corrected: it uses an Event List and
-  Version Map, checkpoints are optional, and its aggregate scope is not merely
-  additive.
-- Every contribution is paired with a closest precedent and a scoped
-  difference. The matrix makes no universal novelty, empty-intersection or
-  project optimality claim.
-- The pilot is preserved as exploratory evidence with a 96-file checksum
-  manifest and a one-command reproduction entry point.
-- The algebraic laws, composition direction and generic checkpoint restriction
-  remain recorded in `policy.hpp` and `capability-taxonomy.md`.
-
-Technical recommendation: **continue Route B with the narrow scopes in section
-8.** This is an evidence assessment, not formal Gate G1 approval. Gate G1 also
-requires durable approval from an independent human reviewer under the Phase 1
-charter, and that governance condition is still pending.
-
-## 10. Independent review evidence audit
-
-The repository and GitHub records were checked on 1 September 2026. Pull
-requests #34 and #35 contain no submitted reviews or review comments; their
-merge and closeout commits prove delivery, not independent approval. The
-earlier phrase "recorded by the repository owner" is therefore withdrawn as
-insufficient evidence. The approval is preserved separately in the
-[Phase 1 human review record](phase-1-human-review.md).
-
-| Field | Current verifiable record |
-| --- | --- |
-| Reviewer | Sunjaree |
-| Independence basis | Reviewer states that they did not author the Phase 1 changes |
-| Durable approval reference | [Phase 1 human review record](phase-1-human-review.md) |
-| Decision | Approved; Route B remains defensible within the scoped claims |
-| Required changes and dispositions | None |
-| Acceptable closure evidence | A submitted PR review, reviewer-signed document, or archived reviewer email/message that identifies the reviewed material, decision, date, independence basis and required-change dispositions |
-
-The separate [AI technical review](phase-1-review.md) verified the source
-audit and pilot reproduction and identified three corrective actions. Its
-confirmatory metadata guard and stale-record findings have been resolved, and
-the corrected public Wiki baseline was published and verified at commit
-`a4154d6`; the updated G1 approval status is prepared in the Wiki working copy
-and awaits publication. That AI review is additional technical evidence, not a
-human signature. It is supplementary to the human approval record and does not
-replace it.
-
-The human approval record closes the independent-review condition. Gate G1 is
-reconfirmed for the scoped Route B continuation, subject to the remaining
-Phase 3 registration and confirmatory-campaign controls.

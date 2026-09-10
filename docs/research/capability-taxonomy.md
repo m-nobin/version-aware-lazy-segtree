@@ -180,9 +180,8 @@ baseline stays in SumAdd-only comparisons.
 
 ## 6. Representation model R
 
-The model in which the lower-bound attempt (theory PR, Gate G2) will be
-stated. Fixed here, before the attempt, so it cannot drift to rescue a
-result:
+The model the lower-bound attempt is stated in. Fixed before the attempt, so
+it cannot drift to rescue a result:
 
 - computation is on a word RAM with word size
   `w >= ceil(log2(n + U + 1))`, where `U` is the number of published updates;

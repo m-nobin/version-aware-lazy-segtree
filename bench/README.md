@@ -189,7 +189,7 @@ The differences that matter:
   the commit, tag, manifest hash and timestamp afterwards. The protocol and
   manifest are published with the paper.
   `docs/research/confirmatory-campaign.md` is the one-shot runbook from
-  registration to Gate G3.
+  registration to reporting.
 
 ## The external structure
 

@@ -16,7 +16,7 @@ with the paper's arXiv submission.
 | Registered tag | `registered-20260903` |
 | Manifest SHA-256 | `f253a6f2a3c612efa1c7cf4720b99ce6364eb2d95fcab5232d36b216c2ba4493` |
 | Registration UTC timestamp (tag push) | 2026-09-03T07:47:14Z |
-| Custody directory (outside every campaign tree) | `/Users/nobin/valseg-custody-confirmatory` |
+| Custody directory | A `valseg-custody-confirmatory` directory outside the repository and outside every campaign tree; its absolute path is recorded with the campaign archive, not here |
 | Verified by, on | Mohammad Nobinur, 2026-09-03 |
 
 The custody directory holds the blinding key, the label map and the input

@@ -4,12 +4,10 @@ This document proves that `valseg::PersistentLazySegmentTree` answers every hist
 query correctly and preserves all published versions, and it establishes the time and space bounds
 stated in the design contract
 ([Planned Versioned Tree](https://github.com/m-nobin/version-aware-lazy-segtree/wiki/Planned-Versioned-Tree)).
-Completes [issue #9](https://github.com/m-nobin/version-aware-lazy-segtree/issues/9).
 
 Sections 1 to 8 are the SumAdd proof and complexity analysis. Section 9 generalizes the
 correctness argument to an arbitrary aggregate/action policy and characterizes when retaining tags
-is correct at all; it is the theorem of the Route B programme's PR3 and is not cited as a result
-until its review record (section 9.10) is complete.
+is correct at all. Section 10 gives the exact frontier identities and the lower-bound attempt.
 
 ## 1. Preliminaries
 
@@ -321,7 +319,7 @@ Proposition 2 on every non-zero update it generates.
 ## 8. Appendix: baseline complexity
 
 This appendix collects, in one place, the bounds already proved and `static_assert`ed in each
-Phase 7 comparison baseline's own header. Nothing is re-derived here — each row is an index into
+comparison baseline's own header. Nothing is re-derived here — each row is an index into
 the header that owns the argument, and each baseline's deterministic suite asserts its retained
 node count exactly. The purpose is to make the benchmark's expected shape legible before any
 number is measured: the runner should confirm these bounds, not discover them.
@@ -392,9 +390,6 @@ initialization where the template reports the missing version first. The update 
 recursions are the same code shape, so the statements below are read as statements about the
 measured structures. The executable evidence for
 each statement is indexed in section 9.9.
-
-**Status.** Drafted for PR3. Nothing in this section is cited as a theorem in the manuscript until
-the review record in section 9.10 is completed by a reader who did not implement the code.
 
 ### 9.1 Setting
 
@@ -719,24 +714,6 @@ node keeps its tag.
 Tests validate these implementations on the tested domains and seeds. The theorems are the
 argument; the tests are the check that the argument is about the code that runs.
 
-### 9.10 Automated independent review record
-
-The Gate G2 audit below was performed by an automated reviewer that did not implement
-`policy_trees.hpp` or this section. The 31 August 2026 governance amendment in the public execution
-plan permits this reproducible automated audit for the internal G2 gate when its method and every
-disposition are recorded. It is not a human review and cannot satisfy the named human theory review
-required before G4 submission.
-
-| Field | Review record |
-| --- | --- |
-| Reviewer name | Independent automated reviewer acting for Sunjare Zulfiker, at the repository owner's request |
-| Independence basis | Did not write the code or this section; worked from the sources in a separate context; rebuilt and ran the policy and compile-fail tests (30 of 30 pass) |
-| Material reviewed | Section 9, `include/valseg/policy.hpp`, `include/valseg/policy_trees.hpp`, `tests/policy_trees_test.cpp`, `tests/policy_oracle.hpp`, `tests/compile_fail/`, the three audited baseline sources, the capability taxonomy, the C2 row of the claim matrix and the README |
-| Checked line by line | Quantifiers of Lemmas 9.0 to 9.3, Theorems 9.4, 9.5 and 9.8, Corollaries 9.6, 9.7 and 9.9; the `compose(newer, older)` direction in the lemmas and in `update`, `query`, `pushInto` and `push`; the reachability set `R`; the three named assumptions of section 9.4; the witness arithmetic of section 9.5 (arena `3 → 4 → 6`, copy-on-push `4 → 8`, answers 2 and 1, `compose((2,0),(1,1)) = (2,2) ≠ (2,1)`); the MinAdd hand trace; the theorem-to-test map |
-| Decision | Approve with changes. The boundary statement (correct iff the induced actions commute on reachable states, under the stated operation model) is supported by the code and the tests. |
-| Required changes and disposition | Four required: restate invariant (C) so the leaf-absorbing push of `PushedLazyTree` preserves it; relabel the `TreeOrderEqualsChronologicalOrderForCommutingPolicies` row as Theorem 9.4 evidence; replace "refuses a policy whose induced actions do not commute" with the declared-fact wording; mark the buffered baseline's additive-delta buffer as a SumAdd refinement whose action-class claim is for the state-storing form. Six precision items (nonzero updates in the full-copy row, "probed answer" wording and test names, the point-materialized tree in Corollary 9.9 and the isolation probes in the map, tense of the push-frontier reference, the bench ablation's pre-initialization validation order, the taxonomy trace wording). All ten applied in this revision. |
-| Date | 30 August 2026 |
-
 ## 10. Frontier identities, push cost and the lower-bound attempt
 
 This section answers RQ2 of the research plan: how much structure each strategy retains after a
@@ -745,9 +722,6 @@ checked in `tests/frontier_test.cpp` against the arena growth of the implemented
 exhaustively over every range for small `n` and on seeded histories for larger `n`. Section 10.6
 reports the outcome of the lower-bound attempt in representation model `R`: it fails, and the
 failure is documented with an executable counterexample rather than argued around.
-
-**Status.** Merged after the automated independent audit in section 10.8 under the public G2
-governance amendment. That audit is not a human theory review.
 
 ### 10.1 Definitions
 
@@ -1026,7 +1000,7 @@ update. Proposition 10.3 tightens it to `4h − 3` and the frontier suite assert
 on every generated update; both statements stand, and the older one is kept because the
 differential suite predates this section.
 
-### 10.8 Theorem-to-test map and review record
+### 10.8 Theorem-to-test map
 
 | Statement | Executable evidence (`tests/frontier_test.cpp` unless noted) |
 | --- | --- |
@@ -1038,17 +1012,3 @@ differential suite predates this section.
 | Proposition 10.7, push worst case | `PushFrontierWorstCaseIsAttained` |
 | Proposition 10.8, point materialization | `PointOnlyAppendsExactlyTheIntersectingNodesOnEveryRange` |
 | Proposition 10.9, counterexample | `EdgeTagModelAgreesWithTheOracleAndAllocatesThePartialCount` |
-
-This Gate G2 record is an automated independent audit under the 31 August 2026 public governance
-amendment. It is not a human review and does not replace the named human theory review required
-before G4 submission.
-
-| Field | Review record |
-| --- | --- |
-| Reviewer name | Independent automated reviewer acting for Sunjare Zulfiker, at the repository owner's request |
-| Independence basis | Did not write the code or this section; worked from the sources in a separate context; re-derived every proof by hand, traced the closed form on hand examples including a split node containing the other boundary, and built and ran `frontier_test` under the strict-warning preset (10 of 10 pass) |
-| Material reviewed | Section 10, `include/valseg/frontier.hpp`, `tests/frontier_test.cpp`, both copy-on-push implementations, the subject and point-only trees, model `R` and the outcome paragraph in the capability taxonomy, the C3 row of the claim matrix, the README |
-| Checked line by line | The case analysis of Proposition 10.2 and its implementation; the extremal and attainment argument of Proposition 10.3; the double count and counting functions of Proposition 10.4; the extra-copy accounting of Proposition 10.6; the construction of Proposition 10.7; Proposition 10.8; the byte arithmetic of section 10.6; membership of the edge-tag representation in `R`, its record count and the decision not to narrow `R` |
-| Decision | Approve with changes. No error in any result: the identities `F`, `F + 2P`, `N`, the bounds `4h − 3` and `8h − 5` and the counterexample stand; the optimality withdrawal is correctly and honestly stated. |
-| Required changes and disposition | Eight required: a false justification in the `P_L ∩ P_R` case of 10.2; the timing of the `P` definition; the unproved leaf-depth and rightmost-path facts in 10.3; an off-by-one at `h = 4` in 10.6; the unstated `8h − 5` upper bound in 10.7 and the leaf updates in its construction; "tight" qualified to powers of two in the taxonomy and claim matrix; a source for the pilot ratio in 10.4; a direct SumAdd correctness argument for the edge-tag model in place of a Theorem 9.4 analogy. Five precision items (proposition number and path description in `frontier.hpp`, an unused `left − 1` at `left == 0`, the spliced sentence in section 6, the AffineSum delta description, the children wording in 10.4). All applied in this revision. |
-| Date | 30 August 2026 |
