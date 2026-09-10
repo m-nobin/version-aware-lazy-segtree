@@ -59,8 +59,15 @@ run_arm() {
   # VALSEG_DRY_RUN keeps the registration gate out of the way: what is under
   # test is the arm wiring, and the gate has its own fixture.
   # run_sensitivity.sh writes under the repository it lives in, so the
-  # campaign ids are scratch-only and removed at the end.
-  (cd "$scratch" && env VALSEG_DRY_RUN=1 "$@" bash "$script" "$campaign" "$scratch/build" >/dev/null)
+  # campaign ids are scratch-only and removed at the end. Output is captured
+  # rather than discarded so a failure is diagnosable from the captured log
+  # instead of leaving only a bare exit code.
+  local log="$scratch/run_arm.$campaign.log"
+  if ! (cd "$scratch" && env VALSEG_DRY_RUN=1 "$@" bash "$script" "$campaign" "$scratch/build") >"$log" 2>&1; then
+    echo "run_arm $campaign failed; captured output:" >&2
+    cat "$log" >&2
+    return 1
+  fi
 }
 
 root="$(cd "$(dirname "$script")/.." && pwd)"
