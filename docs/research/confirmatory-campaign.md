@@ -1,0 +1,183 @@
+# Confirmatory campaign runbook
+
+The one-shot execution of the registered protocol
+(`registered-protocol.md`), from registration to reporting. Each step names
+the command and the evidence it leaves; a step with no evidence file did not
+happen. Machine A is the macOS Apple Silicon development machine, machine B
+the Linux x86-64 machine driven as in `bench/env/README.md`. Nothing here
+runs before the registration in step 2 is recorded, and
+`bench/run_confirmatory.sh` enforces that on its own. Both roles below,
+analyst and custody, are performed by the authors; the custody directory is
+the only thing that must stay outside every campaign tree.
+
+## 1. Preconditions
+
+| Requirement | Evidence |
+| --- | --- |
+| Both machines completed the excluded-seed dry run on the frozen harness | `bench/results/campaigns/<id>-dryrun/complete_*` on each machine |
+| Statistical review approved | `statistical-review.md` |
+| PR6, PR7 and PR8 merged; worktree clean | `git status --porcelain` empty |
+
+## 2. Register
+
+```sh
+bench/make_registration.sh                       # writes registration-manifest.txt from a clean commit
+bench/make_registration.sh --verify              # every frozen checksum
+git add docs/research/registration-manifest.txt && git commit -m "docs(research): register the confirmatory protocol"
+git tag -a registered-YYYYMMDD <commit the manifest names> -m "registered protocol"
+git push origin main registered-YYYYMMDD
+```
+
+Fill every row of `registration-record.md` (commit, tag, manifest SHA-256,
+the tag's push timestamp from `git log -1 --format=%cI registered-YYYYMMDD`
+or the GitHub tag page, the custody directory, who verified and when) and
+commit it. The record is not a frozen file, so this commit changes no
+registered checksum. The registered seed is authorized from this moment and
+not before. The protocol and manifest are published with the arXiv
+submission of the paper.
+
+## 3. Build and verify on each machine
+
+```sh
+git checkout registered-YYYYMMDD    # or any later commit; the runner verifies the frozen files
+cmake --preset release-verify && cmake --build --preset release-verify --parallel
+ctest --preset release-verify       # 100 % before any measurement
+cmake --preset release-verify-clang && cmake --build --preset release-verify-clang --parallel   # Linux second compiler
+# On macOS, `g++` is AppleClang, so name the real GCC or the second-compiler arm
+# repeats the primary one. The registered compiler stage rejects that anyway.
+cmake --preset release-verify-gcc -DCMAKE_CXX_COMPILER=$(brew --prefix gcc)/bin/g++-16 \
+  && cmake --build --preset release-verify-gcc --parallel
+sudo bench/env/pin_linux.sh prepare  # Linux only, once per boot
+```
+
+Evidence: `campaign.txt` in every campaign directory records both binary
+hashes, the script hashes, the registered commit and `git_dirty=no`; the
+runner refuses to write it otherwise.
+
+## 4. Seal the blinding
+
+The custody role, from the controlled directory, before any measurement is analysed:
+
+```sh
+uv run --frozen --project bench/analysis python bench/analysis/blind.py seal   <analyst-a> --custody-dir <controlled> --study-id <study>
+for other in <analyst-b> <analyst-compiler> <analyst-allocator>; do
+  uv run --frozen --project bench/analysis python bench/analysis/blind.py attach "$other" --custody-dir <controlled> --study-id <study>
+done
+```
+
+Every campaign the analyst half reads needs its own commitment under the same
+key, the two sensitivity campaigns included.
+
+Evidence: the custody directory holds the key and label map; the analyst
+half never receives its path.
+
+## 5. Measure, per machine
+
+Campaign ids: `macos-a`, `linux-b`, then `macos-a-gcc` and `macos-a-alloc`.
+None contains `dryrun` or `pilot`. The registered compiler and allocator stages
+compare machine A against its own alternate arms, so the two sensitivity
+campaigns are machine A's; running them on machine B produces output no
+registered decision reads.
+
+```sh
+# both machines
+for phase in structural timing alloc latency trace; do
+  VALSEG_PIN=1 bench/run_confirmatory.sh <id> $phase
+done
+# machine A only
+VALSEG_PIN=1 bench/run_sensitivity.sh macos-a-gcc build/release-verify-gcc
+VALSEG_PIN=1 VALSEG_ALT_ALLOC=$(brew --prefix mimalloc)/lib/libmimalloc.dylib \
+  bench/run_sensitivity.sh macos-a-alloc
+```
+
+`VALSEG_PIN=1` on the sensitivity arms too: they are compared against the
+primary campaign cell by cell, so an arm measured unpinned against a pinned
+primary campaign reads a placement difference as a compiler or allocator
+effect. The registered stages refuse the pair if their recorded
+`core_placement` disagrees, and refuse a campaign that disagrees with itself,
+which is what a reboot mid-campaign produces.
+
+On macOS the run refuses to start on battery power, so the machine stays on AC
+for the whole campaign.
+
+Both sensitivity arms go through `run_sensitivity.sh`, which runs the sixteen
+registered cells at twenty trials each. The primary schedule gives forty
+trials to the two W11 cells it shares with the primary family, so a
+`run_confirmatory.sh` compiler arm cannot satisfy the registered
+twenty-paired-trial check.
+
+Every phase is resumable and refuses a changed binary, script, schedule or
+trace on resume. A cell counts as done only when its runs file holds data:
+an unclean shutdown leaves zero-length files whose metadata reached the
+journal but whose contents never flushed, so those cells are cleared and
+measured again rather than skipped, and the audit does not count them as
+present. Evidence per phase: `complete_<phase>` written only after
+the expected-versus-present audit, `system_*.txt` before every process,
+`environment_*.txt` with `core_placement` after it. Capped, incomplete and
+failed trials stay in the raw CSV with their `status`; nothing is rerun.
+
+## 6. Blind and analyse
+
+The custody role first moves each measured campaign into the controlled tree,
+because `blind` and `verify-named` refuse a named campaign the analyst could
+reach, then copies it into its opaque analyst copy:
+
+```sh
+mv bench/results/campaigns/<id> <controlled>/named/<id>
+uv run --frozen --project bench/analysis python bench/analysis/blind.py blind <controlled>/named/<named-a> <analyst-a> --custody-dir <controlled> --study-id <study>
+uv run --frozen --project bench/analysis python bench/analysis/blind.py blind <controlled>/named/<named-b> <analyst-b> --custody-dir <controlled> --study-id <study>
+```
+
+The two sensitivity campaigns are blinded the same way, into the analyst
+copies the compiler and allocator stages read. A blinded copy carries each
+process's `compiler` and `malloc_provider` beside the run data, and nothing
+else from its environment file: both are properties of the process rather than
+of any structure, and the registered sensitivity stages have to read them to
+tell a second compiler from the same one.
+
+The analyst, who sees only the opaque copies and two lexically ordered labels:
+
+```sh
+bench/run_registered_analysis.sh analyst <analyst-a> <analyst-b> <compiler-campaign> <allocator-campaign> S0x S0y
+```
+
+The custody role, once, after the analyst half has run:
+
+```sh
+bench/run_registered_analysis.sh custodian <analyst-a> <analyst-b> <named-a> <named-b> <controlled> <study>
+```
+
+The custodian half hashes every blinded output, unblinds, verifies the named
+inputs against custody manifests, runs checksums and H1, prepares, fits and
+evaluates the model exactly once (training only, then one holdout read),
+builds the H5 responses from machine A's trace phase, transfers, decides H5,
+and re-verifies the pre-unblinding hashes. A decision that fails closed leaves
+`<stage>_unavailable.json`; the half still finishes and exits non-zero.
+
+Evidence: `analysis/` under each campaign, the study-wide pre-unblinding hash
+and UTC time from `blind.py unblind`, the model artifact hash, and the
+`_unavailable.json` records if any.
+
+## 7. Archive
+
+```sh
+find bench/results/campaigns/<id>/raw -type f | sort | xargs shasum -a 256 > bench/results/campaigns/<id>/raw.sha256
+```
+
+Archive every campaign directory (raw, `campaign.txt`, schedules, traces,
+`raw.sha256`, `analysis/`) as the artifact published with the paper's arXiv
+submission. Pilot, dry-run and
+confirmatory directories are never merged: the pilot lives under
+`bench/results/raw`, dry runs carry `dryrun` in their id, and the runner
+refuses that substring for a real run.
+
+## 8. Interpretation and reporting
+
+Classify H1 to H5 from the decision CSVs as supported, contradicted or
+inconclusive; remove "predictive" from the title if H3 misses its target;
+restrict hardware claims if H4 fails; foreground H5 contradictions; freeze
+`claim-evidence-matrix.md` to those results. Every deviation from the
+protocol is entered in its section 12 with a UTC timestamp before the
+affected output is inspected. Tables and figures are generated only from the
+archived campaign directories, each carrying the source rows, script, commit
+and input checksums it was built from.
