@@ -43,12 +43,22 @@ chmod +x "$stub/valseg_bench"
 # allocator actually took over is answered by each process's recorded
 # malloc_provider, not here.
 printf 'int valseg_stand_in_allocator(void) { return 0; }\n' > "$scratch/stand_in.c"
+arches=()
 case "$(uname -s)" in
-Darwin) stand_in_allocator="$scratch/libstandin.dylib"; shared=(-dynamiclib) ;;
+Darwin)
+  stand_in_allocator="$scratch/libstandin.dylib"
+  shared=(-dynamiclib)
+  # Apple silicon system binaries are arm64e, and dyld aborts the process when
+  # an inserted dylib carries no slice for the architecture it is being loaded
+  # into. Both slices keep the preload loadable whichever interpreter the arm
+  # ends up running under; an Intel host has no arm64e and stays single-slice.
+  if [[ "$(uname -m)" == arm64 ]]; then arches=(-arch arm64 -arch arm64e); fi
+  ;;
 Linux)  stand_in_allocator="$scratch/libstandin.so";    shared=(-shared -fPIC) ;;
 *) echo "unsupported platform" >&2; exit 1 ;;
 esac
-if ! "${CC:-cc}" "${shared[@]}" -o "$stand_in_allocator" "$scratch/stand_in.c" 2>/dev/null; then
+if ! "${CC:-cc}" "${shared[@]}" ${arches[@]+"${arches[@]}"} \
+    -o "$stand_in_allocator" "$scratch/stand_in.c" 2>/dev/null; then
   echo "cannot build the stand-in library; skipping" >&2
   exit 0
 fi
