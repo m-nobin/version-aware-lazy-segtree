@@ -20,34 +20,36 @@ An Advanced Algorithms project exploring how range-add lazy propagation can be c
 | `FatNodePersistentSegmentTree`   | Benchmark baseline: fat nodes with node copying                |                    `O(log n)` |        `O(log n)` | In-place versioned states, copy on overflow          |
 | `CopyOnPushSegmentTree`          | Measurement subject under `bench/`: path copying that pushes tags |                 `O(log n)` |        `O(log n)` | Path copying, tag pushed into copied children        |
 
-[include/valseg/policy.hpp](include/valseg/policy.hpp) defines the aggregate/action policy model
-these strategies are analysed under: `SumAddPolicy`, `MinAddPolicy` and `AffineSumModPolicy` with
-their algebraic laws and compile-time capability facts; the strategy-by-strategy audit is in
-[docs/research/capability-taxonomy.md](docs/research/capability-taxonomy.md).
-[include/valseg/policy_trees.hpp](include/valseg/policy_trees.hpp) holds the policy-generic
-research instruments the boundary theorem is stated for: `RetainedTagPersistentTree<Policy>` (the
-subject; refuses at compile time a policy that does not declare `kInducedActionsCommute`),
-`CopyOnPushPersistentTree<Policy>` (the ablation), `PointMaterializedPersistentTree<Policy>` and
-`PushedLazyTree<Policy>`. Their SumAdd instantiations match `PersistentLazySegmentTree` and
-`CopyOnPushSegmentTree` in arena size after every update and in every probed answer on the
-tested histories. [include/valseg/frontier.hpp](include/valseg/frontier.hpp) holds the executable
-frontier definitions (`F`, the closed form, the intersecting-node count, the push frontier `P`
-and exact range-family sums) that [docs/proof.md](docs/proof.md) section 10 states record
-identities with. The existing structures remain SumAdd-only; the
-policies and templates feed the research programme, not a new public API for the trees.
+Three headers support the analysis rather than the public API. The trees above stay
+SumAdd-only.
 
-All components support zero-based, inclusive range-add and range-sum operations using `long long`
-values. Their numeric domain is exact signed-integer arithmetic in which every evaluated
-intermediate, canonical segment sum and retained lazy tag is representable as `long long`.
-Out-of-domain initialization, update, or query operations throw `std::overflow_error`; failed
-writes leave the prior state and published history unchanged. Persistent updates apply to the
-latest version only, while queries read any published version. Persistent update time is amortized
-over arena growth; the bounds are proved in [docs/proof.md](docs/proof.md). The update bounds in
-the table describe the structural algorithm and the constant-time numeric fast path. Lazy-tag
-implementations use a conservative magnitude envelope to prove the full logical array remains in
-domain; when that proof is inconclusive near `long long` boundaries, they run an `O(n)` read-only
-exact preflight before the normal update. This fallback preserves exact acceptance and rejection
-without enlarging the benchmarked node layouts.
+- [policy.hpp](include/valseg/policy.hpp) — the aggregate/action model the strategies are
+  analysed under (`SumAddPolicy`, `MinAddPolicy`, `AffineSumModPolicy`), with their algebraic
+  laws and compile-time capability facts. Strategy-by-strategy audit:
+  [capability-taxonomy.md](docs/research/capability-taxonomy.md).
+- [policy_trees.hpp](include/valseg/policy_trees.hpp) — policy-generic instruments the boundary
+  theorem is stated for. `RetainedTagPersistentTree<Policy>` is the subject and rejects at compile
+  time any policy that does not declare `kInducedActionsCommute`;
+  `CopyOnPushPersistentTree<Policy>` is the ablation. Their SumAdd instantiations match the
+  measured structures in arena size and in every probed answer.
+- [frontier.hpp](include/valseg/frontier.hpp) — executable frontier definitions (`F`, its closed
+  form, the intersecting-node count and the push frontier `P`) that
+  [docs/proof.md](docs/proof.md) section 10 states the record identities with.
+
+**Contract.** Ranges are zero-based and inclusive over `long long` values. Persistent updates
+apply to the latest version only; queries read any published version. A failed write throws and
+leaves the prior state and the published history unchanged.
+
+**Numeric domain.** Exact signed-integer arithmetic in which every intermediate, segment sum and
+retained lazy tag is representable as `long long`. Anything outside it throws
+`std::overflow_error`. Lazy-tag implementations decide this with a conservative magnitude
+envelope; near the `long long` boundary, where the envelope is inconclusive, they fall back to an
+`O(n)` read-only exact preflight before the update. The fallback changes neither what is accepted
+nor the benchmarked node layouts.
+
+The table's update bounds describe the structural algorithm and the constant-time numeric fast
+path; persistent update time is amortized over arena growth. Both are proved in
+[docs/proof.md](docs/proof.md).
 
 ## Build and verify
 
@@ -143,31 +145,31 @@ bench/analysis/             Locked pilot analysis and figure/table generation
 CMakeLists.txt              Build and tooling configuration
 CMakePresets.json           Developer, release, analysis, and CI presets
 docs/proof.md               Correctness proof, complexity analysis and the action-order boundary theorem
-docs/research/              Claim-evidence matrix, capability model, registered protocol
+docs/research/              Prior-art audit, capability model, cost model and registered protocol
+docs/benchmarking/          Exploratory-pilot report source
 ```
 
 ## Benchmarks
 
-`bench/` replays twelve workloads against every implemented persistence
-strategy and one vendored external implementation
-([bench/external/PROVENANCE.md](bench/external/PROVENANCE.md)); see
-[bench/README.md](bench/README.md). Measured campaign data, the
-generated tables, figures and PDFs are kept out of version control; the
-analysis and report sources, raw checksum manifest and provenance record are
-versioned. The recorded campaign is an **exploratory pilot** (one machine, no
-registered protocol). With the preserved local data present,
-`bench/verify_pilot.sh` verifies checksums and rebuilds the complete report.
-The confirmatory campaign runs under the registered protocol instead:
-batch-mode primary timing, fresh-process orchestration
-(`bench/run_confirmatory.sh`), blinded confirmatory statistics
-(`bench/analysis/confirm.py`), one locked decision pipeline
-(`bench/run_registered_analysis.sh`) and second-compiler/second-allocator sensitivity paths.
+`bench/` replays twelve workloads against every persistence strategy plus one
+vendored external implementation; see [bench/README.md](bench/README.md).
+
+The recorded campaign is an **exploratory pilot**: one machine, one compiler, no
+registered protocol. `bench/verify_pilot.sh` checks the data manifest and rebuilds
+the report. The confirmatory campaign runs instead under the protocol registered in
+[docs/research/](docs/research/README.md), with fresh-process orchestration, blinded
+statistics and a single locked decision pipeline.
+
+Sources, analysis code and the raw checksum manifest are versioned; measured data,
+tables, figures and PDFs are not.
 
 ## Documentation
 
-Design, algorithms, public API and research background are documented in the
-[project Wiki](https://github.com/m-nobin/version-aware-lazy-segtree/wiki). The correctness proof
-and complexity analysis are in [docs/proof.md](docs/proof.md).
+Design, algorithms and public API are documented in the
+[project Wiki](https://github.com/m-nobin/version-aware-lazy-segtree/wiki). The correctness proof,
+complexity analysis and the action-order boundary theorem are in [docs/proof.md](docs/proof.md).
+The prior-art audit, capability model, cost model and registered analysis protocol are in
+[docs/research/](docs/research/README.md).
 
 ## Citation and license
 
