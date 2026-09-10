@@ -6,48 +6,6 @@
 
 An Advanced Algorithms project exploring how range-add lazy propagation can be combined with partial persistence while preserving correct historical range-sum queries.
 
-> **Current status**
-> Route B Phase 1's implementation and evidence package is complete and was re-audited on
-> 1 September 2026. Gate G1 is reconfirmed for the scoped Route B continuation; the durable
-> approval is preserved in the [Phase 1 human review record](docs/research/phase-1-human-review.md).
-> The authoritative [Phase 1 charter](docs/research/phase-1-charter.md), corrected
-> [exit review](docs/research/phase-1-exit-review.md) and
-> [claim-evidence matrix](docs/research/claim-evidence-matrix.md) record the technical closure
-> and the reconfirmed Gate G1 decision. Phase 2 (theorems, frontier identities and the cost model)
-> passed Gate G2 under the public automated-review governance amendment: the
-> observational commutativity boundary ([docs/proof.md](docs/proof.md) section 9) and the
-> frontier identities (section 10) are merged and independently audited by an automated reviewer
-> who authored neither change; the lower-bound
-> attempt of section 10 found a counterexample, so no optimality claim is made and the adopted
-> paper title is:
->
-> **Partial Persistence Strategies for In-Memory Segment Trees under Additive Range Updates:
-> Structural Space Characterizations and a Controlled Space–Time Study**
->
-> The physical and predictive cost model is specified in
-> [docs/research/cost-model.md](docs/research/cost-model.md), including stream-group holdout
-> separation and a hashable three-stage prepare/fit/evaluate path. The
-> Gate G1 evidence assessment is section 9 of the claim-evidence matrix. Phase charters and exit
-> reviews are version-controlled records in `docs/research/`.
->
-> Phase 3 (registered confirmatory evaluation) is being hardened: the prospective analysis
-> protocol is written in
-> [docs/research/registered-protocol.md](docs/research/registered-protocol.md) with its
-> statistics, fail-closed H3/H4/H5 decisions, custody-separated blinding, sensitivity paths and
-> an external implementation in place, and the statistical machinery approved by an independent
-> review ([docs/research/statistical-review.md](docs/research/statistical-review.md)). The
-> fresh-process harness is hardened ([bench/README.md](bench/README.md)) and its excluded-seed
-> dry run passed on macOS and on dedicated Linux x86-64 hardware
-> ([bench/env/README.md](bench/env/README.md)), with core placement verified from the data on
-> both machines. Rehearsing the registered analysis end to end then closed the last gap before
-> registration: both sensitivity arms now run the same sixteen registered cells through one
-> gated runner, and every process records the library that actually answered `malloc`, so a
-> second compiler or a preloaded allocator is evidence rather than intent. The registration (a
-> tagged, pushed commit with its manifest) and the one-shot campaign
-> ([docs/research/confirmatory-campaign.md](docs/research/confirmatory-campaign.md)) remain
-> open. No confirmatory measurement runs before that registration; the protocol and data are
-> published with the paper's arXiv submission.
-
 ## Implemented components
 
 | Component                        | Purpose                                                        |                        Update |             Query | Persistence                                          |
@@ -185,8 +143,7 @@ bench/analysis/             Locked pilot analysis and figure/table generation
 CMakeLists.txt              Build and tooling configuration
 CMakePresets.json           Developer, release, analysis, and CI presets
 docs/proof.md               Correctness proof, complexity analysis and the action-order boundary theorem
-docs/research/              Claim-evidence matrix, capability model and cost model
-paper/                      Version-controlled manuscript source
+docs/research/              Claim-evidence matrix, capability model, registered protocol
 ```
 
 ## Benchmarks
@@ -208,10 +165,9 @@ batch-mode primary timing, fresh-process orchestration
 
 ## Documentation
 
-Detailed design and research documentation is maintained in the
-[project Wiki](https://github.com/m-nobin/version-aware-lazy-segtree/wiki), while actionable work is
-organized through the [GitHub Project](https://github.com/users/m-nobin/projects/1) and repository
-[issue tracker](https://github.com/m-nobin/version-aware-lazy-segtree/issues).
+Design, algorithms, public API and research background are documented in the
+[project Wiki](https://github.com/m-nobin/version-aware-lazy-segtree/wiki). The correctness proof
+and complexity analysis are in [docs/proof.md](docs/proof.md).
 
 ## Citation and license
 
