@@ -95,11 +95,14 @@ done
 # actually answered malloc is recorded per process as malloc_provider, and the
 # registered compiler and allocator stages refuse a campaign that matches the
 # primary one on it.
-if ! grep -qx 'alt_allocator=none' "$(find "$compiler_raw" -name 'system_*.txt' | head -1)"; then
+# -print -quit rather than a pipe into head: head closes the pipe after the
+# first line, and a find still walking the directory then dies of SIGPIPE,
+# which pipefail turns into a silent errexit death with no diagnostic at all.
+if ! grep -qx 'alt_allocator=none' "$(find "$compiler_raw" -name 'system_*.txt' -print -quit)"; then
   echo "the compiler arm did not record that it left the allocator alone" >&2
   exit 1
 fi
-system_file="$(find "$allocator_raw" -name 'system_*.txt' | head -1)"
+system_file="$(find "$allocator_raw" -name 'system_*.txt' -print -quit)"
 if ! grep -q "^alt_allocator=$stand_in_allocator$" "$system_file" \
    || ! grep -qE '^preload_variable=(DYLD_INSERT_LIBRARIES|LD_PRELOAD)$' "$system_file"; then
   echo "the allocator arm did not record the preloaded library" >&2
@@ -127,7 +130,7 @@ fi
 
 # A cell whose runs file is empty is not finished. An unclean shutdown leaves
 # exactly that, and skipping it would leave a silent hole in the arm.
-emptied="$(find "$compiler_raw" -name 'runs_*.csv' | head -1)"
+emptied="$(find "$compiler_raw" -name 'runs_*.csv' -print -quit)"
 : > "$emptied"
 run_arm "$compiler_campaign" VALSEG_SENSITIVITY_TRIALS=1
 if [[ ! -s "$emptied" ]]; then

@@ -13,7 +13,9 @@ set -euo pipefail
 
 mode="${1:-record}"
 
-power_source="$(pmset -g batt 2>/dev/null | head -1)"
+# awk, not head: head closes the pipe after the first line and pmset then dies
+# of SIGPIPE, which pipefail turns into a silent errexit death mid-measurement.
+power_source="$(pmset -g batt 2>/dev/null | awk 'NR==1')"
 low_power="$(pmset -g 2>/dev/null | awk '/lowpowermode/{print $2}')"
 
 record() {
