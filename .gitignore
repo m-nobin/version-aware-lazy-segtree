@@ -79,3 +79,10 @@ paper/main.pdf
 *.out
 *.toc
 *.synctex.gz
+
+# Rebuildable manuscript artifacts
+/paper/generated/
+/paper/preprint.pdf
+/paper/rendered/
+/output/pdf/
+/output/submission/
